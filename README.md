@@ -12,7 +12,10 @@ SignSage is an innovative real-time sign language interpretation system designed
 - **Text-to-Speech Support**: Converts recognized gestures into speech for seamless communication.
 - **Cross-Platform Compatibility**: Works on various operating systems with Python support.
 
----
+## 🎬 Demonstration
+
+[![SignSage - demonstration](https://github.com/user-attachments/assets/75aea488-43e5-406e-93f0-86ea83f1019e)](https://vimeo.com/1072834668)<br>
+​To view the complete video, please click on the GIF above
 
 ## 📋 System Requirements
 
