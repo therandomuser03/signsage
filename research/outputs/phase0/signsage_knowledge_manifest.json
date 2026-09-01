@@ -1,0 +1,238 @@
+{
+  "project": "SignSage",
+  "repository_version": 1,
+  "run_id": "20260901T165730Z",
+  "started_at": "2026-09-01T16:57:30.984177+00:00",
+  "completed_at": "2026-09-01T17:37:32.863533+00:00",
+  "environment": {
+    "data_mode": "kaggle",
+    "run_mode": "kaggle",
+    "device": "cuda",
+    "gpu_count": 2,
+    "gpu_names": [
+      "Tesla T4",
+      "Tesla T4"
+    ],
+    "python_executable": "/usr/bin/python3",
+    "seed": 42
+  },
+  "dataset": {
+    "name": "iSign v1.1",
+    "csv_path": "/kaggle/working/signsage_data/iSign_v1.1.csv",
+    "csv_rows": 127237,
+    "unique_video_ids": 6058,
+    "selected_rows": 2600,
+    "pose_source": "remote multipart ZIP64 archive on Hugging Face; lazy member reads"
+  },
+  "split": {
+    "train_rows": 2000,
+    "val_rows": 300,
+    "test_rows": 300,
+    "train_videos": 1248,
+    "val_videos": 177,
+    "test_videos": 181,
+    "leakage_free": true
+  },
+  "configuration": {
+    "max_tokens": 40,
+    "max_frames": 160,
+    "pose_output_frames": 60,
+    "batch_size": 16,
+    "grad_accum_steps": 1,
+    "amp": true,
+    "full_feature_dim": 1629,
+    "no_face_feature_dim": 225,
+    "vocab_size": 6241,
+    "use_llm_gloss": false
+  },
+  "models": {
+    "gru": {
+      "checkpoint": "/kaggle/working/signsage_outputs/checkpoints/signsage_gru_best.pt",
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 7.180184246063233,
+          "val_loss": 6.9207961935746045
+        },
+        {
+          "epoch": 2,
+          "train_loss": 6.212110683441162,
+          "val_loss": 6.9306659949453255
+        },
+        {
+          "epoch": 3,
+          "train_loss": 5.673493324279785,
+          "val_loss": 6.996471405029297
+        },
+        {
+          "epoch": 4,
+          "train_loss": 5.161267017364502,
+          "val_loss": 7.069331194225111
+        },
+        {
+          "epoch": 5,
+          "train_loss": 4.6662277984619145,
+          "val_loss": 7.228174234691419
+        }
+      ]
+    },
+    "transformer_full": {
+      "checkpoint": "/kaggle/working/signsage_outputs/checkpoints/signsage_transformer_full.pt",
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 20.80681174468994,
+          "val_loss": 18.068322633442126
+        },
+        {
+          "epoch": 2,
+          "train_loss": 13.865567520141601,
+          "val_loss": 15.613828608864232
+        },
+        {
+          "epoch": 3,
+          "train_loss": 10.554691925048829,
+          "val_loss": 14.50489576239335
+        },
+        {
+          "epoch": 4,
+          "train_loss": 8.368136852264405,
+          "val_loss": 13.726907880682694
+        },
+        {
+          "epoch": 5,
+          "train_loss": 6.928921401977539,
+          "val_loss": 13.62102332868074
+        },
+        {
+          "epoch": 6,
+          "train_loss": 5.987514270782471,
+          "val_loss": 13.511523798892373
+        }
+      ]
+    },
+    "transformer_no_face": {
+      "checkpoint": "/kaggle/working/signsage_outputs/checkpoints/signsage_transformer_noface.pt",
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 20.727721237182617,
+          "val_loss": 16.956206371909694
+        },
+        {
+          "epoch": 2,
+          "train_loss": 13.717345596313477,
+          "val_loss": 14.528615549991006
+        },
+        {
+          "epoch": 3,
+          "train_loss": 10.33712883758545,
+          "val_loss": 13.46570466694079
+        },
+        {
+          "epoch": 4,
+          "train_loss": 8.154067878723145,
+          "val_loss": 12.9882106279072
+        },
+        {
+          "epoch": 5,
+          "train_loss": 6.714282470703125,
+          "val_loss": 12.724381597418533
+        },
+        {
+          "epoch": 6,
+          "train_loss": 5.8058085632324214,
+          "val_loss": 12.848814914101048
+        }
+      ]
+    },
+    "text_to_pose_gru": {
+      "checkpoint": "/kaggle/working/signsage_outputs/checkpoints/signsage_text_to_pose_best.pt",
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.169253517344594,
+          "val_loss": 0.07688385905011703
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.09215334805846215,
+          "val_loss": 0.07858055349635451
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.08867480573058129,
+          "val_loss": 0.07897693673638921
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.08301441409438849,
+          "val_loss": 0.08818031798459981
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.08058377042412758,
+          "val_loss": 0.08265768501319383
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.07445772407203913,
+          "val_loss": 0.09500399035842795
+        }
+      ]
+    }
+  },
+  "evaluation": {
+    "sign_to_text": {
+      "Trivial baseline": {
+        "WER": 1.0,
+        "BLEU": 0.0,
+        "ROUGE-L": 0.0
+      },
+      "GRU": {
+        "WER": 0.9567786069651741,
+        "BLEU": 0.0556488202517252,
+        "ROUGE-L": 0.09544456567921268
+      },
+      "Transformer (full)": {
+        "WER": 1.0348258706467661,
+        "BLEU": 0.08154829400234395,
+        "ROUGE-L": 0.06531138837879641
+      },
+      "Transformer (no face)": {
+        "WER": 1.0652985074626866,
+        "BLEU": 0.08466131426142438,
+        "ROUGE-L": 0.0715974454239427
+      }
+    },
+    "text_to_pose": {
+      "retrieval_DTW_mean": 584.8018756508827,
+      "retrieval_DTW_std": 275.2024887357808,
+      "retrieval_MSE_mean": 0.09322883253917098,
+      "generative_DTW_mean": 343.33868411779406,
+      "generative_DTW_std": 71.74362334126899,
+      "generative_MSE_mean": 0.02381190932355821
+    },
+    "runtime_ms": {
+      "sign_to_text_mean": 21.009689900029116,
+      "sign_to_text_std": 0.5294015112722119,
+      "text_to_pose_mean": 14.310661700073979,
+      "text_to_pose_std": 0.5953132074175915
+    },
+    "round_trip": {
+      "original_text": "and their medical expenses will be borne by the state government.",
+      "gloss": "their medical expenses will be borne state government.",
+      "recovered_text": "the"
+    }
+  },
+  "status": {
+    "transformer_beats_trivial": true,
+    "phase_0_status": "GO-CANDIDATE",
+    "warning": "A bounded Kaggle run is not automatically a thesis-quality final result."
+  },
+  "artifacts": {
+    "sqlite_knowledge_base": "/kaggle/working/signsage_outputs/signsage_knowledge.db",
+    "json_manifest": "/kaggle/working/signsage_outputs/signsage_knowledge_manifest.json",
+    "checkpoints_dir": "/kaggle/working/signsage_outputs/checkpoints"
+  }
+}

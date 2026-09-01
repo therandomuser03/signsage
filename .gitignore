@@ -1,0 +1,31 @@
+# ponytail: minimal — only what this repo actually produces
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# research binaries — DO NOT commit (61M checkpoints)
+research/outputs/phase0/checkpoints/*.pt
+backend/weights/*.pt
+
+# data — 231GB never in repo, keep README
+research/data/*
+!research/data/README.md
+
+# frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# graphify
+graphify-out/
+
+# os
+.DS_Store
+Thumbs.db
