@@ -11,9 +11,19 @@
 
 ## Data licensing
 
-- iSign and INCLUDE are used under their respective research-only licenses (iSign:
-  "free for research use, not commercial purposes"). No commercial use, no
-  redistribution beyond what those licenses permit.
+- **iSign is licensed CC BY-NC-SA 4.0** (Creative Commons Attribution-NonCommercial-
+  ShareAlike 4.0) — confirmed against the dataset's HuggingFace listing, not just the
+  looser "research-only" description used in earlier drafts of this document. In
+  practice: non-commercial use (this thesis qualifies) is fine; redistributing the
+  dataset itself, or a derivative of it, requires attribution and carrying the same
+  license forward. INCLUDE is used under its own respective research-only license.
+- **Concretely, for this repository: never commit the iSign CSV, any `.pose` files, or
+  any HuggingFace cache directory to version control**, even a private one you intend to
+  make public later. This isn't just a size/clutter concern — it's a licensing
+  redistribution concern. `.gitignore` should block `signsage_data/`, `*.csv` under any
+  data directory, and `.cache/`. `research/data/README.md` should contain access
+  instructions (accept iSign's gated terms, generate an `HF_TOKEN`), never the data
+  itself.
 - No new volunteer data collection is in scope for this phase (see PRD.md). If that
   ever changes, informed consent and (per the user's institution's policy) ethics/IRB-
   equivalent clearance apply *before* collecting anything from real signers, even
@@ -26,7 +36,10 @@ University research, Imai & Alikhani), AI sign-language tools deployed in high-s
 contexts (legal, medical, emergency) without a certified human interpreter present
 carry real risk of harm from mistranslation, and are viewed with justified skepticism by
 Deaf advocacy organizations. **SignSage makes no claim to be usable in such contexts**
-and should not be presented or deployed as one, even informally.
+and should not be presented or deployed as one, even informally. This is not a
+theoretical concern given Phase 0's results (see `research/outputs/phase0/RESULTS.md`):
+the current Sign→Text models produce confidently-repeated but frequently wrong output,
+which is exactly the failure mode this boundary exists to guard against.
 
 ## Secrets
 
@@ -43,10 +56,13 @@ and should not be presented or deployed as one, even informally.
   repository, or to cell output — but note that **the token does live in kernel memory
   for the whole session**, so do not share a Kaggle notebook *version with output* from
   a session where anything was added that prints it. Set it as a Kaggle Secret; never
-  paste it into a cell.
+  paste it into a cell. Confirmed in practice across two completed runs: the token has
+  not appeared in any printed cell output, the knowledge DB, or the JSON manifest.
 - **Local mode needs no token.** With `SIGNSAGE_DATA_DIR` pointing at an already-
   extracted archive, the notebook performs no HuggingFace call at all — dataset access
-  and any `hf auth login` happened separately, out of band, on the storage machine.
+  and any `hf auth login` happened separately, out of band, on the storage machine. (This
+  path is currently untested-since-migration — the storage machine it depended on has
+  been wiped now that Kaggle mode is validated; see DECISIONS.md.)
 - `GROQ_API_KEY`, if set for the optional gloss step, is read from the environment
   only, never hardcoded.
 

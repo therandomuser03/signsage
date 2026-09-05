@@ -2,13 +2,17 @@
 
 ## Current state (be honest about this)
 
-As of this writing: **no standalone backend or frontend exists.** The primary artifact
-is `notebooks/signsage.ipynb` (61 cells), which has been prepared and
-statically validated — every code cell compiles, the notebook loads as valid `nbformat`
-4.5 — but has **not yet been run end-to-end on the real iSign data inside Kaggle**. Do
-not read "statically validated" as "experimentally validated"; the first real Kaggle
-execution is still the source of truth, and runtime, data-format, and GPU-memory issues
-found there are expected.
+As of this writing: **no standalone backend or frontend exists**, and per AGENTS.md's
+core rule, none should until Phase 0.5 (module extraction) is underway. That part hasn't
+changed. What has changed: the primary artifact, `research/notebooks/signsage.ipynb` (61 cells),
+has now been **run end-to-end on real iSign data on Kaggle, twice** — a bounded
+2,000/300/300-row validation pass, then a scaled-up 10,000/1,500/1,500-row pass. Both
+completed without errors. Do not read "ran without errors" as "produced a working
+model," though — see `research/outputs/phase0/RESULTS.md` for the actual findings.
+Concretely: the Sign→Text models currently mode-collapse to a small number of repeated
+phrases, and the Text→Pose model currently collapses to a near-static average pose. The
+pipeline is validated; the model quality is not, and two specific root causes (decoding
+strategy, pose loss function) have been identified for whoever picks this back up.
 
 The earlier Phase-1/2 live-demo prototype (a FastAPI WebSocket server plus a MediaPipe
 HTML/JS client, formerly Section 18 behind `RUN_LIVE_DEMO = False`) has been **removed
@@ -16,12 +20,14 @@ from the notebook entirely** — the research artifact no longer contains servin
 DECISIONS.md for why, and API.md / DESIGN.md for a record of how that spike diverged from
 the contract, kept so the real backend doesn't repeat the same mistakes. Everything below
 is the target MVP architecture, gated on the notebook producing a go decision (see
-PHASES.md). Do not start building the standalone version until then.
+PHASES.md — that decision now exists, `GO-CANDIDATE`, with the caveats above). Do not
+start building the standalone version until Phase 0.5 has extracted the shared
+normalization/model code out of the notebook.
 
 ## Training-time architecture (what actually runs today)
 
 ```text
-HuggingFace: Exploration-Lab/iSign (gated)
+HuggingFace: Exploration-Lab/iSign (gated, CC BY-NC-SA 4.0)
   ├── iSign_v1.1.csv                      downloaded outright (9.81 MB)
   └── iSign-poses_v1.1_part_a{a,b,c,d}    NOT downloaded; opened as one virtual
                                           ZIP64 over HTTP range requests
@@ -30,15 +36,21 @@ Kaggle Notebook (GPU T4, Internet enabled, HF_TOKEN secret)
   ├── lazy per-member .pose fetch  →  /kaggle/temp/signsage_cache/  (ephemeral)
   ├── preprocessing, normalization, face ablation
   ├── training (GRU, Transformer, pose generator)
-  ├── evaluation (WER/BLEU/ROUGE-L, DTW, round-trip, latency)
+  ├── evaluation (WER/BLEU/ROUGE-L, DTW, motion-energy check, round-trip, latency)
   └── /kaggle/working/signsage_outputs/
         ├── checkpoints/
         ├── reports/
         ├── signsage_knowledge.db
         └── signsage_knowledge_manifest.json
         ↓
-downloaded into this repo  →  Phase 1 backend loads the checkpoint for inference
+downloaded into this repo (research/outputs/phase0/)  →  Phase 1 backend loads the checkpoint for inference
 ```
+
+Confirmed by two completed runs, not just designed: this streaming path reliably fetches
+only the pose members a given `TRAIN_LIMIT`/`VAL_LIMIT`/`TEST_LIMIT` selection needs, at
+both a 2,300-unique-row scale and a 13,000-unique-row scale, without extracting or
+uploading the archive. Wall-clock is dominated by this remote fetch (~0.7s per unique
+UID observed), not by GPU compute, at these model sizes.
 
 The application never retrains. Training is a separate, offline, expensive step; the
 backend loads a finished checkpoint and reads the knowledge repository only for
@@ -86,9 +98,9 @@ flowchart TD
 |---|---|---|
 | Landmark extraction | MediaPipe Holistic (WASM), 543 landmarks (pose+hands+face) | Client (browser), privacy: raw video never leaves device |
 | Sentence boundary detector | Tunable motion-pause heuristic + manual "Send" override | Client |
-| Sign->Text model | Spatial-temporal model (starts as GRU baseline, upgrades to Transformer — see DECISIONS.md) | Backend, on a landmark sequence buffered for one sentence |
+| Sign->Text model | Spatial-temporal model (starts as GRU baseline, upgrades to Transformer — see DECISIONS.md; both currently mode-collapse per Phase 0's results, see RESULTS.md) | Backend, on a landmark sequence buffered for one sentence |
 | Text->Gloss | LLM call (Groq primary, Ollama offline fallback) | Backend, calls external API |
-| Text->Pose model | Generates a pose sequence from gloss/text | Backend |
+| Text->Pose model | Generates a pose sequence from gloss/text (currently collapses to a near-static pose, see RESULTS.md) | Backend |
 | Skeleton renderer | Draws the predicted pose sequence | Client (canvas/SVG — no avatar) |
 | Transport | WebSocket (landmark frames up, text/pose results down) | Client <-> Backend |
 
@@ -107,6 +119,11 @@ flowchart TD
    2-3s from end-of-signing to caption") rather than leaving "real-time" as a vague claim.
 4. **Shared-device UX contention.** Who owns the mic/camera at any moment on one shared
    device, and how is turn-taking signaled without feeling clunky.
+5. **Model quality, not just plumbing (new, from Phase 0's results).** Even once 1-4 are
+   solved, the current checkpoints will visibly repeat phrases (Sign→Text) and barely
+   animate (Text→Pose). This is a modeling/decoding problem, not an integration bug —
+   don't spend Phase 1 time debugging "why does the demo look bad" as if it were a
+   plumbing issue when the notebook's own evaluation already explains why.
 
 ## Explicitly deferred (do not build until triggered)
 
@@ -130,7 +147,7 @@ See DECISIONS.md for the reasoning behind each choice.
 | Model | GRU baseline first, Transformer encoder/decoder next (see PHASES.md) |
 | LLM | Groq (primary, fast hosted inference), Ollama (offline/no-API-cost fallback) |
 | Persistence | SQLite |
-| Training | Kaggle Notebooks, GPU (T4), fp16 mixed precision — moved off local CPU-only training, which was too slow for the timeline, and off Google Colab before that; see DECISIONS.md |
-| iSign dataset access (training) | Streamed from HuggingFace as a virtual multipart ZIP64 over HTTP range requests. Nothing uploaded to Kaggle, nothing extracted, only the 9.81 MB CSV downloaded. Requires Kaggle Internet + an `HF_TOKEN` secret; see SECURITY.md |
-| iSign dataset storage (local fallback) | A separate dedicated machine holding the extracted ~231 GB archive (127,237 `.pose` files, confirmed). Reached via a Jupyter server on that machine from the dev laptop's VS Code over Tailscale — no network mount. Still supported via `SIGNSAGE_DATA_DIR`, but no longer the training path; see DECISIONS.md |
+| Training | Kaggle Notebooks, GPU (T4), fp16 mixed precision — moved off local CPU-only training, which was too slow for the timeline, and off Google Colab before that; see DECISIONS.md. Validated by two completed runs |
+| iSign dataset access (training) | Streamed from HuggingFace as a virtual multipart ZIP64 over HTTP range requests. Nothing uploaded to Kaggle, nothing extracted, only the 9.81 MB CSV downloaded. Requires Kaggle Internet + an `HF_TOKEN` secret; see SECURITY.md. Archive size was documented as ~231 GB in early planning; Kaggle's own probe measures it at **158.54 GiB (~170 GB)** — see DATA_MODEL.md/DECISIONS.md |
+| iSign dataset storage (local fallback) | Previously a separate dedicated machine holding an extracted copy of the archive, reached via Tailscale. That machine has since been wiped — Kaggle streaming is now the sole validated training path, confirmed across two runs at different scales. `SIGNSAGE_DATA_DIR` remains supported in code but is currently untested-since-migration |
 | Experiment tracking | SQLite (`signsage_knowledge.db`, 7 tables keyed on `run_id`) plus a portable JSON manifest, written by every run; see DATA_MODEL.md |

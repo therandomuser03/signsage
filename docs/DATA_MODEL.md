@@ -3,8 +3,9 @@
 ## Training data: iSign
 
 Source: Joshi et al., "iSign: A Benchmark for Indian Sign Language Processing," ACL
-Findings 2024. Hosted (gated, research-only license) at
-`huggingface.co/datasets/Exploration-Lab/iSign`.
+Findings 2024. Hosted at `huggingface.co/datasets/Exploration-Lab/iSign`, gated access,
+licensed **CC BY-NC-SA 4.0** (non-commercial, share-alike — see SECURITY.md for what
+this means for this repository specifically).
 
 **Known facts (confirmed by running Sections 0-4 of the notebook against the real archive):**
 - The published iSign description refers to 118,228 video-sentence/phrase pairs, but the
@@ -18,7 +19,19 @@ Findings 2024. Hosted (gated, research-only license) at
 - Only **593** of these pairs were verified by certified ISL signers (limited signer
   availability, per the paper). The rest is aligned/scraped at unknown quality. Treat
   this as a real data-quality risk, not a footnote — see the audit section of
-  `notebooks/signsage.ipynb`.
+  `research/notebooks/signsage.ipynb`.
+- **A second, previously undocumented data-quality issue was found while auditing Phase
+  0's results** (see `research/outputs/phase0/RESULTS.md`): roughly **1% of all 127,237
+  rows are junk or placeholder text**, not real sentences — the most frequent exact
+  `text` values dataset-wide, after blank strings (391 rows), are single digits (`2`: 99
+  rows, `1`: 96, `3`: 87, `5`: 54, `4`: 49, `6`: 32...), single letters (`B`: 36, `A`:
+  22), the literal word `blank` (46 rows), and caption artifacts like `[Music]` (30
+  rows). This is common enough to dominate a naive "most common training sentence"
+  computation on a random sample of a few thousand rows, and likely dilutes training
+  signal proportionally too. **Any code computing a frequency-based statistic over
+  `text` should filter using the CSV's own `n_words` column (e.g. `n_words >= 2`) first**
+  — excluding only blank strings is not sufficient, as the notebook's own trivial
+  baseline demonstrated in practice (see DECISIONS.md).
 - Poses are pre-extracted and shipped as `.pose` files (read via the `pose-format`
   Python package, `Pose.read()`), not raw video, for the pose-based tasks.
 - Translations live in `iSign_v1.1.csv`. **Confirmed columns include `uid` and `text`**
@@ -44,7 +57,8 @@ person 0 and the first **543 image-space keypoints** — `POSE_LANDMARKS` (33) +
 of 576 total; the trailing `POSE_WORLD_LANDMARKS` (33) is a world-coordinate duplicate
 block and is excluded. Flattened feature dim = 1629 (543×3); the no-face ablation drops
 the 468 face points, leaving 225 (75×3). A per-point confidence array
-(`p.body.confidence`) is also present.
+(`p.body.confidence`) is also present, though not currently used at training time (see
+`research/outputs/phase0/RESULTS.md` — this is a known gap, not an oversight in this doc).
 
 ## Secondary baseline data: INCLUDE
 
@@ -56,8 +70,11 @@ sign baseline comparator (per the proposal), not for continuous translation trai
 The notebook resolves `DATA_DIR` from its environment, and the two modes reach the same
 logical dataset by very different routes:
 
-**Kaggle mode (the training path).** Only `iSign_v1.1.csv` (9.81 MB) is downloaded, via
-`hf_hub_download`. The ~231 GB pose archive is **never uploaded to Kaggle and never
+**Kaggle mode (the training path — the only one currently validated).** Only
+`iSign_v1.1.csv` (9.81 MB) is downloaded, via `hf_hub_download`. The pose archive —
+documented in early project planning as ~231 GB, but **measured directly by the
+notebook's own size probe at 158.54 GiB (~170 GB)**: `part_aa`/`part_ab`/`part_ac` =
+45.00 GiB each, `part_ad` = 23.54 GiB — is **never uploaded to Kaggle and never
 extracted**. Its four published parts —
 
 ```text
@@ -73,7 +90,8 @@ and then fetch only the members the selected rows need, in 256 KB HTTP range chu
 chunks cached in memory, FIFO). Member lookup tries `iSign-poses_v1.1/{uid}.pose` then
 `{uid}.pose`. Requires Kaggle Internet and an `HF_TOKEN` secret (see SECURITY.md).
 
-**Local mode (fallback).** `SIGNSAGE_DATA_DIR` points at an already-extracted tree:
+**Local mode (fallback, currently untested-since-migration).** `SIGNSAGE_DATA_DIR` would
+point at an already-extracted tree:
 
 ```text
 iSign/
@@ -82,6 +100,10 @@ iSign/
     └── iSign-poses_v1.1/
         └── *.pose
 ```
+
+The machine that previously backed this path has been wiped now that Kaggle mode is
+validated at two different scales (see DECISIONS.md) — this path remains supported in
+code but nothing currently exercises it.
 
 Both modes produce identical arrays downstream — `read_pose_bytes_for_uid()` is the seam.
 
@@ -103,11 +125,19 @@ original `.pose` data on every epoch (see DECISIONS.md).
 
 On Kaggle it is kept out of `/kaggle/working` so a multi-GB regenerable cache doesn't
 consume the 20 GB output budget meant for checkpoints and reports. Size is roughly
-521 KB per sample (160 frames × 1629 features × 2 bytes), so ~2-3 GB at current limits.
+521 KB per sample (160 frames × 1629 features × 2 bytes) — ~1 GB at the first run's
+2,300-unique-row scale, ~6-7 GB at the scaled-up run's ~13,000-unique-row scale.
 
 It is derived data, not source data: safe to delete entirely and let it rebuild. Writes
 are atomic (temp file + `os.replace`), and a failed load is treated as a cache miss and
 rebuilt rather than crashing the pipeline.
+
+A rare edge case exists where a pose sequence has no frame with any real body-keypoint
+spread at all (a fully static/degenerate capture) or missing hip landmarks; both are
+handled defensively (falls back to a neutral scale/center rather than crashing or
+propagating NaN) and are now counted internally via `POSE_NORMALIZATION_STATS`, though
+as of the scaled-up run this counter is tracked but not yet printed or logged anywhere —
+a known instrumentation gap, not a correctness issue (see RESULTS.md).
 
 ## Project knowledge repository (SQLite + JSON)
 
@@ -117,10 +147,9 @@ experiment provenance, **not** a RAG knowledge base — nothing retrieves from i
 inference time.
 
 Artifacts land under `signsage_outputs/` (`/kaggle/working/signsage_outputs/` on Kaggle,
-`./signsage_outputs/` locally). The completed bounded Kaggle run has now been observed to
-produce this structure, including trained checkpoints, a report/vocabulary artifact, and the
-SQLite/JSON provenance artifacts. Exact metric values remain an experimental-result concern,
-not an artifact-existence claim:
+`./signsage_outputs/` locally). Two completed Kaggle runs have now produced this
+structure end-to-end, including trained checkpoints, a report/vocabulary artifact, and
+the SQLite/JSON provenance artifacts:
 
 ```text
 signsage_outputs/
@@ -129,11 +158,6 @@ signsage_outputs/
 ├── signsage_knowledge.db               queryable relational record
 └── signsage_knowledge_manifest.json    portable per-run snapshot
 ```
-
-**Observed in the completed Kaggle output:** four checkpoint files are present under
-`checkpoints/`, a `token_vocabulary.json` report artifact is present under `reports/`, and both
-`signsage_knowledge.db` and `signsage_knowledge_manifest.json` were generated. These observations
-confirm artifact creation; they do not substitute for reading the recorded metrics and verdict.
 
 **Split of responsibility.** SQLite holds the relational history, because "which
 experiment produced the current best model, and under what hyperparameters" is a
@@ -167,6 +191,16 @@ delete the matching prior row before inserting:
 - `knowledge_observation(...)` — **append-only by design.** Observations are log-style
   notes where a re-run recording a second entry is the correct behavior, not a duplicate.
 
+**Naming consistency across tables is part of this contract, not just tidiness.**
+Auditing the first run's DB found `experiments.name = "GRU baseline"`,
+`metrics.experiment_name = "GRU"`, and `artifacts.artifact_name = "sign_to_text_gru"` all
+referring to the same model — a plain `JOIN` on name returned zero rows for it. Fixed to
+use one canonical name (`"GRU baseline"`) in all three tables (see DECISIONS.md). When
+adding a new experiment, use the exact same string across all `knowledge_insert` /
+`knowledge_metric` / `knowledge_artifact` calls for it — this is not enforced by a
+foreign key, so it's a discipline requirement, not something that will fail loudly if
+you get it wrong.
+
 The traceability chain this supports: dataset → data preparation → experiment → model →
 metrics → selected model → deployment artifact.
 
@@ -192,5 +226,11 @@ explicitly requires persistence, which does not exist yet).
 
 The feasibility notebook uses a deliberately dumb whitespace + lowercase tokenizer with
 `<pad>/<bos>/<eos>/<unk>` specials, vocab built from the training split only. No subword
-tokenization at this stage (see DECISIONS.md). Confirmed vocab size on a full local
-training split: 60,384 word types.
+tokenization at this stage (see DECISIONS.md).
+
+Confirmed vocab sizes: 60,384 word types on a full local training split (all ~102,757
+train rows); on Kaggle, 6,241 word types at the first bounded run's 2,000-row sample
+(`<unk>` rate ~20% on val/test), and 17,214 word types at the scaled-up run's 10,000-row
+sample (`<unk>` rate down to ~10.7%) — vocabulary coverage scales with `TRAIN_LIMIT` as
+expected, and is a large part of why WER/BLEU numbers at bounded-run scale should not be
+compared directly to a full-scale run.

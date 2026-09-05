@@ -24,6 +24,18 @@ so the real UI doesn't inherit either:
 
 Do not treat that spike as a starting point for the real UI without fixing both.
 
+**Read `research/outputs/phase0/RESULTS.md` before building against Phase 0's
+checkpoints.** The "fail loudly, not silently" principle below was written speculatively,
+before any model existed to fail. It is no longer speculative: the current Sign→Text
+checkpoints repeat a small number of stock phrases regardless of input, and the current
+Text→Pose checkpoint produces a near-static pose rather than real motion. A UI built
+against these checkpoints needs to either genuinely communicate uncertainty (per the
+principle below) or, more honestly, be explicitly labeled a plumbing demo rather than a
+translation demo until the underlying models improve — showing confident-looking captions
+next to a model that is known to mode-collapse would itself be a "fail silently" violation
+of this document's own principle, just at the UI-design level instead of the
+landmark-confidence level.
+
 ## Who this is for
 
 Primarily: a Deaf/HoH ISL signer and a hearing non-signer, sharing one device, having a

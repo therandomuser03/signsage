@@ -1,137 +1,140 @@
 # SignSage
 
-**Real-time, bidirectional assistive communication for Indian Sign Language (ISL) ↔ English** — M.Tech thesis prototype (single shared device), not a production accessibility product.
+**Real-time, bidirectional assistive communication between Indian Sign Language (ISL) and English.**
 
-> ~63 million people in India have significant auditory impairment (Sharma et al., IEEE ICCCIS 2022). Most systems do isolated sign recognition or one-way sign→text. SignSage targets **continuous, sentence-level, bidirectional** translation with non-manual markers — the gap literature hasn't closed.
+An **M.Tech thesis research prototype** — continuous, sentence-level ISL ↔ English communication via spatial-temporal modeling, a non-manual-marker (face) ablation, and a Text-to-Pose pipeline. Single shared device, research/thesis evaluation scope.
+
+> **Not a production accessibility product.** Not intended for medical, legal, emergency, or other high-stakes use — see [`docs/SECURITY.md`](docs/SECURITY.md).
+
+---
+
+## Status (as of the Phase 0 scaled-up run, 2026-09-03)
+
+**Phase 0 — bounded Kaggle validation — complete.** Full findings: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md). Read that before quoting any number from this project — the honest summary is:
+
+- The pipeline (remote dataset streaming, training, evaluation, experiment provenance) runs correctly and reproducibly end-to-end on real iSign data, at two different data scales.
+- Sign→Text: the GRU baseline has fully mode-collapsed to a single repeated output. The Transformer shows a small, real improvement in output diversity with more data, but its **WER is currently worse than a trivial baseline** due to a decoding-side repetition problem (greedy decoding, no repetition penalty) — not something more data alone fixes.
+- Text→Pose: the generative model's favorable DTW/MSE numbers are misleading — a motion-energy diagnostic confirms it has collapsed to a **near-static average pose** (6.7% of ground-truth motion), a known failure mode of position+velocity MSE loss without an adversarial/perceptual term.
+- The non-manual-marker (face) ablation replicated across both runs: removing face landmarks trains to a *lower* validation loss than keeping them, at this data scale — worth real discussion, not a bare number.
+- A real, previously undocumented data-quality issue was found: roughly 1% of the dataset is junk/placeholder text (single digits, single letters, caption artifacts like `[Music]`), which contaminates any frequency-based baseline.
+
+None of this blocks the thesis — it's exactly the kind of finding a bounded validation phase is supposed to produce. It does mean: don't present current checkpoints as demonstrating working translation or working pose generation without these caveats attached.
+
+**Next:** Phase 0.5 (extract reusable inference code from the notebook) → Phase 1 (backend) → Phase 2 (frontend). Per [`docs/PHASES.md`](docs/PHASES.md)'s own timeline math, Phases 1–3 are scoped and designed, not built — `backend/` and `frontend/` below are intentionally empty.
+
+---
 
 ## How it works
 
-**Training (offline, Kaggle T4):** HuggingFace iSign (gated) → `iSign_v1.1.csv` (9.81 MB) + virtual ZIP64 over HTTP range requests (4 parts, ~231 GB, never extracted) → GRU → Transformer → Text-to-Pose → `research/outputs/phase0/` checkpoints + `signsage_knowledge.db`.
+**Training (offline, Kaggle T4×2):** HuggingFace `Exploration-Lab/iSign` (gated, CC BY-NC-SA 4.0) → `iSign_v1.1.csv` (9.81 MB, downloaded) + the pose archive (measured ~158.5 GiB across 4 parts, streamed via a virtual ZIP64 over HTTP range requests, never downloaded or extracted) → GRU → Transformer → Text-to-Pose → `research/outputs/phase0/` checkpoints + `signsage_knowledge.db`.
 
-**Inference (single device):**
+**Inference (single device, planned — not built yet):**
 ```
 Camera → MediaPipe Holistic (WASM, 543 landmarks, on-device) → motion-pause+Send → WebSocket → FastAPI → Sign→Text → captions
 Text/speech → LLM (Groq→heuristic fallback) → ISL gloss → Text-to-Pose → pose → canvas skeleton
 ```
-Raw video **never leaves device**. Two-device relay deferred (`docs/ARCHITECTURE.md`).
+Raw video never leaves the device. Two-device relay is deliberately deferred — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## Repo layout (4 areas — compact)
+---
 
-```
+## Repository layout
+
+```text
 SignSage/
-│
-├── frontend/                    # Next.js web application — currently empty, to be installed
-│   ├── app/                     # App Router: pages, layouts, routes
-│   ├── components/              # UI components
-│   ├── lib/                     # API, WebSocket, MediaPipe utilities
-│   ├── public/                  # Static assets / sign animations
-│   ├── types/                   # TypeScript types
-│   ├── package.json
-│   └── ...
-│
-├── backend/                     # FastAPI + PyTorch
-│   ├── main.py                  # FastAPI entry point
-│   ├── inference.py             # Sign→Text / Text→Pose inference
-│   ├── preprocessing.py         # Landmark preprocessing
-│   ├── models.py                # Model architecture/loading
-│   ├── weights/                 # DEPLOYMENT model artifacts only
-│   │   ├── sign_to_text.pt
-│   │   ├── text_to_pose.pt
-│   │   └── token_vocabulary.json
-│   ├── requirements.txt
-│   └── .env.example
-│
-├── research/                    # M.Tech research / training
+├── research/                    # M.Tech research / training — the source of truth right now
 │   ├── notebooks/
-│   │   └── signsage.ipynb
-│   │
-│   ├── outputs/                 # Complete notebook/Kaggle outputs
-│   │   └── phase0/
-│   │       ├── checkpoints/
+│   │   └── signsage.ipynb       # training/evaluation reference, run on Kaggle GPU
+│   ├── outputs/
+│   │   └── phase0/              # complete Kaggle experiment record
+│   │       ├── checkpoints/     # 4 .pt files: GRU, Transformer (full/no-face), Text-to-Pose
 │   │       ├── reports/
-│   │       ├── signsage_knowledge.db
-│   │       └── signsage_knowledge_manifest.json
-│   │
-│   └── data/                    # Dataset references only
-│       └── README.md
+│   │       │   └── token_vocabulary.json
+│   │       ├── signsage_knowledge.db          # queryable experiment/metrics record
+│   │       ├── signsage_knowledge_manifest.json
+│   │       └── RESULTS.md       # human-written findings — read this first
+│   └── data/
+│       └── README.md            # dataset access instructions only — raw data is gitignored
 │
-├── docs/                        # Project documentation
-│   ├── PRD.md
-│   ├── ARCHITECTURE.md
-│   ├── API.md
-│   ├── DATA_MODEL.md
-│   ├── DESIGN.md
-│   ├── SECURITY.md
-│   ├── PHASES.md
-│   ├── TESTING.md
-│   ├── DECISIONS.md
-│   └── AGENTS.md
+├── backend/                     # FastAPI + PyTorch — NOT YET BUILT (Phase 1)
+├── frontend/                    # Next.js — NOT YET BUILT (Phase 2)
 │
+├── docs/                        # specs and decisions
+│   ├── PRD.md · ARCHITECTURE.md · API.md · DATA_MODEL.md · DESIGN.md
+│   ├── SECURITY.md · PHASES.md · TESTING.md · DECISIONS.md · AGENTS.md
+│
+├── LICENSE
 ├── .gitignore
-├── .env.example
-└── README.md
+└── .env.example
 ```
 
-> `frontend/` is intentionally empty — install Next.js there (`npx create-next-app@latest frontend --typescript --app --eslint`). `research/outputs/phase0/` holds the 61M Kaggle research record; `backend/weights/` holds only the selected deployment artifacts.
+**Why research/outputs vs. a future backend/weights:** `research/outputs/phase0/` is the complete, unedited experiment record. A future `backend/weights/` (once Phase 1 starts) will hold only the specific artifacts selected for serving — never the reverse; the research output is never overwritten by the deployment selection.
 
-Flow:
-```
-research/notebooks/signsage.ipynb → research/outputs/phase0/ (4 checkpoints, reports, knowledge.db)
-                                    │ select validated
-                                    ▼
-                              backend/weights/ (sign_to_text.pt, text_to_pose.pt, vocab)
-                                    │ FastAPI
-                                    ▼
-                                frontend/ (Next.js — to be installed)
-```
-
-## Quick start
-
-```bash
-# 1. Notebook (Kaggle GPU, Internet ON, HF_TOKEN secret) — run §0–8 first, confirm Device: cuda
-pip install -r backend/requirements.txt
-# open research/notebooks/signsage.ipynb
-
-# 2. Backend (after Phase 0 GO)
-uvicorn backend.main:app --reload
-
-# 3. Frontend — currently empty, install framework first
-# npx create-next-app@latest frontend --typescript --app --eslint  (or your setup)
-# cd frontend && npm run dev
-```
+---
 
 ## Dataset
 
-- **Primary:** [iSign](https://huggingface.co/datasets/Exploration-Lab/iSign) — 118k pairs, 127,237 `.pose` files `(frames, people, keypoints, xyz)` (Joshi et al., ACL 2024)
-- **Secondary:** INCLUDE — 263 isolated signs
-- Gated HF → needs `HF_TOKEN` + accepting terms. No volunteer collection this phase.
+- **Primary:** [iSign](https://huggingface.co/datasets/Exploration-Lab/iSign) (Joshi et al., ACL Findings 2024) — 127,237 CSV rows / `.pose` files locally confirmed (the paper describes 118,228; this repo uses the local counts actually present, see `docs/DATA_MODEL.md`). License: **CC BY-NC-SA 4.0** (non-commercial, share-alike) — gated access, requires an accepted-terms HF account + `HF_TOKEN`.
+- **Not stored in this repository** — neither the pose archive nor the CSV. Committing the CSV would violate the dataset's redistribution terms; see `research/data/README.md` for access instructions instead.
+- **Secondary:** INCLUDE (263 isolated signs) — isolated-sign baseline reference only, not used for training.
+
+---
 
 ## Evaluation
 
-- **Sign→Text:** WER · BLEU · ROUGE-L vs. "most common sentence" baseline
-- **Text→Pose:** MSE + DTW vs. TF-IDF retrieval (capped 3000)
-- **System:** end-to-end latency (SMART obj. 2)
-- Every run writes `signsage_knowledge.db` + manifest — provenance, not claims.
+- **Sign→Text:** WER, BLEU, ROUGE-L vs. a (junk-text-filtered) most-common-sentence baseline; output-diversity check for mode collapse.
+- **Text→Pose:** DTW + MSE vs. TF-IDF retrieval; **motion-energy check** vs. ground truth (catches static-pose collapse that DTW/MSE alone would miss).
+- **System:** model-only latency (not end-to-end — that requires Phase 1's backend to exist).
+- Every run writes full provenance to `signsage_knowledge.db` + a JSON manifest — see `docs/DATA_MODEL.md` for schema.
 
-## Status (honest)
+Full current numbers and their caveats: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md).
 
-**Phase 0:** bounded Kaggle run (2000/300/300, 5–6 eps) completed under `research/outputs/phase0/`; Section 17 `GO/NO-GO` pending audit. Phases 1–3 scoped, not built until GO (`docs/PHASES.md` — the one rule). Notebook statically validated (61 cells), not yet at thesis scale.
+---
 
-## Tech stack
+## Development
 
-Next.js + MediaPipe Holistic (WASM) · FastAPI + WebSocket · Transformer (GRU baseline first) · Groq `openai/gpt-oss-20b`/Ollama · SQLite · Kaggle T4 fp16. See `docs/DECISIONS.md` for why.
+Research (this is what currently works):
+```bash
+# open research/notebooks/signsage.ipynb on Kaggle
+# GPU T4 accelerator, Internet ON, HF_TOKEN secret attached
+# run cells 0-8 first and confirm Device: cuda before running the rest
+```
 
-## Docs
+Backend / frontend: not implemented yet. See `docs/PHASES.md` for the sequencing rule (`docs/AGENTS.md` calls it "the one rule that matters most") — they are built from modules extracted out of the notebook during Phase 0.5, not scaffolded ahead of a validated model.
+
+---
+
+## Privacy & security
+
+Landmarks-only design: raw video never leaves the device (planned, once Phase 1 exists); no biometric storage; secrets via environment variables only; not a substitute for certified human interpreters in high-stakes contexts. Full detail: [`docs/SECURITY.md`](docs/SECURITY.md).
+
+---
+
+## Documentation index
 
 | Doc | Read when |
 |---|---|
-| `docs/PRD.md` | what this is/isn't |
-| `docs/ARCHITECTURE.md` | training vs. MVP, deferred features |
-| `docs/API.md` | WebSocket contract |
-| `docs/PHASES.md` | where we are, exit criteria |
-| `docs/TESTING.md` | metrics + preflight |
-| `docs/DECISIONS.md` | why each choice |
-| `docs/DESIGN.md` | turn-taking, fail-loudly |
+| [`docs/PRD.md`](docs/PRD.md) | what this is/isn't, success criteria |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | training vs. MVP architecture, deferred features |
+| [`docs/API.md`](docs/API.md) | planned WebSocket contract |
+| [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) | dataset facts, knowledge-repo schema |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | interaction principles, turn-taking, fail-loudly |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | privacy, secrets, safety boundaries |
+| [`docs/PHASES.md`](docs/PHASES.md) | roadmap, exit criteria, honest timeline math |
+| [`docs/TESTING.md`](docs/TESTING.md) | evaluation strategy, preflight checks |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | why each technical choice was made |
+| [`docs/AGENTS.md`](docs/AGENTS.md) | rules for anyone (human or AI) working on this repo |
 
 ---
-Thesis: Anubhab Pal (M.Tech CSE) · Guide: Mr. Ponsuresh Manoharan · L&T EduTech · Aug 2026. Prior: single-frame MediaPipe Hands + RF, 19 words, Flask+MJPEG — ground-up redesign.
+
+## Boundaries (explicitly out of scope)
+
+Unrestricted open-vocabulary ISL, regional dialect coverage, photorealistic avatars, production-grade mobile deployment, high-stakes translation use, remote/two-device relay, large-scale new volunteer data collection. See `docs/PRD.md`.
+
+---
+
+## Thesis
+
+**SignSage** — M.Tech CSE (AI & Data Science), Anubhab Pal
+Guide: Mr. Ponsuresh Manoharan · L&T EduTech · August 2026
+
+Ground-up redesign of an earlier prototype (single-frame MediaPipe Hands + Random Forest, 19-word vocabulary, Flask + MJPEG streaming).
