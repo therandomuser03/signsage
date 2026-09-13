@@ -21,9 +21,9 @@ An **M.Tech thesis research prototype** — continuous, sentence-level ISL ↔ E
 None of this blocks the thesis — it's exactly the kind of finding a bounded validation phase is supposed to produce. It does mean: don't present current checkpoints as demonstrating working translation or working pose generation without these caveats attached.
 
 **Backend now built** (Phase 0.5 module extraction + the backend half of Phase 1 — see
-`backend/README.md`); **frontend still not built** (Phase 2). Per
-[`docs/PHASES.md`](docs/PHASES.md)'s own sequencing, `frontend/` below remains
-intentionally empty until that phase is actually picked up.
+`backend/README.md`); **frontend has a static Vite + React UI shell**, but no live
+camera, MediaPipe, WebSocket, or pose rendering integration. See
+[`docs/PHASES.md`](docs/PHASES.md) for remaining Phase 1/2 work.
 
 ---
 
@@ -67,7 +67,7 @@ SignSage/
 │   ├── app/ · tests/ · scripts/ · weights/ · vocab/
 │   ├── docs/API.md · MODEL_CARD.md · README.md
 │   └── ...
-├── frontend/                    # Next.js — NOT YET BUILT (Phase 2)
+├── frontend/                    # Vite + React static UI shell — no live translation yet
 │
 ├── thesis/                      # human academic deliverables — not agent-facing, not referenced by AGENTS.md
 │   ├── SignSage.pptx             # college/committee presentation
@@ -135,11 +135,10 @@ Research (this is what currently works):
 # run cells 0-8 first and confirm Device: cuda before running the rest
 ```
 
-Backend: implemented — see `backend/README.md` for setup/run instructions. Frontend: not
-implemented yet. See `docs/PHASES.md` for the sequencing rule (root `AGENTS.md` calls it
-"the one rule that matters most") — both were built from modules extracted out of the
-notebook during Phase 0.5, not scaffolded ahead of a validated model, and the frontend
-still isn't scaffolded ahead of someone actually picking that phase up.
+Backend: implemented — see `backend/README.md` for setup/run instructions. Frontend:
+Vite + React static UI shell exists, but webcam capture, MediaPipe extraction, backend
+WebSocket integration, and pose rendering are not yet implemented. See `docs/PHASES.md`
+for remaining Phase 1/2 work.
 
 ---
 
