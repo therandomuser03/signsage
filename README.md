@@ -20,7 +20,10 @@ An **M.Tech thesis research prototype** — continuous, sentence-level ISL ↔ E
 
 None of this blocks the thesis — it's exactly the kind of finding a bounded validation phase is supposed to produce. It does mean: don't present current checkpoints as demonstrating working translation or working pose generation without these caveats attached.
 
-**Next:** Phase 0.5 (extract reusable inference code from the notebook) → Phase 1 (backend) → Phase 2 (frontend). Per [`docs/PHASES.md`](docs/PHASES.md)'s own timeline math, Phases 1–3 are scoped and designed, not built — `backend/` and `frontend/` below are intentionally empty.
+**Backend now built** (Phase 0.5 module extraction + the backend half of Phase 1 — see
+`backend/README.md`); **frontend still not built** (Phase 2). Per
+[`docs/PHASES.md`](docs/PHASES.md)'s own sequencing, `frontend/` below remains
+intentionally empty until that phase is actually picked up.
 
 ---
 
@@ -28,7 +31,8 @@ None of this blocks the thesis — it's exactly the kind of finding a bounded va
 
 **Training (offline, Kaggle T4×2):** HuggingFace `Exploration-Lab/iSign` (gated, CC BY-NC-SA 4.0) → `iSign_v1.1.csv` (9.81 MB, downloaded) + the pose archive (measured ~158.5 GiB across 4 parts, streamed via a virtual ZIP64 over HTTP range requests, never downloaded or extracted) → GRU → Transformer → Text-to-Pose → `research/outputs/phase0/` checkpoints + `signsage_knowledge.db`.
 
-**Inference (single device, planned — not built yet):**
+**Inference (single device):** the WebSocket contract below is implemented and serving
+the real Phase 0 checkpoints (`backend/`); the client-side half is not built yet.
 ```
 Camera → MediaPipe Holistic (WASM, 543 landmarks, on-device) → motion-pause+Send → WebSocket → FastAPI → Sign→Text → captions
 Text/speech → LLM (Groq→heuristic fallback) → ISL gloss → Text-to-Pose → pose → canvas skeleton
@@ -41,6 +45,9 @@ Raw video never leaves the device. Two-device relay is deliberately deferred —
 
 ```text
 SignSage/
+├── AGENTS.md                    # read by OpenCode / Zed / Google Antigravity automatically
+├── CLAUDE.md                    # thin @AGENTS.md import, so Claude Code reads it too
+│
 ├── research/                    # M.Tech research / training — the source of truth right now
 │   ├── notebooks/
 │   │   └── signsage.ipynb       # training/evaluation reference, run on Kaggle GPU
@@ -55,17 +62,46 @@ SignSage/
 │   └── data/
 │       └── README.md            # dataset access instructions only — raw data is gitignored
 │
-├── backend/                     # FastAPI + PyTorch — NOT YET BUILT (Phase 1)
+├── backend/                     # FastAPI + PyTorch — BUILT (Phase 0.5 + backend half of Phase 1)
+│   ├── AGENTS.md                 # nested, backend-scoped rules (read in addition to root AGENTS.md)
+│   ├── app/ · tests/ · scripts/ · weights/ · vocab/
+│   ├── docs/API.md · MODEL_CARD.md · README.md
+│   └── ...
 ├── frontend/                    # Next.js — NOT YET BUILT (Phase 2)
 │
-├── docs/                        # specs and decisions
+├── thesis/                      # human academic deliverables — not agent-facing, not referenced by AGENTS.md
+│   ├── SignSage.pptx             # college/committee presentation
+│   └── paper/                    # written report/research paper and its source material
+│       ├── draft.md               # (or .docx/.tex, whatever you draft in)
+│       ├── figures/               # curated, finalized charts pulled FROM research/outputs — not raw dumps
+│       └── references.bib
+│
+├── docs/                        # specs and decisions (reference material, not auto-loaded)
 │   ├── PRD.md · ARCHITECTURE.md · API.md · DATA_MODEL.md · DESIGN.md
-│   ├── SECURITY.md · PHASES.md · TESTING.md · DECISIONS.md · AGENTS.md
+│   └── SECURITY.md · PHASES.md · TESTING.md · DECISIONS.md
 │
 ├── LICENSE
 ├── .gitignore
 └── .env.example
 ```
+
+**Why a separate `thesis/` instead of putting the pptx in `docs/` or `research/`:**
+`docs/` is the agent-facing technical reference set (specs, contracts, decisions) —
+a slide deck and a paper draft are a different audience (guide/committee) and a
+different kind of content (narrative, not spec), and mixing them muddies both.
+`research/outputs/phase0/` is explicitly the complete, unedited experiment record (see
+below) — a paper's `figures/` are curated, finalized exports pulled *from* that record,
+not part of it. `thesis/` keeps "outputs for a grade" separate from "outputs for the
+pipeline" (`research/`) and "instructions for agents" (`AGENTS.md`, `docs/`).
+
+**Why `AGENTS.md`/`CLAUDE.md` sit at the repo root instead of in `docs/` with everything
+else:** OpenCode, Zed, and Google Antigravity all auto-discover `AGENTS.md` at the project
+root — none of them look inside `docs/`. Claude Code reads `CLAUDE.md` specifically, not
+`AGENTS.md`, so the root `CLAUDE.md` is a one-line `@AGENTS.md` import rather than a
+second copy of the same content. `backend/AGENTS.md` is a nested, backend-scoped file
+under the same convention (closest `AGENTS.md` to the file being edited applies, in
+addition to the root one, not instead of it). Everything else in `docs/` is reference
+material an agent is pointed to from `AGENTS.md`, not something any tool auto-loads.
 
 **Why research/outputs vs. a future backend/weights:** `research/outputs/phase0/` is the complete, unedited experiment record. A future `backend/weights/` (once Phase 1 starts) will hold only the specific artifacts selected for serving — never the reverse; the research output is never overwritten by the deployment selection.
 
@@ -99,13 +135,17 @@ Research (this is what currently works):
 # run cells 0-8 first and confirm Device: cuda before running the rest
 ```
 
-Backend / frontend: not implemented yet. See `docs/PHASES.md` for the sequencing rule (`docs/AGENTS.md` calls it "the one rule that matters most") — they are built from modules extracted out of the notebook during Phase 0.5, not scaffolded ahead of a validated model.
+Backend: implemented — see `backend/README.md` for setup/run instructions. Frontend: not
+implemented yet. See `docs/PHASES.md` for the sequencing rule (root `AGENTS.md` calls it
+"the one rule that matters most") — both were built from modules extracted out of the
+notebook during Phase 0.5, not scaffolded ahead of a validated model, and the frontend
+still isn't scaffolded ahead of someone actually picking that phase up.
 
 ---
 
 ## Privacy & security
 
-Landmarks-only design: raw video never leaves the device (planned, once Phase 1 exists); no biometric storage; secrets via environment variables only; not a substitute for certified human interpreters in high-stakes contexts. Full detail: [`docs/SECURITY.md`](docs/SECURITY.md).
+Landmarks-only design: raw video never leaves the device — the backend has no camera/video upload endpoint by construction, not just by plan; no biometric storage; secrets via environment variables only; not a substitute for certified human interpreters in high-stakes contexts. Full detail: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ---
 
@@ -113,16 +153,18 @@ Landmarks-only design: raw video never leaves the device (planned, once Phase 1 
 
 | Doc | Read when |
 |---|---|
+| [`AGENTS.md`](AGENTS.md) | rules for anyone (human or AI) working on this repo — read automatically by OpenCode, Zed, Google Antigravity |
+| [`CLAUDE.md`](CLAUDE.md) | one-line `@AGENTS.md` import so Claude Code reads the same rules |
+| [`backend/AGENTS.md`](backend/AGENTS.md) | additional rules scoped to `backend/` only |
 | [`docs/PRD.md`](docs/PRD.md) | what this is/isn't, success criteria |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | training vs. MVP architecture, deferred features |
-| [`docs/API.md`](docs/API.md) | planned WebSocket contract |
+| [`docs/API.md`](docs/API.md) | the implemented WebSocket contract |
 | [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) | dataset facts, knowledge-repo schema |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | interaction principles, turn-taking, fail-loudly |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | privacy, secrets, safety boundaries |
 | [`docs/PHASES.md`](docs/PHASES.md) | roadmap, exit criteria, honest timeline math |
 | [`docs/TESTING.md`](docs/TESTING.md) | evaluation strategy, preflight checks |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | why each technical choice was made |
-| [`docs/AGENTS.md`](docs/AGENTS.md) | rules for anyone (human or AI) working on this repo |
 
 ---
 
@@ -136,5 +178,9 @@ Unrestricted open-vocabulary ISL, regional dialect coverage, photorealistic avat
 
 **SignSage** — M.Tech CSE (AI & Data Science), Anubhab Pal
 Guide: Mr. Ponsuresh Manoharan · L&T EduTech · August 2026
+
+Presentation deck and written report/paper live in [`thesis/`](thesis/) — kept separate
+from `docs/` (agent-facing technical reference) and `research/outputs/` (the unedited
+experiment record); see "Repository layout" above for why.
 
 Ground-up redesign of an earlier prototype (single-frame MediaPipe Hands + Random Forest, 19-word vocabulary, Flask + MJPEG streaming).

@@ -1,0 +1,202 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import time
+
+import numpy as np
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.schemas.api import (
+    LandmarksFrame,
+    SentenceBoundary,
+    TextInput,
+    TranslationPose,
+    TranslationText,
+    ErrorMessage,
+)
+from app.services.model_manager import ModelManager
+from app.services.session import SessionError, TranslationSession
+
+
+logger = logging.getLogger("signsage.websocket")
+router = APIRouter()
+
+
+def _manager(websocket: WebSocket) -> ModelManager:
+    manager = getattr(websocket.app.state, "model_manager", None)
+    if manager is None:
+        raise RuntimeError("Models are not loaded.")
+    return manager
+
+
+async def _send_error(
+    websocket: WebSocket,
+    session_id: str,
+    message: str,
+    code: str,
+) -> None:
+    payload = ErrorMessage(
+        session_id=session_id,
+        message=message,
+        code=code,
+    )
+    await websocket.send_json(payload.model_dump())
+
+
+@router.websocket("/api/v1/ws/translate")
+async def translate(websocket: WebSocket):
+    """One WebSocket connection == one shared-device session (see
+    app/services/session.py). Handles both directions independently:
+    Person A's `landmarks.frame`/`sentence.boundary` stream and Person B's
+    `text.input` are unrelated message flows sharing one socket -- neither
+    blocks or waits on the other, matching the shared-device turn-taking
+    model in ARCHITECTURE.md."""
+    settings = websocket.app.state.settings
+    await websocket.accept()
+
+    manager = _manager(websocket)
+    session = TranslationSession()
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+
+            if len(raw.encode("utf-8")) > settings.max_ws_message_bytes:
+                await _send_error(
+                    websocket,
+                    session.session_id or "",
+                    "WebSocket message is too large.",
+                    "MESSAGE_TOO_LARGE",
+                )
+                continue
+
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                await _send_error(
+                    websocket,
+                    session.session_id or "",
+                    "Message must be valid JSON.",
+                    "INVALID_JSON",
+                )
+                continue
+
+            msg_type = payload.get("type")
+            if not isinstance(msg_type, str):
+                await _send_error(
+                    websocket,
+                    session.session_id or "",
+                    "Message type is required.",
+                    "INVALID_MESSAGE",
+                )
+                continue
+
+            try:
+                if msg_type == "landmarks.frame":
+                    msg = LandmarksFrame.model_validate(payload)
+                    session.bind_session_id(msg.session_id)
+                    session.add_frame(
+                        np.asarray(msg.landmarks, dtype=np.float32).reshape(543, 3),
+                        settings.max_websocket_frames,
+                    )
+
+                elif msg_type == "sentence.boundary":
+                    msg = SentenceBoundary.model_validate(payload)
+                    session.bind_session_id(msg.session_id)
+                    sequence = session.take_sentence()
+
+                    started = time.perf_counter()
+                    # PyTorch inference is synchronous. Run it off the event
+                    # loop so another connection is not blocked by CPU
+                    # inference.
+                    text, frames_used, model_latency = await asyncio.to_thread(
+                        manager.predict_sign_to_text,
+                        sequence,
+                        no_face=False,
+                    )
+                    total_latency = (time.perf_counter() - started) * 1000
+
+                    await websocket.send_json(
+                        TranslationText(
+                            session_id=session.session_id,
+                            text=text,
+                            latency_ms=round(max(model_latency, total_latency), 3),
+                        ).model_dump()
+                    )
+
+                elif msg_type == "text.input":
+                    msg = TextInput.model_validate(payload)
+                    session.bind_session_id(msg.session_id)
+
+                    started = time.perf_counter()
+                    gloss, poses, model_latency, _provider = await asyncio.to_thread(
+                        manager.text_to_pose.predict,
+                        msg.text,
+                    )
+                    total_latency = (time.perf_counter() - started) * 1000
+                    session.record_text_to_pose_turn()
+
+                    await websocket.send_json(
+                        TranslationPose(
+                            session_id=session.session_id,
+                            gloss=gloss,
+                            frames=poses.tolist(),
+                            fps=25,
+                            latency_ms=round(max(model_latency, total_latency), 3),
+                        ).model_dump()
+                    )
+
+                else:
+                    await _send_error(
+                        websocket,
+                        session.session_id or "",
+                        f"Unknown message type: {msg_type!r}.",
+                        "UNKNOWN_MESSAGE_TYPE",
+                    )
+
+            except SessionError as exc:
+                await _send_error(
+                    websocket,
+                    session.session_id or str(payload.get("session_id", "")),
+                    str(exc),
+                    "SESSION_ERROR",
+                )
+            except ValueError as exc:
+                await _send_error(
+                    websocket,
+                    session.session_id or str(payload.get("session_id", "")),
+                    str(exc),
+                    "INVALID_MESSAGE",
+                )
+            except FileNotFoundError:
+                logger.exception("Model artifact missing during WebSocket inference.")
+                await _send_error(
+                    websocket,
+                    session.session_id or "",
+                    "Required model artifact is unavailable.",
+                    "MODEL_UNAVAILABLE",
+                )
+            except Exception:
+                logger.exception("Unhandled WebSocket inference error.")
+                await _send_error(
+                    websocket,
+                    session.session_id or str(payload.get("session_id", "")),
+                    "Translation inference failed.",
+                    "INFERENCE_FAILED",
+                )
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected session=%s", session.session_id)
+    except Exception:
+        logger.exception("WebSocket connection failed session=%s", session.session_id)
+        try:
+            await _send_error(
+                websocket,
+                session.session_id or "",
+                "WebSocket connection failed.",
+                "CONNECTION_FAILED",
+            )
+        except Exception:
+            pass

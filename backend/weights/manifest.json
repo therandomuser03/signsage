@@ -1,0 +1,37 @@
+{
+  "backend_version": "1.0.0",
+  "note": "This file is a static inventory for humans/tooling; the backend never reads it. See MODEL_CARD.md for why signsage_gru_best.pt is present on disk but 'served': false.",
+  "architecture": {
+    "sign_to_text": "SignTransformer",
+    "text_to_pose": "TextToPoseGRU",
+    "input_features": 1629,
+    "noface_input_features": 225,
+    "max_frames": 160,
+    "max_tokens": 40,
+    "pose_output_frames": 60,
+    "pose_fps": 25
+  },
+  "checkpoints": {
+    "signsage_transformer_full.pt": {
+      "sha256": "8256506eace7db7643b80744f56a9489871f056664dcfdd336a9a6132430eec7",
+      "size_bytes": 33888444,
+      "served": true
+    },
+    "signsage_transformer_noface.pt": {
+      "sha256": "98971fcd46fc6b970a22adc318e23c8c82ca94b66a9cb4eeebcb9cd9a143ab4b",
+      "size_bytes": 32810318,
+      "served": true
+    },
+    "signsage_text_to_pose_best.pt": {
+      "sha256": "ff294de9f2df16630d3e2164c440de0ab853b86ad46cbeb32678b16fb151ce3a",
+      "size_bytes": 19305589,
+      "served": true
+    },
+    "signsage_gru_best.pt": {
+      "sha256": "cdde13f519836efed61441227765b57e0dac1ba45d885bb30507e92fbcc83073",
+      "size_bytes": 36099603,
+      "served": false,
+      "reason": "Sign->Text GRU sanity baseline; fully mode-collapsed in Phase 0 evaluation (see research/outputs/phase0/RESULTS.md and MODEL_CARD.md). Not loaded, not required at startup, not reachable via any API route."
+    }
+  }
+}

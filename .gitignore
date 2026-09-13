@@ -11,8 +11,16 @@ build/
 .ipynb_checkpoints/
 
 # research binaries — DO NOT commit (61M checkpoints)
-research/outputs/phase0/checkpoints/*.pt
-backend/weights/*.pt
+research/outputs/phase0/checkpoints/*
+!research/outputs/phase0/checkpoints/.gitkeep
+backend/weights/*
+!backend/weights/.gitkeep
+!backend/weights/manifest.json
+
+# docs and agent instructions
+*.md
+!**/README.md
+!README.md
 
 # data — 231GB never in repo, keep README
 research/data/*
