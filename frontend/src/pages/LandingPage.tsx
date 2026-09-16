@@ -7,7 +7,8 @@ const landingHtml = stitchLandingHtml
   .replace(/<script[\s\S]*?<\/script>/g, "")
   .replace(/M\.Tech Research Initiative/g, "SignSage Platform")
   .replace(/M\.Tech/g, "SignSage")
-  // keep global container in sync with AppNavbar/Footer: homepage is the reference (max-w-7xl + px-4 lg:px-8)
+  // remove fixed-header offset (AppNavbar is sticky, not fixed) + keep global container in sync
+  .replace("pt-16", "")
   .replaceAll("max-w-6xl", "max-w-7xl")
   .replaceAll("px-margin lg:px-margin-desktop", "px-4 lg:px-8")
   .replaceAll("px-margin-desktop", "px-4 lg:px-8")
