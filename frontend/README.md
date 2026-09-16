@@ -1,78 +1,47 @@
-# React + TypeScript + Vite
+# SignSage Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Shared-device conversational UI — Vite + React + TypeScript. See `PLAN.md` for pipeline status.
 
-Currently, two official plugins are available:
+## What this is
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Sign→Text:** camera → MediaPipe Holistic WASM (`@mediapipe/tasks-vision`) → 543 landmarks (pose 33+face 468+hands 21+21) flattened 1629-dim → browser `normalizeLandmarkSequence` (`lib/landmarks.ts` port of notebook) → motion-pause heuristic (<0.012 / 650ms / ≥15 frames) + manual Send → WebSocket `landmarks.frame` + `sentence.boundary` → `translation.text` caption. Privacy: raw video never leaves device.
+- **Text→Pose:** typed text (Speech-to-Text via Web Speech API in Phase B) → `text.input` → gloss (Groq→Ollama→naive) → 60-frame pose → `PoseCanvas` 33-point skeleton @25fps. Honesty banners per `research/outputs/phase0/RESULTS.md`.
+- **Transport:** `hooks/use-translation-socket.ts` — one WS per tab (`VITE_SIGNSAGE_WS_URL`), `session_id` per-message.
+- **Verified:** `npm run build` + `npm run test` (vitest) green; `PLAN.md` Phase A.
 
-## React Compiler
+## Run
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev        # Vite at http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Backend must be running (`backend/README.md` → `uvicorn app.main:app --reload` at :8000) or set:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+# frontend/.env.local
+VITE_SIGNSAGE_WS_URL=ws://127.0.0.1:8000/api/v1/ws/translate
+VITE_MEDIAPIPE_MODEL_URL=https://storage.googleapis.com/mediapipe-models/holistic_landmarker/holistic_landmarker/float16/latest/holistic_landmarker.task
 ```
+
+## Build / Test
+
+```bash
+npm run build
+npm run test         # vitest
+npx playwright test  # e2e (landing + workspace)
+```
+
+## Key files
+
+| File | Role |
+|---|---|
+| `src/App.tsx` | Landing + `SignSageWorkspace`/`SignToTextPanel`/`TextToSignPanel`, hash routing |
+| `src/lib/landmarks.ts` | `flattenHolisticLandmarks` + `normalizeLandmarkSequence` + `poseMotion` |
+| `src/hooks/use-translation-socket.ts` | WS connect/send |
+| `src/components/pose-canvas.tsx` | 33-point skeleton canvas |
+| `src/hooks/useSpeechRecognition.ts` | Phase B — browser STT (pending) |
+
+## Caveat
+
+Current checkpoints mode-collapse / near-static per `research/outputs/phase0/RESULTS.md` and `backend/MODEL_CARD.md`. A successful WS round-trip = pipeline ran, not translation verified.

@@ -22,14 +22,54 @@ def causal_mask(n: int, device: torch.device) -> torch.Tensor:
     )
 
 
-class SignToTextService:
-    """Greedy-decoding Sign->Text inference, matching the notebook's
-    `greedy_transformer` exactly.
+def apply_penalties(
+    logits: torch.Tensor,
+    generated_ids: list[int],
+    *,
+    repetition_penalty: float = 2.0,
+    no_repeat_ngram_size: int = 3,
+    temperature: float = 0.8,
+) -> torch.Tensor:
+    """Score adjustment: suppress specials, penalize repeats, apply temperature."""
+    scores = logits.clone()
+    # ponytail: hard-mask <pad>(0) and <bos>(1); they should never be generated
+    scores[0] = -torch.inf
+    scores[1] = -torch.inf
 
-    A single parameterized class serves both the full-landmark and no-face
-    ablation models -- they differ only in whether `prepare_landmarks` masks
-    out the face block, never in the decoding logic itself. (Previously this
-    was two near-identical classes; collapsed to avoid drift between them.)
+    # Token-level repetition penalty
+    for token_id in set(generated_ids):
+        if scores[token_id] >= 0:
+            scores[token_id] /= repetition_penalty
+        else:
+            scores[token_id] *= repetition_penalty
+
+    # N-gram blocking
+    if len(generated_ids) >= no_repeat_ngram_size - 1:
+        prefix = tuple(generated_ids[-(no_repeat_ngram_size - 1) :])
+        blocked = {
+            ngram[-1]
+            for ngram in zip(
+                *(generated_ids[index:] for index in range(no_repeat_ngram_size))
+            )
+            if ngram[:-1] == prefix
+        }
+        for token_id in blocked:
+            scores[token_id] = -torch.inf
+
+    # Temperature scaling sharpens (< 1) or flattens (> 1) the distribution
+    scores = scores / max(temperature, 1e-6)
+    return scores
+
+
+class SignToTextService:
+    """Beam-search Sign→Text inference.
+
+    Replaces the previous greedy decoder with a simple beam search that
+    explores multiple hypothesis paths. This helps a mode-collapsed model
+    find more diverse and coherent output than single-path greedy decoding.
+
+    ponytail: no length-normalization or coverage penalty; upgrade path is
+    adding those if beam search alone isn't enough after retraining.
     """
 
     def __init__(
@@ -42,6 +82,7 @@ class SignToTextService:
         max_tokens: int,
         input_mode: str = "normalized",
         no_face: bool = False,
+        beam_width: int = 5,
     ):
         self.model = model
         self.vocab = vocab
@@ -50,6 +91,7 @@ class SignToTextService:
         self.max_tokens = max_tokens
         self.input_mode = input_mode
         self.no_face = no_face
+        self.beam_width = beam_width
 
     @torch.inference_mode()
     def predict(self, landmarks: np.ndarray):
@@ -67,19 +109,55 @@ class SignToTextService:
         src_pad = padding_mask(lengths, frames.size(1))
         memory = self.model.encode(frames, src_pad)
 
-        ids = [self.vocab.bos_id]
+        # Beam search
+        # Each beam: (cumulative_log_prob, token_ids)
+        beams: list[tuple[float, list[int]]] = [(0.0, [self.vocab.bos_id])]
+        finished: list[tuple[float, list[int]]] = []
+
         for _ in range(self.max_tokens):
-            tokens = torch.tensor([ids], device=self.device)
-            logits = self.model.decode(
-                tokens,
-                memory,
-                causal_mask(tokens.size(1), self.device),
-                src_pad,
-            )
-            nxt = int(logits[0, -1].argmax())
-            if nxt == self.vocab.eos_id:
+            candidates: list[tuple[float, list[int]]] = []
+
+            for score, ids in beams:
+                tokens = torch.tensor([ids], device=self.device)
+                logits = self.model.decode(
+                    tokens,
+                    memory,
+                    causal_mask(tokens.size(1), self.device),
+                    src_pad,
+                )
+                adjusted = apply_penalties(logits[0, -1], ids)
+                log_probs = torch.log_softmax(adjusted, dim=-1)
+
+                # Expand top-k candidates from this beam
+                topk_probs, topk_ids = log_probs.topk(self.beam_width)
+                for prob, tid in zip(topk_probs.tolist(), topk_ids.tolist()):
+                    new_ids = ids + [tid]
+                    new_score = score + prob
+                    if tid == self.vocab.eos_id:
+                        # Length-normalize: divide by number of generated tokens
+                        norm_score = new_score / max(len(new_ids) - 1, 1)
+                        finished.append((norm_score, new_ids))
+                    else:
+                        candidates.append((new_score, new_ids))
+
+            if not candidates:
                 break
-            ids.append(nxt)
+
+            # Keep top beam_width candidates
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            beams = candidates[: self.beam_width]
+
+            # Early stop: enough finished hypotheses
+            if len(finished) >= self.beam_width:
+                break
+
+        # Pick best finished hypothesis, or best beam if none finished
+        if finished:
+            finished.sort(key=lambda x: x[0], reverse=True)
+            best_ids = finished[0][1]
+        else:
+            beams.sort(key=lambda x: x[0], reverse=True)
+            best_ids = beams[0][1]
 
         elapsed_ms = (time.perf_counter() - started) * 1000
-        return self.vocab.decode(ids[1:]), processed.true_length, elapsed_ms
+        return self.vocab.decode(best_ids[1:]), processed.true_length, elapsed_ms

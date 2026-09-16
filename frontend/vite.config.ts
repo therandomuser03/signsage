@@ -15,4 +15,6 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // ponytail: vitest exclusion — vite types don't include `test`, cast via any
+  ...( { test: { exclude: ["e2e/**", "node_modules/**", "dist/**"] } } as any),
 })

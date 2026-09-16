@@ -4,10 +4,30 @@ import numpy as np
 import torch
 
 from app.models.sign_to_text import SignTransformer, TextToPoseGRU
+from app.services.sign_to_text import apply_penalties
 from app.services.vocab import Vocabulary
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_decoder_blocks_control_tokens_and_repeated_trigrams():
+    logits = torch.zeros(8)
+    logits[0] = 100
+    logits[1] = 99
+    logits[2] = 98
+    logits[7] = 97
+    scores = apply_penalties(logits, [4, 5, 6, 4, 5, 6])
+    assert scores[0] == float("-inf")
+    assert scores[1] == float("-inf")
+    assert scores[4] == float("-inf")  # trigram (5,6)->4 blocked
+    assert int(scores.argmax()) == 2
+
+
+def test_decoder_penalizes_previously_generated_token():
+    logits = torch.tensor([0.0, 0.0, 0.0, 0.0, 1.0, 1.1])
+    scores = apply_penalties(logits, [5])
+    assert int(scores.argmax()) == 4
 
 
 def _load(path, model, device="cpu"):

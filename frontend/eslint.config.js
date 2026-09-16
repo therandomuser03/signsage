@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'src/prisma/**', 'src/components/ui/**', 'src/hooks/use-mobile.ts', 'src/components/theme-provider.tsx']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

@@ -12,6 +12,10 @@ STOPWORDS = {
     "that", "for", "with", "as", "at", "by",
 }
 
+GLOSS_ALIASES = {
+    "hi": "hello",
+}
+
 
 @dataclass(frozen=True)
 class GlossResult:
@@ -22,7 +26,8 @@ class GlossResult:
 def naive_gloss(text: str) -> str:
     words = re.findall(r"[a-z0-9']+", str(text).lower())
     kept = [w for w in words if w not in STOPWORDS]
-    return " ".join(kept) if kept else " ".join(words)
+    gloss = kept if kept else words
+    return " ".join(GLOSS_ALIASES.get(word, word) for word in gloss)
 
 
 def _clean_gloss(value: str) -> str:
