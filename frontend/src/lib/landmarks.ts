@@ -11,6 +11,11 @@ export const HAND_LANDMARKS = 21
 export const LANDMARK_COUNT = POSE_LANDMARKS + FACE_LANDMARKS + HAND_LANDMARKS * 2
 export const LANDMARK_DIMENSIONS = LANDMARK_COUNT * 3
 
+// ponytail: temporal detection tuned for conversational ISL; raise PAUSE_MS if you see split sentences, lower if sluggish
+export const TEMPORAL_MOTION_THRESHOLD = 0.012
+export const TEMPORAL_PAUSE_MS = 650
+export const TEMPORAL_MIN_FRAMES = 15
+
 export interface HolisticLandmarks {
   pose?: LandmarkPoint[]
   face?: LandmarkPoint[]

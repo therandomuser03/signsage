@@ -38,3 +38,5 @@ graphify-out/
 # os
 .DS_Store
 Thumbs.db
+
+.vscode

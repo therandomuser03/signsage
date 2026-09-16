@@ -41,6 +41,7 @@ class TranslationSession:
     """
 
     session_id: str | None = None
+    user_id: str | None = None
     created_at: float = field(default_factory=time.time)
     last_activity_at: float = field(default_factory=time.time)
     frames: list[np.ndarray] = field(default_factory=list)
@@ -97,6 +98,7 @@ class TranslationSession:
         """Small dict for logging/diagnostics -- not part of the wire contract."""
         return {
             "session_id": self.session_id,
+            "user_id": self.user_id,
             "created_at": self.created_at,
             "last_activity_at": self.last_activity_at,
             "buffered_frames": self.buffered_frame_count,

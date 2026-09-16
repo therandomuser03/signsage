@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { getSupabase } from "../contexts/AuthContext"
 
 export type ConnectionState = "connecting" | "connected" | "disconnected"
 
 type ServerMessage =
-  | { type: "translation.text"; session_id: string; text: string; latency_ms: number }
+  | { type: "translation.text"; session_id: string; text: string; latency_ms: number; confidence?: number; is_fallback?: boolean; gated_reason?: string | null }
   | { type: "translation.pose"; session_id: string; gloss: string; frames: number[][]; fps: number; latency_ms: number }
   | { type: "error"; session_id: string; message: string; code: string }
 
@@ -11,10 +12,17 @@ interface TranslationSocketOptions {
   onMessage: (message: ServerMessage) => void
 }
 
-const endpoint = import.meta.env.VITE_SIGNSAGE_WS_URL ?? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/api/v1/ws/translate`
+const baseEndpoint = import.meta.env.VITE_SIGNSAGE_WS_URL ?? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/api/v1/ws/translate`
 
 function sessionId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `signsage-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const { data } = await getSupabase().auth.getSession()
+    return data.session?.access_token ?? null
+  } catch { return null }
 }
 
 export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
@@ -28,27 +36,37 @@ export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
   }, [onMessage])
 
   useEffect(() => {
-    const socket = new WebSocket(endpoint)
-    socketRef.current = socket
+    let cancelled = false
+    let socket: WebSocket | null = null
 
-    socket.addEventListener("open", () => setConnectionState("connected"))
-    socket.addEventListener("close", () => setConnectionState("disconnected"))
-    socket.addEventListener("error", () => setConnectionState("disconnected"))
-    socket.addEventListener("message", (event) => {
-      try {
-        onMessageRef.current(JSON.parse(event.data) as ServerMessage)
-      } catch {
-        onMessageRef.current({
-          type: "error",
-          session_id: sessionIdRef.current,
-          code: "INVALID_SERVER_MESSAGE",
-          message: "Backend returned an unreadable message.",
-        })
-      }
-    })
+    async function connect() {
+      const token = await getAuthToken()
+      const url = token ? `${baseEndpoint}${baseEndpoint.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : baseEndpoint
+      if (cancelled) return
+      socket = new WebSocket(url)
+      socketRef.current = socket
+
+      socket.addEventListener("open", () => setConnectionState("connected"))
+      socket.addEventListener("close", () => setConnectionState("disconnected"))
+      socket.addEventListener("error", () => setConnectionState("disconnected"))
+      socket.addEventListener("message", (event) => {
+        try {
+          onMessageRef.current(JSON.parse(event.data) as ServerMessage)
+        } catch {
+          onMessageRef.current({
+            type: "error",
+            session_id: sessionIdRef.current,
+            code: "INVALID_SERVER_MESSAGE",
+            message: "Backend returned an unreadable message.",
+          })
+        }
+      })
+    }
+    void connect()
 
     return () => {
-      socket.close()
+      cancelled = true
+      socket?.close()
       socketRef.current = null
     }
   }, [])

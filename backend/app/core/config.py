@@ -66,8 +66,25 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2:3b"
     ollama_timeout_seconds: float = 8.0
 
+    # LLM sentence refinement for Sign→Text (groq→ollama→naive)
+    enable_llm_refine: bool = False
+    llm_refine_timeout_seconds: float = 8.0
+
     # Fail-fast rather than pretending a missing checkpoint is healthy.
     require_all_models: bool = True
+
+    # Optional Supabase auth for translator (frontend-enforced by default).
+    # When enabled, WebSocket verifies Bearer token against Supabase Auth.
+    enable_auth: bool = False
+    supabase_url: str | None = None
+    supabase_anon_key: str | None = None
+
+    # Functional fallback for collapsed Sign→Text checkpoint (Image 1 "this is why sacrifices.")
+    # When true, low-confidence/attractor outputs are replaced by demo lexicon DTW match or honest placeholder.
+    enable_demo_fallback: bool = True
+    demo_prototypes_dir: Path = Path("./demo_prototypes")
+    translation_confidence_threshold: float = 0.45
+    demo_match_threshold: float = 6.5
 
     @field_validator("cors_origins", mode="before")
     @classmethod

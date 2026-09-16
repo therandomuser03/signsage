@@ -16,6 +16,7 @@ from app.schemas.api import (
     TranslationText,
     ErrorMessage,
 )
+from app.core.auth import verify_supabase_token
 from app.services.model_manager import ModelManager
 from app.services.session import SessionError, TranslationSession
 
@@ -54,10 +55,23 @@ async def translate(websocket: WebSocket):
     blocks or waits on the other, matching the shared-device turn-taking
     model in ARCHITECTURE.md."""
     settings = websocket.app.state.settings
+    # Optional auth: token via query param ?token=...
+    user_id: str | None = None
+    token = websocket.query_params.get("token")
+    if token and settings.enable_auth and settings.supabase_url:
+        user_id = await verify_supabase_token(token, settings.supabase_url, settings.supabase_anon_key)
+        if user_id is None:
+            await websocket.close(code=4401, reason="Unauthorized")
+            return
+    elif token and not settings.enable_auth:
+        # Auth disabled — trust token-less but allow passthrough if frontend sent token (no verification)
+        # ponytail: no JWT dep needed when disabled; frontend guard is primary
+        user_id = None
+
     await websocket.accept()
 
     manager = _manager(websocket)
-    session = TranslationSession()
+    session = TranslationSession(user_id=user_id)
 
     try:
         while True:
@@ -111,8 +125,8 @@ async def translate(websocket: WebSocket):
                     # PyTorch inference is synchronous. Run it off the event
                     # loop so another connection is not blocked by CPU
                     # inference.
-                    text, frames_used, model_latency = await asyncio.to_thread(
-                        manager.predict_sign_to_text,
+                    text, frames_used, model_latency, is_fallback, confidence, gated_reason = await asyncio.to_thread(
+                        manager.predict_sign_to_text_with_meta,
                         sequence,
                         no_face=False,
                     )
@@ -123,6 +137,9 @@ async def translate(websocket: WebSocket):
                             session_id=session.session_id,
                             text=text,
                             latency_ms=round(max(model_latency, total_latency), 3),
+                            confidence=round(float(confidence), 3),
+                            is_fallback=bool(is_fallback),
+                            gated_reason=gated_reason,
                         ).model_dump()
                     )
 

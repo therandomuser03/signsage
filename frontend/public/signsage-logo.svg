@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" fill="none">
+  <rect width="120" height="120" rx="24" fill="#101720"/>
+  <rect x="0.5" y="0.5" width="119" height="119" rx="23.5" stroke="#253342" stroke-width="1"/>
+  <!-- Minimal geometric ISL bidirectional gesture / wave instrument mark -->
+  <circle cx="60" cy="60" r="38" stroke="#16A085" stroke-width="2" stroke-dasharray="4 4" opacity="0.4"/>
+  <!-- Stylized precision hand gesture / translation nexus nodes -->
+  <path d="M42 74 C42 56, 50 44, 60 44 C70 44, 78 56, 78 74" stroke="#16A085" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 68 C50 54, 55 48, 60 48 C65 48, 70 54, 70 68" stroke="#F8FAFC" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="60" cy="34" r="4.5" fill="#16A085"/>
+  <circle cx="42" cy="74" r="3.5" fill="#7C5CFC"/>
+  <circle cx="78" cy="74" r="3.5" fill="#7C5CFC"/>
+  <circle cx="60" cy="56" r="3" fill="#F8FAFC"/>
+  <!-- Coordinate reticle crosshairs -->
+  <line x1="60" y1="20" x2="60" y2="26" stroke="#16A085" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="60" y1="94" x2="60" y2="100" stroke="#16A085" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="20" y1="60" x2="26" y2="60" stroke="#16A085" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="94" y1="60" x2="100" y2="60" stroke="#16A085" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

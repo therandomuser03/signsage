@@ -8,6 +8,7 @@ import torch
 from app.core.config import Settings
 from app.core.serialization import load_json
 from app.models.sign_to_text import SignTransformer, TextToPoseGRU
+from app.services.demo_lexicon import DemoLexicon
 from app.services.pose_preprocessing import FULL_FEATURE_DIM, NOFACE_FEATURE_DIM
 from app.services.sign_to_text import SignToTextService
 from app.services.text_to_pose import TextToPoseService
@@ -38,6 +39,7 @@ class ModelManager:
     sign_to_text_noface: SignToTextService | None
     text_to_pose: TextToPoseService
     manifest: dict
+    demo_lexicon: DemoLexicon | None = None
 
     @classmethod
     def load(cls, settings: Settings) -> "ModelManager":
@@ -98,6 +100,14 @@ class ModelManager:
         )
         pose_model.eval()
 
+        # Demo lexicon for functional fallback (noface DTW)
+        demo_lexicon = None
+        try:
+            demo_dir = settings.resolve(settings.demo_prototypes_dir)
+            demo_lexicon = DemoLexicon.load(demo_dir)
+        except Exception:
+            demo_lexicon = DemoLexicon.load(settings.demo_prototypes_dir)
+
         manifest = {}
         if settings.resolved_manifest.is_file():
             manifest = load_json(settings.resolved_manifest)
@@ -112,18 +122,48 @@ class ModelManager:
                     f"Required checkpoint(s) missing: {', '.join(missing)}"
                 )
 
+        # inject demo lexicon + LLM refine into services
+        demo_kwargs = dict(
+            demo_lexicon=demo_lexicon,
+            enable_demo_fallback=settings.enable_demo_fallback,
+            demo_match_threshold=settings.demo_match_threshold,
+            enable_llm_refine=settings.enable_llm_refine,
+            groq_api_key=settings.groq_api_key,
+            groq_model=settings.groq_model,
+            enable_ollama=settings.enable_ollama_gloss,
+            ollama_base_url=settings.ollama_base_url,
+            ollama_model=settings.ollama_model,
+            ollama_timeout_seconds=settings.ollama_timeout_seconds,
+            llm_refine_timeout=settings.llm_refine_timeout_seconds,
+        )
+        full_service = SignToTextService(
+            model=full_model,
+            vocab=text_vocab,
+            device=device,
+            max_frames=settings.max_frames,
+            max_tokens=settings.max_tokens,
+            input_mode=settings.landmark_input_mode,
+            **demo_kwargs,
+        )
+        # also inject into noface if present
+        if noface_service is not None:
+            noface_service.demo_lexicon = demo_lexicon
+            noface_service.enable_demo_fallback = settings.enable_demo_fallback
+            noface_service.demo_match_threshold = settings.demo_match_threshold
+            noface_service.enable_llm_refine = settings.enable_llm_refine
+            noface_service.groq_api_key = settings.groq_api_key
+            noface_service.groq_model = settings.groq_model
+            noface_service.enable_ollama = settings.enable_ollama_gloss
+            noface_service.ollama_base_url = settings.ollama_base_url
+            noface_service.ollama_model = settings.ollama_model
+            noface_service.ollama_timeout_seconds = settings.ollama_timeout_seconds
+            noface_service.llm_refine_timeout = settings.llm_refine_timeout_seconds
+
         return cls(
             device=device,
             text_vocab=text_vocab,
             gloss_vocab=gloss_vocab,
-            sign_to_text_full=SignToTextService(
-                model=full_model,
-                vocab=text_vocab,
-                device=device,
-                max_frames=settings.max_frames,
-                max_tokens=settings.max_tokens,
-                input_mode=settings.landmark_input_mode,
-            ),
+            sign_to_text_full=full_service,
             sign_to_text_noface=noface_service,
             text_to_pose=TextToPoseService(
                 model=pose_model,
@@ -139,6 +179,7 @@ class ModelManager:
                 ollama_timeout_seconds=settings.ollama_timeout_seconds,
             ),
             manifest=manifest,
+            demo_lexicon=demo_lexicon,
         )
 
     def predict_sign_to_text(self, landmarks, *, no_face: bool = False):
@@ -147,6 +188,13 @@ class ModelManager:
                 raise ValueError("The no-face model is disabled.")
             return self.sign_to_text_noface.predict(landmarks)
         return self.sign_to_text_full.predict(landmarks)
+
+    def predict_sign_to_text_with_meta(self, landmarks, *, no_face: bool = False):
+        if no_face:
+            if self.sign_to_text_noface is None:
+                raise ValueError("The no-face model is disabled.")
+            return self.sign_to_text_noface.predict_with_meta(landmarks)
+        return self.sign_to_text_full.predict_with_meta(landmarks)
 
     def provenance_summary(self) -> dict | None:
         """Surface the research knowledge-repository manifest (see
@@ -178,7 +226,8 @@ class ModelManager:
                 "status": "loaded",
                 "caveat": (
                     "Phase 0 checkpoint; evaluation documented repetitive/mode-collapsed "
-                    "outputs. Mechanical inference is supported; reliability is not established."
+                    "outputs. Mechanical inference is supported; reliability is not established. "
+                    "Demo lexicon fallback active."
                 ),
             },
             {
@@ -202,6 +251,18 @@ class ModelManager:
                     "checkpoint": CHECKPOINTS["transformer_noface"],
                     "status": "loaded",
                     "caveat": "Phase 0 non-manual-marker/face ablation checkpoint.",
+                }
+            )
+        # demo lexicon is not a checkpoint but expose availability
+        if self.demo_lexicon is not None and self.demo_lexicon.is_available():
+            items.append(
+                {
+                    "name": "demo_lexicon",
+                    "task": "sign_to_text_fallback",
+                    "input_features": NOFACE_FEATURE_DIM,
+                    "checkpoint": "demo_prototypes/*.json",
+                    "status": f"loaded ({len(self.demo_lexicon.inventory())} phrases)",
+                    "caveat": "DTW noface fallback for collapsed outputs; honest placeholder when no match.",
                 }
             )
         return items

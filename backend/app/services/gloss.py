@@ -27,7 +27,16 @@ def naive_gloss(text: str) -> str:
     words = re.findall(r"[a-z0-9']+", str(text).lower())
     kept = [w for w in words if w not in STOPWORDS]
     gloss = kept if kept else words
-    return " ".join(GLOSS_ALIASES.get(word, word) for word in gloss)
+    gloss = [GLOSS_ALIASES.get(word, word) for word in gloss]
+    # ponytail: minimal ISL ordering — questions last, time first (cheap heuristic, LLM does full)
+    question_words = {"where", "what", "when", "why", "how", "who", "whom", "which"}
+    q = [w for w in gloss if w in question_words]
+    rest = [w for w in gloss if w not in question_words]
+    if q:
+        # move question to end: "where is hospital" -> "hospital where"
+        gloss = rest + q
+    # keep as is otherwise (SOV approx via stopword removal already)
+    return " ".join(gloss)
 
 
 def _clean_gloss(value: str) -> str:
@@ -54,8 +63,10 @@ def groq_gloss(
             {
                 "role": "system",
                 "content": (
-                    "Convert the English sentence to concise Indian Sign Language "
-                    "gloss ordering. Reply only with the gloss words, no explanation."
+                    "Convert English to concise Indian Sign Language (ISL) gloss. "
+                    "Rules: SOV/topic-comment order, drop articles (a/an/the), copulas (is/are), "
+                    "keep content words, fingerspell names. Example: 'Where is the hospital?' -> 'hospital where'. "
+                    "Reply only with gloss words, lowercase, no punctuation, no explanation."
                 ),
             },
             {"role": "user", "content": str(text)},
@@ -76,8 +87,9 @@ def ollama_gloss(
     timeout_seconds: float,
 ) -> str:
     prompt = (
-        "Convert this English sentence to concise Indian Sign Language gloss "
-        "ordering. Reply only with gloss words, no explanation.\n\n"
+        "Convert English to concise Indian Sign Language (ISL) gloss. "
+        "Rules: SOV/topic-comment, drop articles/copulas, keep content words. "
+        "Example: 'Where is the hospital?' -> 'hospital where'\n\n"
         f"English: {text}\nGloss:"
     )
     with httpx.Client(timeout=timeout_seconds) as client:
