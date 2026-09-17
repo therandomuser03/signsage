@@ -20,7 +20,7 @@ export function ArchivePage({ navigate }: { navigate: (hash: string) => void }) 
           <div className="rounded-xl bg-surface-container border border-outline-variant/30 p-8 text-center flex flex-col items-center gap-3">
             <span className="material-symbols-outlined text-5xl text-on-surface-variant/20">history</span>
             <p className="font-body-md text-body-md text-on-surface-variant">No archived sessions yet. Translate something and it will appear here.</p>
-            <button onClick={() => navigate("#/translate/sign")} className="px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-sm">Start Translating</button>
+            <button onClick={() => navigate("/translate/sign")} className="px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-sm">Start Translating</button>
           </div>
         ) : (
           <div className="grid gap-2">

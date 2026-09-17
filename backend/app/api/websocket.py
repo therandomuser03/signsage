@@ -111,15 +111,15 @@ async def translate(websocket: WebSocket):
                 if msg_type == "landmarks.frame":
                     msg = LandmarksFrame.model_validate(payload)
                     session.bind_session_id(msg.session_id)
-                    session.add_frame(
-                        np.asarray(msg.landmarks, dtype=np.float32).reshape(543, 3),
-                        settings.max_websocket_frames,
-                    )
+                    frame_arr = np.asarray(msg.landmarks, dtype=np.float32).reshape(543, 3)
+                    session.add_frame(frame_arr, settings.max_websocket_frames)
+                    logger.info("landmarks.frame received session=%s frame_idx=%d total_frames=%d", session.session_id, session.buffered_frame_count, len(session.frames) if hasattr(session, 'frames') else '?')
 
                 elif msg_type == "sentence.boundary":
                     msg = SentenceBoundary.model_validate(payload)
                     session.bind_session_id(msg.session_id)
                     sequence = session.take_sentence()
+                    logger.info("sentence.boundary received session=%s seq_len=%d", session.session_id, len(sequence) if hasattr(sequence, '__len__') else '?')
 
                     started = time.perf_counter()
                     # PyTorch inference is synchronous. Run it off the event
@@ -131,6 +131,8 @@ async def translate(websocket: WebSocket):
                         no_face=False,
                     )
                     total_latency = (time.perf_counter() - started) * 1000
+
+                    logger.info("S2T inference session=%s text=%s fallback=%s reason=%s", session.session_id, text[:30] if text else "None", is_fallback, gated_reason)
 
                     await websocket.send_json(
                         TranslationText(
@@ -154,6 +156,8 @@ async def translate(websocket: WebSocket):
                     )
                     total_latency = (time.perf_counter() - started) * 1000
                     session.record_text_to_pose_turn()
+
+                    logger.info("T2P inference session=%s text=%s gloss=%s poses_len=%d", session.session_id, msg.text[:30], gloss, len(poses) if hasattr(poses, '__len__') else '?')
 
                     await websocket.send_json(
                         TranslationPose(

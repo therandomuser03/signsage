@@ -3,8 +3,10 @@ import { useAuth } from "../contexts/AuthContext"
 
 export function AppNavbar({ route, navigate }: { route: string; navigate: (h: string) => void }) {
   const { user, signOut } = useAuth()
-  const is = (p: string) =>
-    p === "#/" ? route === "#/" || route === "" : route.startsWith(p)
+  const is = (p: string) => {
+    const clean = p.replace(/^#/, "") || "/"
+    return clean === "/" ? route === "/" || route === "" : route.startsWith(clean)
+  }
   const link = (p: string, label: string) => (
     <button
       onClick={() => navigate(p)}
@@ -18,7 +20,7 @@ export function AppNavbar({ route, navigate }: { route: string; navigate: (h: st
   return (
     <header className="sticky top-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40">
       <div className="h-16 w-full max-w-7xl mx-auto px-4 lg:px-8 flex items-center justify-between gap-4">
-        <button onClick={() => navigate("#/")} className="flex items-center gap-2 shrink-0">
+        <button onClick={() => navigate("/")} className="flex items-center gap-2 shrink-0">
           <img src="/signsage-logo.svg" alt="SignSage" className="h-8 w-8 rounded object-contain shrink-0" />
           <span className="font-headline-md text-headline-md tracking-tight text-on-surface hidden sm:inline">SignSage</span>
         </button>
@@ -31,7 +33,7 @@ export function AppNavbar({ route, navigate }: { route: string; navigate: (h: st
         </nav>
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => navigate("#/translate/sign")}
+            onClick={() => navigate("/translate/sign")}
             className="hidden sm:inline-flex px-3 py-2 rounded-lg bg-primary text-on-primary text-label-sm font-medium hover:bg-primary/90"
           >
             Open Translator
@@ -54,7 +56,7 @@ export function AppNavbar({ route, navigate }: { route: string; navigate: (h: st
         {link("#/technology", "Tech")}
         {link("#/privacy", "Privacy")}
         {link("#/archive", "Archive")}
-        <button onClick={() => navigate("#/translate/sign")} className="px-3 py-1.5 rounded bg-primary text-on-primary text-label-sm shrink-0">Open Translator</button>
+        <button onClick={() => navigate("/translate/sign")} className="px-3 py-1.5 rounded bg-primary text-on-primary text-label-sm shrink-0">Open Translator</button>
         {user ? (
           <button onClick={() => void signOut()} className="px-3 py-1.5 rounded bg-surface-container border border-outline-variant/40 text-on-surface text-label-sm shrink-0">Sign out</button>
         ) : (

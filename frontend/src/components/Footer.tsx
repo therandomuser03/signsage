@@ -25,16 +25,16 @@ export function Footer() {
           <div className="md:col-span-3 flex flex-col gap-3">
             <span className="font-label-sm text-label-sm uppercase tracking-wider text-outline">Explore</span>
             <nav className="flex flex-col gap-1 font-body-sm text-sm">
-              <a href="#/research" onClick={e=>{e.preventDefault();window.location.hash="#/research"}} className="text-on-surface-variant hover:text-primary">Research &amp; Benchmarks</a>
-              <a href="#/technology" onClick={e=>{e.preventDefault();window.location.hash="#/technology"}} className="text-on-surface-variant hover:text-primary">Technology</a>
-              <a href="#/privacy" onClick={e=>{e.preventDefault();window.location.hash="#/privacy"}} className="text-on-surface-variant hover:text-primary">Privacy</a>
-              <a href="#/archive" onClick={e=>{e.preventDefault();window.location.hash="#/archive"}} className="text-on-surface-variant hover:text-primary">Archive</a>
+              <a href="/research" onClick={e=>{e.preventDefault();history.pushState(null,"","/research");window.dispatchEvent(new Event("popstate"))}} className="text-on-surface-variant hover:text-primary">Research &amp; Benchmarks</a>
+              <a href="/technology" onClick={e=>{e.preventDefault();history.pushState(null,"","/technology");window.dispatchEvent(new Event("popstate"))}} className="text-on-surface-variant hover:text-primary">Technology</a>
+              <a href="/privacy" onClick={e=>{e.preventDefault();history.pushState(null,"","/privacy");window.dispatchEvent(new Event("popstate"))}} className="text-on-surface-variant hover:text-primary">Privacy</a>
+              <a href="/archive" onClick={e=>{e.preventDefault();history.pushState(null,"","/archive");window.dispatchEvent(new Event("popstate"))}} className="text-on-surface-variant hover:text-primary">Archive</a>
             </nav>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 font-technical-data text-xs text-on-surface-variant">
-          <span>© 2024 SignSage · CC BY-NC-SA 4.0 (iSign) · Not certified for medical/legal use</span>
-          <span>ISL-ENG DUAL KERNEL · BUILT 2024.11.08</span>
+          <span>© {new Date().getFullYear()} SignSage · CC BY-NC-SA 4.0 (iSign) · Not certified for medical/legal use</span>
+          <span>ISL-ENG DUAL ENGINE · BUILT 15.09.2026</span>
         </div>
       </div>
     </footer>

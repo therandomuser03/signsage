@@ -44,8 +44,8 @@ export function PrivacyPage({ navigate }: { navigate: (hash: string) => void }) 
         </div>
 
         <div className="flex gap-3">
-          <button onClick={() => navigate("#/translate/sign")} className="px-6 py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-sm">Open Translator</button>
-          <button onClick={() => navigate("#/technology")} className="px-6 py-2.5 rounded-lg bg-surface-container border border-outline-variant text-on-surface font-label-md text-sm">Hardware Security Model</button>
+          <button onClick={() => navigate("/translate/sign")} className="px-6 py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-sm">Open Translator</button>
+          <button onClick={() => navigate("/technology")} className="px-6 py-2.5 rounded-lg bg-surface-container border border-outline-variant text-on-surface font-label-md text-sm">Hardware Security Model</button>
         </div>
         </div>
       </main>

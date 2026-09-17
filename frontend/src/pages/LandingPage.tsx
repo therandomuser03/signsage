@@ -20,13 +20,13 @@ export function LandingPage({ navigate }: { navigate: (hash: string) => void }) 
     if (!a) return
     const dp = a.getAttribute("data-path")
     const href = a.getAttribute("href") ?? ""
-    if (dp === "translator") { e.preventDefault(); navigate("#/translate/sign"); return }
-    if (dp === "landing") { e.preventDefault(); navigate("#/"); window.scrollTo({ top: 0, behavior: "smooth" }); return }
+    if (dp === "translator") { e.preventDefault(); navigate("/translate/sign"); return }
+    if (dp === "landing") { e.preventDefault(); navigate("/"); window.scrollTo({ top: 0, behavior: "smooth" }); return }
     if (href.startsWith("#") && href.length > 1) { e.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView({ behavior: "smooth" }); return }
-    if (dp === "research-benchmarks" || dp === "research-and-benchmarks") { e.preventDefault(); navigate("#/research"); return }
-    if (dp === "technology" || dp?.includes("architecture")) { e.preventDefault(); navigate("#/technology"); return }
-    if (dp === "privacy") { e.preventDefault(); navigate("#/privacy"); return }
-    if (dp?.includes("archive") || dp === "session-archive") { e.preventDefault(); navigate("#/archive"); return }
+    if (dp === "research-benchmarks" || dp === "research-and-benchmarks") { e.preventDefault(); navigate("/research"); return }
+    if (dp === "technology" || dp?.includes("architecture")) { e.preventDefault(); navigate("/technology"); return }
+    if (dp === "privacy") { e.preventDefault(); navigate("/privacy"); return }
+    if (dp?.includes("archive") || dp === "session-archive") { e.preventDefault(); navigate("/archive"); return }
   }, [navigate])
 
   return (

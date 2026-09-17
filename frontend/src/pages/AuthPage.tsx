@@ -6,13 +6,22 @@ import { FlickeringGrid } from "../components/ui/flickering-grid"
 import { useAuth } from "../contexts/AuthContext"
 
 function getNextHash(): string {
-  const hash = window.location.hash || ""
-  const qIndex = hash.indexOf("?")
-  if (qIndex === -1) return "#/translate/sign"
-  const qs = new URLSearchParams(hash.slice(qIndex + 1))
+  const raw = window.location.search || window.location.hash.slice(window.location.hash.indexOf("?")) || ""
+  // raw is "?next=..." or ""
+  if (!raw || !raw.includes("next=")) {
+    // legacy hash fallback
+    const hash = window.location.hash || ""
+    const qi = hash.indexOf("?")
+    if (qi === -1) return "/translate/sign"
+    const qs = new URLSearchParams(hash.slice(qi + 1))
+    const next = qs.get("next")
+    if (!next) return "/translate/sign"
+    try { return decodeURIComponent(next).replace(/^#/, "") || "/translate/sign" } catch { return next.replace(/^#/, "") }
+  }
+  const qs = new URLSearchParams(raw.startsWith("?") ? raw : "?" + raw)
   const next = qs.get("next")
-  if (!next) return "#/translate/sign"
-  try { return decodeURIComponent(next) } catch { return next }
+  if (!next) return "/translate/sign"
+  try { return decodeURIComponent(next).replace(/^#/, "") || "/translate/sign" } catch { return next.replace(/^#/, "") }
 }
 
 export function AuthPage({ navigate }: { navigate: (h: string) => void }) {
@@ -124,9 +133,9 @@ export function AuthPage({ navigate }: { navigate: (h: string) => void }) {
               <div className="flex items-center gap-2 font-technical-data text-xs text-outline">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> 543 coordinates · 60 FPS · WebGPU
                 <span className="mx-1">·</span>
-                <a href="#/privacy" onClick={e=>{e.preventDefault();navigate("#/privacy")}} className="text-primary hover:underline">Privacy</a>
+                <a href="/privacy" onClick={e=>{e.preventDefault();navigate("/privacy")}} className="text-primary hover:underline">Privacy</a>
                 <span>·</span>
-                <a href="#/research" onClick={e=>{e.preventDefault();navigate("#/research")}} className="text-primary hover:underline">Research</a>
+                <a href="/research" onClick={e=>{e.preventDefault();navigate("/research")}} className="text-primary hover:underline">Research</a>
               </div>
             </BlurFade>
           </div>
@@ -239,9 +248,9 @@ export function AuthPage({ navigate }: { navigate: (h: string) => void }) {
 
                   <p className="font-technical-data text-xs text-center text-on-surface-variant leading-relaxed">
                     By continuing you agree translations are assistive only — not medical/legal.<br />
-                    <a href="#/privacy" onClick={e=>{e.preventDefault();navigate("#/privacy")}} className="text-primary hover:underline">Privacy</a>
+                    <a href="/privacy" onClick={e=>{e.preventDefault();navigate("/privacy")}} className="text-primary hover:underline">Privacy</a>
                     <span className="mx-1">·</span>
-                    <a href="#/research" onClick={e=>{e.preventDefault();navigate("#/research")}} className="text-primary hover:underline">Research limits</a>
+                    <a href="/research" onClick={e=>{e.preventDefault();navigate("/research")}} className="text-primary hover:underline">Research limits</a>
                   </p>
                 </motion.form>
               </div>

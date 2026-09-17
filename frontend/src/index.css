@@ -204,6 +204,15 @@
     --color-outline-variant: #cbd5e1;
     --color-background: #ffffff;
     --color-on-background: #0f172a;
+    /* ponytail: light secondary/tertiary were #cabeff/#ffb4a6 (light on white) → dark variants for light mode contrast */
+    --color-secondary: #4f2cc7;
+    --color-on-secondary: #ffffff;
+    --color-secondary-container: #e6deff;
+    --color-on-secondary-container: #1c0060;
+    --color-tertiary: #7d2c1c;
+    --color-on-tertiary: #ffffff;
+    --color-tertiary-container: #ffdad3;
+    --color-on-tertiary-container: #3f0300;
 }
 
 .dark {
@@ -258,6 +267,14 @@
     --color-outline-variant: #3d4945;
     --color-background: #0d141d;
     --color-on-background: #dce3f0;
+    --color-secondary: #cabeff;
+    --color-on-secondary: #32009a;
+    --color-secondary-container: #4918c8;
+    --color-on-secondary-container: #e6deff;
+    --color-tertiary: #ffb4a6;
+    --color-on-tertiary: #5d170b;
+    --color-tertiary-container: #d97461;
+    --color-on-tertiary-container: #410000;
 }
 
 @layer base {

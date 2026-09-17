@@ -16,11 +16,11 @@ export function ResearchPage({ navigate }: { navigate: (h: string) => void }) {
     const a = (e.target as HTMLElement).closest("a[data-path], a[href^='#']") as HTMLAnchorElement | null
     if (!a) return
     const dp = a.getAttribute("data-path"); const href = a.getAttribute("href") ?? ""
-    if (dp === "translator" || href === "#" && dp === "translator") { e.preventDefault(); navigate("#/translate/sign"); return }
+    if (dp === "translator" || href === "#" && dp === "translator") { e.preventDefault(); navigate("/translate/sign"); return }
     if (href.startsWith("#") && href.length > 1) { e.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView({ behavior: "smooth" }); return }
-    if (dp?.includes("research")) { e.preventDefault(); navigate("#/research"); return }
-    if (dp?.includes("session")) { e.preventDefault(); navigate("#/translate/sign"); return }
-    if (dp?.includes("architecture") || dp === "technology") { e.preventDefault(); navigate("#/technology"); return }
+    if (dp?.includes("research")) { e.preventDefault(); navigate("/research"); return }
+    if (dp?.includes("session")) { e.preventDefault(); navigate("/translate/sign"); return }
+    if (dp?.includes("architecture") || dp === "technology") { e.preventDefault(); navigate("/technology"); return }
   }, [navigate])
   return (
     <div className="min-h-screen bg-surface flex flex-col">
