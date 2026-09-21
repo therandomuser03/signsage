@@ -13,7 +13,6 @@ build/
 # research binaries — DO NOT commit (61M checkpoints)
 research/outputs/phase0/checkpoints/*
 !research/outputs/phase0/checkpoints/.gitkeep
-backend/weights/*
 !backend/weights/.gitkeep
 !backend/weights/manifest.json
 
