@@ -12,7 +12,24 @@ interface TranslationSocketOptions {
   onMessage: (message: ServerMessage) => void
 }
 
-const baseEndpoint = import.meta.env.VITE_SIGNSAGE_WS_URL ?? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/api/v1/ws/translate`
+function isLocalHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
+}
+
+export function resolveWebSocketEndpoint(
+  configured: string | undefined,
+  location: Pick<Location, "protocol" | "hostname">,
+): string {
+  const endpoint = configured?.trim()
+  if (endpoint) return endpoint
+  if (!isLocalHost(location.hostname)) return ""
+  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8000/api/v1/ws/translate`
+}
+
+const baseEndpoint = resolveWebSocketEndpoint(
+  import.meta.env.VITE_SIGNSAGE_WS_URL,
+  window.location,
+)
 
 // Reconnect with capped exponential backoff rather than giving up after the
 // first drop -- a backend restart or brief network blip should not require
@@ -47,6 +64,17 @@ export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
     let hasConnectedOnce = false
+
+    if (!baseEndpoint) {
+      setConnectionState("disconnected")
+      onMessageRef.current({
+        type: "error",
+        session_id: sessionIdRef.current,
+        code: "MISSING_WEBSOCKET_URL",
+        message: "Set VITE_SIGNSAGE_WS_URL to the deployed backend WebSocket URL.",
+      })
+      return () => { cancelled = true }
+    }
 
     function scheduleReconnect() {
       if (cancelled) return
