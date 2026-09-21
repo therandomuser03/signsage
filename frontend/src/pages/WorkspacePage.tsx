@@ -13,7 +13,7 @@ export function WorkspacePage({ initialMode, navigate }: { initialMode: Conversa
   const [caption, setCaption] = useState("")
   const [captionLatency, setCaptionLatency] = useState<number | null>(null)
   const [captionMeta, setCaptionMeta] = useState<{ confidence?: number; is_fallback?: boolean; gated_reason?: string | null } | null>(null)
-  const [pose, setPose] = useState<{ frames: number[][]; fps: number; gloss: string; latency: number } | null>(null)
+  const [pose, setPose] = useState<{ frames: number[][]; fps: number; gloss: string; latency: number; isFallback: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptEntry[]>(() => {
     try { const raw = localStorage.getItem("signsage-transcript"); return raw ? JSON.parse(raw) : [] } catch { return [] }
@@ -36,7 +36,7 @@ export function WorkspacePage({ initialMode, navigate }: { initialMode: Conversa
         if (user?.id) void getSupabase().from("translation_turns").insert({ user_id: user.id, dir: "sign→text", text: message.text, latency_ms: message.latency_ms }).then(()=>{}, ()=>{})
       }
       else if (message.type === "translation.pose") {
-        setPose({ frames: message.frames, fps: message.fps, gloss: message.gloss, latency: message.latency_ms }); setError(null); pushEntry({ dir: "text→pose", text: message.gloss, latency: message.latency_ms })
+        setPose({ frames: message.frames, fps: message.fps, gloss: message.gloss, latency: message.latency_ms, isFallback: Boolean(message.is_fallback) }); setError(null); pushEntry({ dir: message.is_fallback ? "text→pose·demo" : "text→pose", text: message.gloss, latency: message.latency_ms })
         if (user?.id) void getSupabase().from("translation_turns").insert({ user_id: user.id, dir: "text→pose", text: message.gloss, gloss: message.gloss, latency_ms: message.latency_ms }).then(()=>{}, ()=>{})
       }
       else if (message.type === "error") { const msg = `${message.code}: ${message.message}`; setError(msg); pushEntry({ dir: "error", text: msg }) }
@@ -55,11 +55,11 @@ export function WorkspacePage({ initialMode, navigate }: { initialMode: Conversa
               <button onClick={() => { setMode("text"); navigate("/translate/text") }} className={`flex items-center gap-2 px-4 py-1.5 rounded-md font-label-md text-sm transition-all ${mode === "text" ? "bg-primary text-on-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}><span className="material-symbols-outlined text-[15px]">model_training</span> English → ISL</button>
             </div>
             <div className="flex items-center gap-4 font-technical-data text-xs text-on-surface-variant">
-              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> Live Feed · 60fps</span>
+              <span className="flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${connectionState === "connected" ? "bg-primary animate-pulse" : "bg-error"}`} /> Backend: {connectionState}</span>
               <span className="hidden md:inline text-outline-variant">·</span>
-              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px] text-primary">memory</span> {captionLatency !== null ? `${captionLatency.toFixed(0)} ms` : "— ms"} · Local WebGPU</span>
+              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px] text-primary">memory</span> {captionLatency !== null ? `${captionLatency.toFixed(0)} ms` : "— ms"} · Server-side inference</span>
             </div>
-            <span className="hidden lg:inline px-2 py-1 rounded bg-surface-container-high border border-outline-variant/40 font-technical-data text-xs text-on-surface-variant">Zero-Cloud · Landmarks only</span>
+            <span className="hidden lg:inline px-2 py-1 rounded bg-surface-container-high border border-outline-variant/40 font-technical-data text-xs text-on-surface-variant">Camera video stays on-device · only landmark coordinates are sent</span>
           </div>
           {mode === "sign"
             ? <SignModePanel caption={caption} captionLatency={captionLatency} captionMeta={captionMeta} error={error} send={send} connectionState={connectionState} transcript={transcript} setTranscript={setTranscript} />

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getSupabase } from "../contexts/AuthContext"
 
-export type ConnectionState = "connecting" | "connected" | "disconnected"
+export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected"
 
 type ServerMessage =
   | { type: "translation.text"; session_id: string; text: string; latency_ms: number; confidence?: number; is_fallback?: boolean; gated_reason?: string | null }
-  | { type: "translation.pose"; session_id: string; gloss: string; frames: number[][]; fps: number; latency_ms: number }
+  | { type: "translation.pose"; session_id: string; gloss: string; frames: number[][]; fps: number; latency_ms: number; is_fallback?: boolean }
   | { type: "error"; session_id: string; message: string; code: string }
 
 interface TranslationSocketOptions {
@@ -13,6 +13,12 @@ interface TranslationSocketOptions {
 }
 
 const baseEndpoint = import.meta.env.VITE_SIGNSAGE_WS_URL ?? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/api/v1/ws/translate`
+
+// Reconnect with capped exponential backoff rather than giving up after the
+// first drop -- a backend restart or brief network blip should not require
+// a full page reload to keep translating.
+const RECONNECT_BASE_DELAY_MS = 1000
+const RECONNECT_MAX_DELAY_MS = 15000
 
 function sessionId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `signsage-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -38,17 +44,40 @@ export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
   useEffect(() => {
     let cancelled = false
     let socket: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let attempt = 0
+    let hasConnectedOnce = false
+
+    function scheduleReconnect() {
+      if (cancelled) return
+      setConnectionState(hasConnectedOnce ? "reconnecting" : "connecting")
+      const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** attempt, RECONNECT_MAX_DELAY_MS)
+      attempt += 1
+      reconnectTimer = setTimeout(() => { void connect() }, delay)
+    }
 
     async function connect() {
+      if (cancelled) return
       const token = await getAuthToken()
       const url = token ? `${baseEndpoint}${baseEndpoint.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : baseEndpoint
       if (cancelled) return
       socket = new WebSocket(url)
       socketRef.current = socket
 
-      socket.addEventListener("open", () => setConnectionState("connected"))
-      socket.addEventListener("close", () => setConnectionState("disconnected"))
-      socket.addEventListener("error", () => setConnectionState("disconnected"))
+      socket.addEventListener("open", () => {
+        attempt = 0
+        hasConnectedOnce = true
+        setConnectionState("connected")
+      })
+      socket.addEventListener("close", () => {
+        if (socketRef.current === socket) socketRef.current = null
+        if (!cancelled) scheduleReconnect()
+      })
+      socket.addEventListener("error", () => {
+        // "close" always follows "error" for a WebSocket, so reconnection
+        // is scheduled there -- this only updates the visible state.
+        setConnectionState(hasConnectedOnce ? "reconnecting" : "connecting")
+      })
       socket.addEventListener("message", (event) => {
         try {
           onMessageRef.current(JSON.parse(event.data) as ServerMessage)
@@ -66,6 +95,7 @@ export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
 
     return () => {
       cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
       socket?.close()
       socketRef.current = null
     }

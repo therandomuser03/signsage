@@ -50,16 +50,19 @@ export function flattenHolisticLandmarks(landmarks: HolisticLandmarks): number[]
 }
 
 /**
- * Reject frames without body tracking and at least one tracked signing hand.
- * MediaPipe's optional visibility score is honored when present.
+ * Accept any complete Holistic component so framing is not limited to a
+ * full-body view. Missing components remain zero-padded for the model.
  */
 export function hasReliableSignLandmarks(landmarks: HolisticLandmarks): boolean {
-  if (landmarks.pose?.length !== POSE_LANDMARKS) return false
-  if (landmarks.leftHand?.length !== HAND_LANDMARKS && landmarks.rightHand?.length !== HAND_LANDMARKS) {
+  const hasComponent =
+    landmarks.leftHand?.length === HAND_LANDMARKS ||
+    landmarks.rightHand?.length === HAND_LANDMARKS
+
+  if (!hasComponent) {
     return false
   }
 
-  const visibility = landmarks.pose
+  const visibility = (landmarks.pose ?? [])
     .map((point) => point.visibility)
     .filter((value): value is number => typeof value === "number")
 
@@ -102,10 +105,19 @@ export function poseMotion(previous: number[], current: number[]): number {
   if (previous.length !== LANDMARK_DIMENSIONS || current.length !== LANDMARK_DIMENSIONS) return Infinity
 
   let total = 0
-  for (let index = 0; index < POSE_LANDMARKS * 3; index += 1) {
-    total += Math.abs(current[index] - previous[index])
+  let dimensions = 0
+  const ranges = [
+    [0, POSE_LANDMARKS * 3],
+    [(POSE_LANDMARKS + FACE_LANDMARKS) * 3, LANDMARK_DIMENSIONS],
+  ] as const
+
+  for (const [start, end] of ranges) {
+    for (let index = start; index < end; index += 1) {
+      total += Math.abs(current[index] - previous[index])
+      dimensions += 1
+    }
   }
-  return total / (POSE_LANDMARKS * 3)
+  return total / dimensions
 }
 
 function standardDeviation(values: number[]): number {

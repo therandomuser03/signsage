@@ -10,16 +10,16 @@ export function Footer() {
               <span className="px-2 py-0.5 rounded border border-outline-variant/30 bg-surface-container text-on-surface-variant font-technical-data text-xs">v1.2-rc</span>
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
-              Bidirectional Indian Sign Language ↔ English translation. Landmarks only, zero-cloud — see Privacy &amp; Research for honest limits.
+              Bidirectional Indian Sign Language ↔ English translation — an M.Tech research prototype. Video stays on-device; see Privacy &amp; Research for honest limits.
             </p>
             <span className="inline-flex items-center gap-1.5 font-technical-data text-xs text-outline">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Zero-Cloud Processing Guarantee
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Landmarks-only transport (no video/image upload)
             </span>
           </div>
           <div className="md:col-span-4 flex flex-col gap-1">
             <span className="font-label-sm text-label-sm uppercase tracking-wider text-outline">Research</span>
             <p className="font-technical-data text-xs text-on-surface-variant leading-relaxed bg-surface-container-low p-3 rounded border border-outline-variant/20">
-              SignSage Consortium. (2024). High-Fidelity Bidirectional ISL Neural Synthesis. M.Tech Research Monograph. arXiv:2409.ISL01 — see Research &amp; Benchmarks for NO-GO status.
+              M.Tech research project, Phase 0 evaluation on iSign v1.1 (run 20260916T144755Z): result NO-GO. No publication exists yet — see Research &amp; Benchmarks for the full disclosed results.
             </p>
           </div>
           <div className="md:col-span-3 flex flex-col gap-3">

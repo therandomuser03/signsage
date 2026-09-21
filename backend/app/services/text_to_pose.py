@@ -25,6 +25,8 @@ class TextToPoseService:
         ollama_base_url: str = "http://127.0.0.1:11434",
         ollama_model: str = "llama3.2:3b",
         ollama_timeout_seconds: float = 8.0,
+        demo_lexicon=None,
+        enable_demo_fallback: bool = True,
     ):
         self.model = model
         self.vocab = vocab
@@ -37,10 +39,52 @@ class TextToPoseService:
         self.ollama_base_url = ollama_base_url
         self.ollama_model = ollama_model
         self.ollama_timeout_seconds = ollama_timeout_seconds
+        self.demo_lexicon = demo_lexicon
+        self.enable_demo_fallback = enable_demo_fallback
+
+    @staticmethod
+    def _quantize(poses: np.ndarray) -> np.ndarray:
+        # Round to 4 decimal places for the wire format only -- see the note
+        # this used to carry inline: this shrinks a (60, 1629) JSON payload
+        # by roughly 60% for ~2ms of extra CPU, with no perceptible change to
+        # a rendered skeleton (float32 source precision is preserved).
+        return np.round(poses.astype(np.float64), 4)
 
     @torch.inference_mode()
     def predict(self, text: str):
+        """Return (gloss_or_phrase, poses[T,1629], elapsed_ms, provider, is_fallback).
+
+        Bounded demo phrases (see backend/demo_prototypes/) are checked
+        first: if `text` matches one of the ~10 supported phrases (exactly or
+        via a small alias table), the real recorded clip for that phrase is
+        returned instead of the generative model. The generative Text->Pose
+        GRU is a Phase 0 research checkpoint that motion-energy evaluation
+        showed collapses to a near-static pose (~7.9% of ground-truth
+        motion -- see research/outputs/phase0/RESULTS.md); the demo lexicon
+        path exists so the bounded phrase set actually animates, matching
+        the honest-fallback pattern already used for Sign->Text.
+        """
         started = time.perf_counter()
+
+        if (
+            self.enable_demo_fallback
+            and self.demo_lexicon is not None
+            and self.demo_lexicon.is_available()
+        ):
+            from app.services.demo_lexicon import match_demo_phrase
+
+            phrase = match_demo_phrase(text, self.demo_lexicon.inventory())
+            if phrase is not None:
+                render = self.demo_lexicon.get_render_sequence(phrase)
+                if render is not None:
+                    elapsed_ms = (time.perf_counter() - started) * 1000
+                    return (
+                        phrase,
+                        self._quantize(render),
+                        elapsed_ms,
+                        "demo_prototype",
+                        True,
+                    )
 
         gloss_result = generate_gloss(
             text,
@@ -68,20 +112,7 @@ class TextToPoseService:
             .numpy()
             .astype(np.float32)
         )
-        # Round to 4 decimal places for the wire format only. This is a
-        # vectorized, precision-preserving trick, not a data change: the
-        # model's output is float32 (~7 significant digits) to begin with,
-        # so 4 decimals loses nothing perceptible in a rendered skeleton.
-        # The result is deliberately kept as float64 (NOT cast back to
-        # float32): rounding *then* upcasting to float64 is what makes this
-        # work. Rounding a float32 array, or rounding-then-recasting to
-        # float32, does not shorten the resulting JSON, because the
-        # float32->float64 upcast that `.tolist()` performs downstream
-        # reintroduces long, non-round-tripping decimal noise either way.
-        # Measured effect on a real (60, 1629) sequence: ~2.07 MB -> ~0.82 MB
-        # of JSON (~60% smaller), for about 2 ms of extra CPU time -- see
-        # MODEL_CARD.md.
-        poses = np.round(poses.astype(np.float64), 4)
+        poses = self._quantize(poses)
 
         elapsed_ms = (time.perf_counter() - started) * 1000
-        return gloss, poses, elapsed_ms, gloss_result.provider
+        return gloss, poses, elapsed_ms, gloss_result.provider, False

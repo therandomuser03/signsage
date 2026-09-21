@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     manager = ModelManager.load(settings)
     app.state.model_manager = manager
     logger.info("SignSage models loaded on %s", manager.device)
+    logger.info("Sign->Text live input mode: raw MediaPipe landmarks")
 
     yield
 
@@ -51,7 +52,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 

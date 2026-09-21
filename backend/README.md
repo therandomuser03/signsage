@@ -12,7 +12,7 @@ FastAPI + PyTorch inference backend for the SignSage single-device research prot
 - checkpoint loading
 - exact notebook landmark normalization
 - no-face ablation model
-- Groq → Ollama → deterministic gloss fallback
+- Ollama → Groq → deterministic gloss fallback
 - validation, error responses, smoke tests, and a benchmark script
 
 The backend accepts **landmarks, not raw camera video**.
@@ -78,7 +78,7 @@ The official contract says each frame carries training-compatible normalized lan
 Default:
 
 ```env
-SIGNSAGE_LANDMARK_INPUT_MODE=normalized
+SIGNSAGE_LANDMARK_INPUT_MODE=raw
 ```
 
 If a future client sends raw MediaPipe image-space coordinates instead:

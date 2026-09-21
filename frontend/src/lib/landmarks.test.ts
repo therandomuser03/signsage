@@ -6,7 +6,7 @@ import {
   hasReliableSignLandmarks,
   normalizeLandmarkSequence,
   poseMotion,
-} from "./landmarks"
+} from "./mediapipe/landmarks"
 
 const point = (value: number, visibility = 0.9) => ({ x: value, y: value + 0.1, z: value + 0.2, visibility })
 
@@ -20,12 +20,14 @@ describe("browser landmark preparation", () => {
     expect(flattened.slice((33 + 468) * 3, (33 + 468) * 3 + 3)).toEqual([2, 2.1, 2.2])
   })
 
-  it("requires full pose and one tracked hand before buffering a signing frame", () => {
+  it("accepts any tracked Holistic component without requiring a full body", () => {
     const pose = Array.from({ length: 33 }, () => point(0))
     const hand = Array.from({ length: 21 }, () => point(0))
 
     expect(hasReliableSignLandmarks({ pose, leftHand: hand })).toBe(true)
+    expect(hasReliableSignLandmarks({ leftHand: hand })).toBe(true)
     expect(hasReliableSignLandmarks({ pose })).toBe(false)
+    expect(hasReliableSignLandmarks({})).toBe(false)
   })
 
   it("centers every frame on the hip midpoint and uses one sentence scale", () => {

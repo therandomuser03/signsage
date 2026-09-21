@@ -16,6 +16,17 @@ GLOSS_ALIASES = {
     "hi": "hello",
 }
 
+CONTRACTIONS = {
+    "how's": "how is",
+    "what's": "what is",
+    "where's": "where is",
+    "who's": "who is",
+    "it's": "it is",
+    "that's": "that is",
+    "you're": "you are",
+    "your": "your",
+}
+
 
 @dataclass(frozen=True)
 class GlossResult:
@@ -24,7 +35,10 @@ class GlossResult:
 
 
 def naive_gloss(text: str) -> str:
-    words = re.findall(r"[a-z0-9']+", str(text).lower())
+    normalized = str(text).lower()
+    for contraction, expansion in CONTRACTIONS.items():
+        normalized = re.sub(rf"\b{re.escape(contraction)}\b", expansion, normalized)
+    words = re.findall(r"[a-z0-9]+", normalized)
     kept = [w for w in words if w not in STOPWORDS]
     gloss = kept if kept else words
     gloss = [GLOSS_ALIASES.get(word, word) for word in gloss]
@@ -35,6 +49,7 @@ def naive_gloss(text: str) -> str:
     if q:
         # move question to end: "where is hospital" -> "hospital where"
         gloss = rest + q
+    gloss = list(dict.fromkeys(gloss))
     # keep as is otherwise (SOV approx via stopword removal already)
     return " ".join(gloss)
 
@@ -119,19 +134,8 @@ def generate_gloss(
 ) -> GlossResult:
     errors: list[str] = []
 
-    if enable_groq and groq_api_key:
-        try:
-            return GlossResult(
-                groq_gloss(
-                    text,
-                    api_key=groq_api_key,
-                    model=groq_model,
-                ),
-                "groq",
-            )
-        except Exception as exc:
-            errors.append(f"groq:{type(exc).__name__}")
-
+    # Ollama is the primary local model. Groq is the immediate remote
+    # fallback when Ollama is unavailable or returns an unusable response.
     if enable_ollama:
         try:
             return GlossResult(
@@ -145,6 +149,19 @@ def generate_gloss(
             )
         except Exception as exc:
             errors.append(f"ollama:{type(exc).__name__}")
+
+    if enable_groq and groq_api_key:
+        try:
+            return GlossResult(
+                groq_gloss(
+                    text,
+                    api_key=groq_api_key,
+                    model=groq_model,
+                ),
+                "groq",
+            )
+        except Exception as exc:
+            errors.append(f"groq:{type(exc).__name__}")
 
     # The notebook's deterministic fallback.
     return GlossResult(naive_gloss(text), "naive")

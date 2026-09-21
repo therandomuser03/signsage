@@ -38,11 +38,8 @@ class Settings(BaseSettings):
     max_text_chars: int = 2000
     max_ws_message_bytes: int = 1_000_000
 
-    # API contract expects landmarks to use the same normalization as training.
-    # "normalized" is therefore the default. Set "raw" only when the client sends
-    # raw MediaPipe image-space coordinates; the backend then applies the exact
-    # notebook normalization.
-    landmark_input_mode: str = "normalized"
+    # Browser sends raw MediaPipe coordinates; backend applies training normalization.
+    landmark_input_mode: str = "raw"
 
     # `NoDecode` is required here: pydantic-settings otherwise tries to JSON-decode
     # any list-typed env var *before* `parse_origins` below ever runs, which raises
@@ -56,18 +53,18 @@ class Settings(BaseSettings):
     allow_noface: bool = True
 
     # Groq is optional; deterministic glossing remains available.
-    enable_groq_gloss: bool = False
+    enable_groq_gloss: bool = True
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-20b"
 
     # Ollama is optional and local.
-    enable_ollama_gloss: bool = False
+    enable_ollama_gloss: bool = True
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
     ollama_timeout_seconds: float = 8.0
 
     # LLM sentence refinement for Sign→Text (groq→ollama→naive)
-    enable_llm_refine: bool = False
+    enable_llm_refine: bool = True
     llm_refine_timeout_seconds: float = 8.0
 
     # Fail-fast rather than pretending a missing checkpoint is healthy.

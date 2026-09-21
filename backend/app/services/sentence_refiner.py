@@ -95,16 +95,27 @@ def refine_sentence(
     if text.lower().strip() in {"hello", "thank you", "yes", "no", "help", "please", "sorry", "good morning", "how are you", "i need help"}:
         return RefineResult(_naive_refine(text), "naive")
 
-    if enable_groq and groq_api_key:
-        try:
-            return RefineResult(groq_refine(text, api_key=groq_api_key, model=groq_model), "groq")
-        except Exception:
-            pass
+    # Prefer the configured local Ollama model, then immediately fall back to
+    # Groq if Ollama is unavailable or fails.
     if enable_ollama:
         try:
             return RefineResult(
-                ollama_refine(text, base_url=ollama_base_url, model=ollama_model, timeout_seconds=ollama_timeout_seconds),
+                ollama_refine(
+                    text,
+                    base_url=ollama_base_url,
+                    model=ollama_model,
+                    timeout_seconds=ollama_timeout_seconds,
+                ),
                 "ollama",
+            )
+        except Exception:
+            pass
+
+    if enable_groq and groq_api_key:
+        try:
+            return RefineResult(
+                groq_refine(text, api_key=groq_api_key, model=groq_model),
+                "groq",
             )
         except Exception:
             pass

@@ -1,6 +1,7 @@
 import numpy as np
 from pathlib import Path
-from app.services.demo_lexicon import DemoLexicon
+from app.services.demo_lexicon import DemoLexicon, match_demo_phrase
+from app.services.pose_preprocessing import FULL_FEATURE_DIM, TRUE_HAND_FEATURE_START, TRUE_HAND_FEATURE_DIM
 
 
 ROOT = Path(__file__).parents[1]
@@ -85,3 +86,43 @@ def test_dtw_distance_scale():
     
     # Same-phrase distance should be much smaller
     assert dist_hello_hello < dist_hello_gm
+
+def test_match_demo_phrase_exact_and_alias():
+    """English text should map onto the bounded phrase set, exact or via alias."""
+    available = ["Hello", "Thank you", "Yes", "No", "Help", "Please", "Sorry",
+                 "Good morning", "How are you", "I need help"]
+    assert match_demo_phrase("Hello", available) == "Hello"
+    assert match_demo_phrase("hi", available) == "Hello"
+    assert match_demo_phrase("Hi!", available) == "Hello"
+    assert match_demo_phrase("thanks", available) == "Thank you"
+    assert match_demo_phrase("How are you?", available) == "How are you"
+    assert match_demo_phrase("good morning", available) == "Good morning"
+    assert match_demo_phrase("I need help", available) == "I need help"
+
+
+def test_match_demo_phrase_no_match_for_arbitrary_text():
+    """Arbitrary/unsupported English text must not silently match a phrase."""
+    available = ["Hello", "Thank you", "Yes", "No", "Help"]
+    assert match_demo_phrase("Where is the nearest hospital", available) is None
+    assert match_demo_phrase("", available) is None
+
+
+def test_get_render_sequence_shape_and_hand_placement():
+    """Render sequence embeds real hand motion at the correct feature offset
+    and leaves pose/face at zero (see AUDIT_NOTES.md)."""
+    lex = DemoLexicon.load(ROOT / "demo_prototypes")
+    render = lex.get_render_sequence("Hello")
+    assert render is not None
+    assert render.shape == (60, FULL_FEATURE_DIM)
+    # Pose/face region (everything before the hand block) must be zero.
+    assert np.allclose(render[:, :TRUE_HAND_FEATURE_START], 0.0)
+    # Hand region must be non-trivial (real captured motion).
+    hand_block = render[:, TRUE_HAND_FEATURE_START:TRUE_HAND_FEATURE_START + TRUE_HAND_FEATURE_DIM]
+    assert np.abs(hand_block).sum() > 0.0
+    # Nothing populated past the hand block.
+    assert np.allclose(render[:, TRUE_HAND_FEATURE_START + TRUE_HAND_FEATURE_DIM:], 0.0)
+
+
+def test_get_render_sequence_unknown_phrase_returns_none():
+    lex = DemoLexicon.load(ROOT / "demo_prototypes")
+    assert lex.get_render_sequence("Not A Real Phrase") is None

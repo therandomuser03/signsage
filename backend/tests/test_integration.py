@@ -95,13 +95,22 @@ def test_models_endpoint_surfaces_research_provenance(client):
     is loaded into memory at startup specifically to be 'consumed by the
     backend for model/version metadata and research transparency' (its
     documented purpose). This asserts that data is actually reachable via
-    the API, not just parsed and discarded."""
+    the API, not just parsed and discarded.
+
+    It must also be the *authoritative* (latest) run. A previous copy of
+    this file shipped the superseded 20260903T134623Z run, which reported
+    the since-retracted "GO-CANDIDATE" status -- see
+    research/outputs/phase0/RESULTS.md, which supersedes it with "NO-GO"
+    once the trivial-baseline data-quality bug was fixed. Serving the old
+    file would mean the API tells clients the model is a go-candidate when
+    the project's own authoritative research finding says otherwise -- a
+    real honesty bug, not just a stale test fixture."""
     response = client.get("/api/v1/models")
     assert response.status_code == 200
     provenance = response.json()["provenance"]
     assert provenance is not None
-    assert provenance["run_id"]
-    assert provenance["phase_0_status"] == "GO-CANDIDATE"
+    assert provenance["run_id"] == "20260916T144755Z"
+    assert provenance["phase_0_status"] == "NO-GO"
     assert "not automatically" in provenance["warning"]
 
 
@@ -223,6 +232,28 @@ def test_ws_text_to_pose_round_trip(client):
     assert len(response["frames"]) > 0
     assert len(response["frames"][0]) == LANDMARK_DIM
     assert response["latency_ms"] >= 0
+
+
+def test_ws_text_to_pose_uses_bounded_demo_phrase_when_matched(client):
+    """'hello' (and its aliases/near-matches) must return the real recorded
+    demo clip, not the near-static generative model -- see
+    text_to_pose.py's docstring and research/outputs/phase0/RESULTS.md
+    (generative Text->Pose motion energy is ~7.9% of ground truth)."""
+    with client.websocket_connect("/api/v1/ws/translate") as ws:
+        ws.send_json(
+            {
+                "type": "text.input",
+                "session_id": "test-session-demo-pose",
+                "text": "hi",
+            }
+        )
+        response = ws.receive_json()
+
+    assert response["type"] == "translation.pose"
+    assert response["gloss"] == "Hello"
+    assert response["is_fallback"] is True
+    assert len(response["frames"]) == 60
+    assert len(response["frames"][0]) == LANDMARK_DIM
 
 
 def test_ws_unknown_message_type_returns_structured_error(client):

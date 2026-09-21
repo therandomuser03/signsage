@@ -83,7 +83,7 @@ class ModelManager:
                 device=device,
                 max_frames=settings.max_frames,
                 max_tokens=settings.max_tokens,
-                input_mode=settings.landmark_input_mode,
+                input_mode="raw",
                 no_face=True,
             )
 
@@ -136,13 +136,15 @@ class ModelManager:
             ollama_timeout_seconds=settings.ollama_timeout_seconds,
             llm_refine_timeout=settings.llm_refine_timeout_seconds,
         )
+        # Live MediaPipe WebSocket frames arrive as raw 543x3 landmarks.
+        # SignToTextService performs the canonical normalization exactly once.
         full_service = SignToTextService(
             model=full_model,
             vocab=text_vocab,
             device=device,
             max_frames=settings.max_frames,
             max_tokens=settings.max_tokens,
-            input_mode=settings.landmark_input_mode,
+            input_mode="raw",
             **demo_kwargs,
         )
         # also inject into noface if present
@@ -177,6 +179,8 @@ class ModelManager:
                 ollama_base_url=settings.ollama_base_url,
                 ollama_model=settings.ollama_model,
                 ollama_timeout_seconds=settings.ollama_timeout_seconds,
+                demo_lexicon=demo_lexicon,
+                enable_demo_fallback=settings.enable_demo_fallback,
             ),
             manifest=manifest,
             demo_lexicon=demo_lexicon,
@@ -238,7 +242,9 @@ class ModelManager:
                 "checkpoint": CHECKPOINTS["text_to_pose"],
                 "status": "loaded",
                 "caveat": (
-                    "Phase 0 checkpoint; motion-energy evaluation showed near-static output."
+                    "Phase 0 checkpoint; motion-energy evaluation showed near-static output "
+                    "(~7.9% of ground-truth motion). Used only when the input text does not "
+                    "match one of the bounded demo phrases; see demo_lexicon below."
                 ),
             },
         ]
@@ -250,7 +256,12 @@ class ModelManager:
                     "input_features": NOFACE_FEATURE_DIM,
                     "checkpoint": CHECKPOINTS["transformer_noface"],
                     "status": "loaded",
-                    "caveat": "Phase 0 non-manual-marker/face ablation checkpoint.",
+                    "caveat": (
+                        "Phase 0 non-manual-marker/face ablation checkpoint. Loaded and "
+                        "reported here for transparency, but not called by the live "
+                        "Sign->Text flow (websocket.py always requests the full-feature "
+                        "model) -- its outputs are unverified in this build."
+                    ),
                 }
             )
         # demo lexicon is not a checkpoint but expose availability

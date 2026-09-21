@@ -172,6 +172,7 @@ class TranslationPose(BaseModel):
     frames: list[list[float]]
     fps: int
     latency_ms: float
+    is_fallback: bool = False
 
 
 class ErrorMessage(BaseModel):

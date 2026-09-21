@@ -45,11 +45,16 @@ def main() -> int:
     print(f"Frames used: {frames_used}; model latency: {latency:.2f} ms")
     print(f"Wall time: {(time.perf_counter() - started) * 1000:.2f} ms")
 
-    gloss, poses, latency, provider = manager.text_to_pose.predict(
+    gloss, poses, latency, provider, is_fallback = manager.text_to_pose.predict(
         "hello how are you"
     )
-    print(f"Text->Pose gloss: {gloss!r} (provider={provider})")
+    print(f"Text->Pose gloss: {gloss!r} (provider={provider}, demo_fallback={is_fallback})")
     print(f"Pose shape: {poses.shape}; latency: {latency:.2f} ms")
+
+    gloss2, poses2, latency2, provider2, is_fallback2 = manager.text_to_pose.predict("hello")
+    print(f"Text->Pose gloss: {gloss2!r} (provider={provider2}, demo_fallback={is_fallback2})")
+    print(f"Pose shape: {poses2.shape}; latency: {latency2:.2f} ms")
+    assert is_fallback2, "Expected 'hello' to hit the bounded demo phrase lexicon."
 
     print("Backend artifact/inference smoke check passed.")
     return 0

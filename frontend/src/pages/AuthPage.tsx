@@ -131,7 +131,7 @@ export function AuthPage({ navigate }: { navigate: (h: string) => void }) {
                 ))}
               </div>
               <div className="flex items-center gap-2 font-technical-data text-xs text-outline">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> 543 coordinates · 60 FPS · WebGPU
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> 543 landmarks/frame · browser MediaPipe + server inference
                 <span className="mx-1">·</span>
                 <a href="/privacy" onClick={e=>{e.preventDefault();navigate("/privacy")}} className="text-primary hover:underline">Privacy</a>
                 <span>·</span>

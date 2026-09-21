@@ -1,185 +1,147 @@
 # SignSage
 
-**Real-time, bidirectional assistive communication between Indian Sign Language (ISL) and English.**
+**Bidirectional Indian Sign Language (ISL) ↔ English — an M.Tech research prototype.**
 
-An **M.Tech thesis research prototype** — continuous, sentence-level ISL ↔ English communication via spatial-temporal modeling, a non-manual-marker (face) ablation, and a Text-to-Pose pipeline. Single shared device, research/thesis evaluation scope.
+> Not a production accessibility product. Not certified for medical, legal, emergency, or
+> other high-stakes use. See [`docs/SECURITY.md`](docs/SECURITY.md) and
+> `frontend`'s Privacy page.
 
-> **Not a production accessibility product.** Not intended for medical, legal, emergency, or other high-stakes use — see [`docs/SECURITY.md`](docs/SECURITY.md).
-
----
-
-## Status (as of the Phase 0 scaled-up run, 2026-09-03)
-
-**Phase 0 — bounded Kaggle validation — complete.** Full findings: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md). Read that before quoting any number from this project — the honest summary is:
-
-- The pipeline (remote dataset streaming, training, evaluation, experiment provenance) runs correctly and reproducibly end-to-end on real iSign data, at two different data scales.
-- Sign→Text: the GRU baseline has fully mode-collapsed to a single repeated output. The Transformer shows a small, real improvement in output diversity with more data, but its **WER is currently worse than a trivial baseline** due to a decoding-side repetition problem (greedy decoding, no repetition penalty) — not something more data alone fixes.
-- Text→Pose: the generative model's favorable DTW/MSE numbers are misleading — a motion-energy diagnostic confirms it has collapsed to a **near-static average pose** (6.7% of ground-truth motion), a known failure mode of position+velocity MSE loss without an adversarial/perceptual term.
-- The non-manual-marker (face) ablation replicated across both runs: removing face landmarks trains to a *lower* validation loss than keeping them, at this data scale — worth real discussion, not a bare number.
-- A real, previously undocumented data-quality issue was found: roughly 1% of the dataset is junk/placeholder text (single digits, single letters, caption artifacts like `[Music]`), which contaminates any frequency-based baseline.
-
-None of this blocks the thesis — it's exactly the kind of finding a bounded validation phase is supposed to produce. It does mean: don't present current checkpoints as demonstrating working translation or working pose generation without these caveats attached.
-
-**Backend now built** (Phase 0.5 module extraction + the backend half of Phase 1 — see
-`backend/README.md`); **frontend has a static Vite + React UI shell**, but no live
-camera, MediaPipe, WebSocket, or pose rendering integration. See
-[`docs/PHASES.md`](docs/PHASES.md) for remaining Phase 1/2 work.
+This README was rewritten as part of a pre-demo audit/fix pass. If you read an older
+copy of this file describing "frontend has no live camera/MediaPipe/WebSocket
+integration" — that's now out of date. The frontend **does** have a working camera →
+MediaPipe → WebSocket → backend pipeline; see **Known limitations** below for what
+still doesn't work well.
 
 ---
+
+## Status (Phase 0 research result: **NO-GO**)
+
+Full numbers: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md)
+(run `20260916T144755Z`, also mirrored into
+[`backend/signsage_knowledge_manifest.json`](backend/signsage_knowledge_manifest.json),
+which is what the running backend actually serves via `/api/v1/models`).
+
+- **Sign→Text**: both the GRU baseline and the Transformer mode-collapsed during
+  evaluation (0.6% / 3.9% unique outputs on the test set). WER is ~1.0–1.03 for every
+  model, including the trivial "always predict the same sentence" baseline — i.e. none
+  of them reliably beat guessing.
+- **Text→Pose**: the generative GRU model's output is near-static (~7.9% of
+  ground-truth motion energy).
+- Because of this, **both directions use a bounded, honestly-labelled demo fallback**
+  for a fixed set of ~10 phrases (Hello, Thank you, Yes, No, Help, Please, Sorry, Good
+  morning, How are you, I need help), backed by real recorded clips in
+  `backend/demo_prototypes/`. Outside that set, the general research models run and the
+  UI says so.
+
+This is disclosed in the app itself (Research & Benchmarks page, the red NO-GO banner,
+and inline notes in the translator) rather than hidden behind favorable-looking numbers.
 
 ## How it works
 
-**Training (offline, Kaggle T4×2):** HuggingFace `Exploration-Lab/iSign` (gated, CC BY-NC-SA 4.0) → `iSign_v1.1.csv` (9.81 MB, downloaded) + the pose archive (measured ~158.5 GiB across 4 parts, streamed via a virtual ZIP64 over HTTP range requests, never downloaded or extracted) → GRU → Transformer → Text-to-Pose → `research/outputs/phase0/` checkpoints + `signsage_knowledge.db`.
-
-**Inference (single device):** the WebSocket contract below is implemented and serving
-the real Phase 0 checkpoints (`backend/`); the client-side half is not built yet.
+```text
+Browser: getUserMedia → MediaPipe Holistic (WASM) → 543 landmarks/frame (1629 floats)
+  → hip-center + scale normalize → buffer → WebSocket (landmarks.frame, sentence.boundary)
+Backend: FastAPI → buffered sequence → Sign→Text Transformer
+  → if output looks unreliable, DTW-match against 10 recorded demo phrases → translation.text
 ```
-Camera → MediaPipe Holistic (WASM, 543 landmarks, on-device) → motion-pause+Send → WebSocket → FastAPI → Sign→Text → captions
-Text/speech → LLM (Groq→heuristic fallback) → ISL gloss → Text-to-Pose → pose → canvas skeleton
-```
-Raw video never leaves the device. Two-device relay is deliberately deferred — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
----
+```text
+Browser: text input → WebSocket (text.input)
+Backend: match against 10 supported phrases (+ aliases like "hi"→"Hello")
+  → match found: real recorded hand-motion clip → translation.pose (is_fallback=true)
+  → no match: gloss → Text→Pose GRU (near-static, disclosed) → translation.pose
+Browser: renders hands (always) + body pose skeleton (only for the GRU path) on Canvas 2D
+```
+
+Raw camera video **never** leaves the browser — only extracted landmark coordinates are
+sent to the backend for inference. This does mean a live backend connection is required;
+there's no offline/on-device inference mode in this build.
 
 ## Repository layout
 
 ```text
-SignSage/
-├── AGENTS.md                    # read by OpenCode / Zed / Google Antigravity automatically
-├── CLAUDE.md                    # thin @AGENTS.md import, so Claude Code reads it too
-│
-├── research/                    # M.Tech research / training — the source of truth right now
-│   ├── notebooks/
-│   │   └── signsage.ipynb       # training/evaluation reference, run on Kaggle GPU
-│   ├── outputs/
-│   │   └── phase0/              # complete Kaggle experiment record
-│   │       ├── checkpoints/     # 4 .pt files: GRU, Transformer (full/no-face), Text-to-Pose
-│   │       ├── reports/
-│   │       │   └── token_vocabulary.json
-│   │       ├── signsage_knowledge.db          # queryable experiment/metrics record
-│   │       ├── signsage_knowledge_manifest.json
-│   │       └── RESULTS.md       # human-written findings — read this first
-│   └── data/
-│       └── README.md            # dataset access instructions only — raw data is gitignored
-│
-├── backend/                     # FastAPI + PyTorch — BUILT (Phase 0.5 + backend half of Phase 1)
-│   ├── AGENTS.md                 # nested, backend-scoped rules (read in addition to root AGENTS.md)
-│   ├── app/ · tests/ · scripts/ · weights/ · vocab/
-│   ├── docs/API.md · MODEL_CARD.md · README.md
-│   └── ...
-├── frontend/                    # Vite + React static UI shell — no live translation yet
-│
-├── thesis/                      # human academic deliverables — not agent-facing, not referenced by AGENTS.md
-│   ├── SignSage.pptx             # college/committee presentation
-│   └── paper/                    # written report/research paper and its source material
-│       ├── draft.md               # (or .docx/.tex, whatever you draft in)
-│       ├── figures/               # curated, finalized charts pulled FROM research/outputs — not raw dumps
-│       └── references.bib
-│
-├── docs/                        # specs and decisions (reference material, not auto-loaded)
-│   ├── PRD.md · ARCHITECTURE.md · API.md · DATA_MODEL.md · DESIGN.md
-│   └── SECURITY.md · PHASES.md · TESTING.md · DECISIONS.md
-│
-├── LICENSE
-├── .gitignore
-└── .env.example
+backend/    FastAPI + PyTorch inference server (see backend/README.md)
+frontend/   Vite + React UI: camera capture, MediaPipe, WebSocket client, pose canvas
+research/   Training notebooks + the Phase 0 experiment record (RESULTS.md, checkpoints)
+docs/       Architecture/data-model/decision notes
 ```
 
-**Why a separate `thesis/` instead of putting the pptx in `docs/` or `research/`:**
-`docs/` is the agent-facing technical reference set (specs, contracts, decisions) —
-a slide deck and a paper draft are a different audience (guide/committee) and a
-different kind of content (narrative, not spec), and mixing them muddies both.
-`research/outputs/phase0/` is explicitly the complete, unedited experiment record (see
-below) — a paper's `figures/` are curated, finalized exports pulled *from* that record,
-not part of it. `thesis/` keeps "outputs for a grade" separate from "outputs for the
-pipeline" (`research/`) and "instructions for agents" (`AGENTS.md`, `docs/`).
-
-**Why `AGENTS.md`/`CLAUDE.md` sit at the repo root instead of in `docs/` with everything
-else:** OpenCode, Zed, and Google Antigravity all auto-discover `AGENTS.md` at the project
-root — none of them look inside `docs/`. Claude Code reads `CLAUDE.md` specifically, not
-`AGENTS.md`, so the root `CLAUDE.md` is a one-line `@AGENTS.md` import rather than a
-second copy of the same content. `backend/AGENTS.md` is a nested, backend-scoped file
-under the same convention (closest `AGENTS.md` to the file being edited applies, in
-addition to the root one, not instead of it). Everything else in `docs/` is reference
-material an agent is pointed to from `AGENTS.md`, not something any tool auto-loads.
-
-**Why research/outputs vs. a future backend/weights:** `research/outputs/phase0/` is the complete, unedited experiment record. A future `backend/weights/` (once Phase 1 starts) will hold only the specific artifacts selected for serving — never the reverse; the research output is never overwritten by the deployment selection.
-
 ---
 
-## Dataset
+## Setup
 
-- **Primary:** [iSign](https://huggingface.co/datasets/Exploration-Lab/iSign) (Joshi et al., ACL Findings 2024) — 127,237 CSV rows / `.pose` files locally confirmed (the paper describes 118,228; this repo uses the local counts actually present, see `docs/DATA_MODEL.md`). License: **CC BY-NC-SA 4.0** (non-commercial, share-alike) — gated access, requires an accepted-terms HF account + `HF_TOKEN`.
-- **Not stored in this repository** — neither the pose archive nor the CSV. Committing the CSV would violate the dataset's redistribution terms; see `research/data/README.md` for access instructions instead.
-- **Secondary:** INCLUDE (263 isolated signs) — isolated-sign baseline reference only, not used for training.
+### Backend
 
----
-
-## Evaluation
-
-- **Sign→Text:** WER, BLEU, ROUGE-L vs. a (junk-text-filtered) most-common-sentence baseline; output-diversity check for mode collapse.
-- **Text→Pose:** DTW + MSE vs. TF-IDF retrieval; **motion-energy check** vs. ground truth (catches static-pose collapse that DTW/MSE alone would miss).
-- **System:** model-only latency (not end-to-end — that requires Phase 1's backend to exist).
-- Every run writes full provenance to `signsage_knowledge.db` + a JSON manifest — see `docs/DATA_MODEL.md` for schema.
-
-Full current numbers and their caveats: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md).
-
----
-
-## Development
-
-Research (this is what currently works):
 ```bash
-# open research/notebooks/signsage.ipynb on Kaggle
-# GPU T4 accelerator, Internet ON, HF_TOKEN secret attached
-# run cells 0-8 first and confirm Device: cuda before running the rest
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env           # defaults work out of the box for a local demo
+uvicorn app.main:app --reload
 ```
 
-Backend: implemented — see `backend/README.md` for setup/run instructions. Frontend:
-Vite + React static UI shell exists, but webcam capture, MediaPipe extraction, backend
-WebSocket integration, and pose rendering are not yet implemented. See `docs/PHASES.md`
-for remaining Phase 1/2 work.
+Backend runs at `http://127.0.0.1:8000`. Swagger docs at `/docs`. Health/model info at
+`/api/v1/models` (this is where you can see the live NO-GO status and which checkpoints
+are loaded).
 
----
+Run the test suite (69 tests) from `backend/`:
 
-## Privacy & security
+```bash
+pytest
+```
 
-Landmarks-only design: raw video never leaves the device — the backend has no camera/video upload endpoint by construction, not just by plan; no biometric storage; secrets via environment variables only; not a substitute for certified human interpreters in high-stakes contexts. Full detail: [`docs/SECURITY.md`](docs/SECURITY.md).
+### Frontend
 
----
+```bash
+cd frontend
+npm install
+cp .env.example .env.local     # optional: only needed to change the backend URL, or for Supabase auth
+npm run dev
+```
 
-## Documentation index
+Frontend runs at `http://127.0.0.1:5173` and connects to the backend WebSocket at
+`ws://127.0.0.1:8000/api/v1/ws/translate` by default (`VITE_SIGNSAGE_WS_URL` in
+`.env.local` overrides this). Supabase auth is optional — the translator works without
+signing in; auth vars are only needed if you want account/session features.
 
-| Doc | Read when |
-|---|---|
-| [`AGENTS.md`](AGENTS.md) | rules for anyone (human or AI) working on this repo — read automatically by OpenCode, Zed, Google Antigravity |
-| [`CLAUDE.md`](CLAUDE.md) | one-line `@AGENTS.md` import so Claude Code reads the same rules |
-| [`backend/AGENTS.md`](backend/AGENTS.md) | additional rules scoped to `backend/` only |
-| [`docs/PRD.md`](docs/PRD.md) | what this is/isn't, success criteria |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | training vs. MVP architecture, deferred features |
-| [`docs/API.md`](docs/API.md) | the implemented WebSocket contract |
-| [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) | dataset facts, knowledge-repo schema |
-| [`docs/DESIGN.md`](docs/DESIGN.md) | interaction principles, turn-taking, fail-loudly |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | privacy, secrets, safety boundaries |
-| [`docs/PHASES.md`](docs/PHASES.md) | roadmap, exit criteria, honest timeline math |
-| [`docs/TESTING.md`](docs/TESTING.md) | evaluation strategy, preflight checks |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | why each technical choice was made |
+To build for deployment: `npm run build` (outputs to `frontend/dist/`).
 
----
+### Environment variables
 
-## Boundaries (explicitly out of scope)
+See `backend/.env.example` and `frontend/.env.example` for the full, current list with
+comments. Neither file contains real secrets — **if you had an earlier copy of this
+project with a committed `backend/.env` or `frontend/.env.local`, treat any Groq API
+key and Postgres/Supabase database password in it as compromised and rotate them.**
+Supabase auth is entirely optional for the demo.
 
-Unrestricted open-vocabulary ISL, regional dialect coverage, photorealistic avatars, production-grade mobile deployment, high-stakes translation use, remote/two-device relay, large-scale new volunteer data collection. See `docs/PRD.md`.
+## Demo flow
 
----
+1. Start the backend, then the frontend, then open the app in a browser and allow
+   camera + microphone permission when prompted.
+2. **ISL → English**: open the Translator, switch to Sign mode, and sign one of the
+   supported phrases (see the on-screen phrase list) in front of your camera, pausing
+   briefly at the end. A caption appears; the app labels whether it came from the
+   bounded demo match or the research model.
+3. **English → ISL**: switch to Text mode and type one of the same supported phrases
+   (or a close rephrasing, e.g. "hi", "thanks"). A recorded hand-motion clip plays on
+   the pose canvas, labelled as a recorded demo clip. Typing something outside that set
+   falls through to the generative model, which is visibly near-static — the UI says
+   so rather than hiding it.
+4. If you kill and restart the backend mid-session, the frontend now reconnects
+   automatically instead of requiring a page reload.
 
-## Thesis
+## Known limitations (not hidden, not "fixed" by hiding them)
 
-**SignSage** — M.Tech CSE (AI & Data Science), Anubhab Pal
-Guide: Mr. Ponsuresh Manoharan · L&T EduTech · August 2026
-
-Presentation deck and written report/paper live in [`thesis/`](thesis/) — kept separate
-from `docs/` (agent-facing technical reference) and `research/outputs/` (the unedited
-experiment record); see "Repository layout" above for why.
-
-Ground-up redesign of an earlier prototype (single-frame MediaPipe Hands + Random Forest, 19-word vocabulary, Flask + MJPEG streaming).
+- **Open-vocabulary translation does not work reliably in either direction.** Only the
+  ~10 bounded demo phrases are dependable; this is a research prototype, not a general
+  ISL translator.
+- **The bounded demo clips only have real captured hand motion**, not full-body pose
+  (a pre-existing data-capture quirk — see `docs/DECISIONS.md` / the code comments in
+  `backend/app/services/pose_preprocessing.py`). The pose canvas therefore renders
+  hands for demo clips rather than a fabricated full-body skeleton.
+- **The no-face ablation Transformer checkpoint is loaded but not served** by the live
+  Sign→Text flow; its outputs are unverified in this build.
+- No offline/on-device inference mode — the backend must be reachable over the network.
+- This is a Phase 0 research checkpoint, not a validated clinical, legal, or safety
+  tool, and not a substitute for a certified human ISL interpreter.
