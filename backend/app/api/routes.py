@@ -90,6 +90,6 @@ def capabilities(
             groq_gloss_enabled=settings.enable_groq_gloss,
             ollama_gloss_enabled=settings.enable_ollama_gloss,
             landmark_input_mode=settings.landmark_input_mode,
-            demo_fallback_available=getattr(manager, "demo_lexicon", None) is not None and manager.demo_lexicon.is_available() if getattr(manager, "demo_lexicon", None) else False,
+            controlled_vocabulary_available=manager.lexicon.is_available(),
         ),
     )

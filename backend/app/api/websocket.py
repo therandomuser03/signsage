@@ -13,7 +13,6 @@ from app.schemas.api import (
     LandmarksFrame,
     SentenceBoundary,
     TextInput,
-    TranslationPose,
     TranslationText,
 )
 from app.core.auth import verify_supabase_token
@@ -413,86 +412,38 @@ async def translate(websocket: WebSocket):
                         )
 
                     started = time.perf_counter()
-
-                    # --------------------------------------------------------
-                    # PyTorch inference is synchronous.
-                    #
-                    # Run it outside the FastAPI event loop so another
-                    # WebSocket connection is not blocked by inference.
-                    #
-                    # IMPORTANT:
-                    # predict_sign_to_text_with_meta() must call
-                    # prepare_landmarks(..., input_mode="raw")
-                    # internally.
-                    # --------------------------------------------------------
-
-                    # Hand-only framing is supported. Use matching ablation
-                    # model when face landmarks are absent instead of feeding
-                    # zero-filled face features into full-model inference.
-                    has_face = bool(np.any(sequence_array[:, 33:501]))
-                    use_noface = not has_face and manager.sign_to_text_noface is not None
-
                     (
-                        text,
-                        frames_used,
-                        model_latency,
-                        is_fallback,
+                        matched_phrase,
+                        distance,
                         confidence,
                         gated_reason,
                     ) = await asyncio.to_thread(
-                        manager.predict_sign_to_text_with_meta,
+                        manager.match_demo_landmarks,
                         sequence_array,
-                        no_face=use_noface,
                     )
-
-                    total_latency = (
-                        time.perf_counter()
-                        - started
-                    ) * 1000
-
-                    logger.info(
-                        "S2T inference "
-                        "session=%s "
-                        "text=%s "
-                        "frames_used=%s "
-                        "fallback=%s "
-                        "confidence=%s "
-                        "reason=%s",
-                        session.session_id,
-                        (
-                            text[:80]
-                            if text
-                            else "None"
-                        ),
-                        frames_used,
-                        is_fallback,
-                        confidence,
-                        gated_reason,
-                    )
-
+                    latency_ms = (time.perf_counter() - started) * 1000
+                    text = matched_phrase or "Sign not recognized"
                     await websocket.send_json(
                         TranslationText(
                             session_id=session.session_id,
                             text=text,
-                            latency_ms=round(
-                                max(
-                                    model_latency,
-                                    total_latency,
-                                ),
-                                3,
-                            ),
-                            confidence=round(
-                                float(
-                                    confidence
-                                ),
-                                3,
-                            ),
-                            is_fallback=bool(
-                                is_fallback
-                            ),
+                            latency_ms=round(latency_ms, 3),
+                            confidence=None,
+                            match_score=round(float(confidence), 3),
+                            distance=round(float(distance), 3) if np.isfinite(distance) else None,
+                            is_fallback=False,
                             gated_reason=gated_reason,
                         ).model_dump()
                     )
+                    logger.info(
+                        "Landmark DTW match session=%s text=%s distance=%s confidence=%s reason=%s",
+                        session.session_id,
+                        text,
+                        distance,
+                        confidence,
+                        gated_reason,
+                    )
+                    continue
 
                 # ============================================================
                 # English/Text -> ISL
@@ -508,67 +459,13 @@ async def translate(websocket: WebSocket):
                         msg.session_id
                     )
 
-                    started = time.perf_counter()
-
-                    (
-                        gloss,
-                        poses,
-                        model_latency,
-                        provider,
-                        is_fallback,
-                    ) = await asyncio.to_thread(
-                        manager.text_to_pose.predict,
-                        msg.text,
+                    await _send_error(
+                        websocket,
+                        session.session_id or "",
+                        "No verified ISL animation resource is configured.",
+                        "ISL_ANIMATION_UNAVAILABLE",
                     )
-
-                    total_latency = (
-                        time.perf_counter()
-                        - started
-                    ) * 1000
-
-                    session.record_text_to_pose_turn()
-
-                    logger.info(
-                        "T2P inference "
-                        "session=%s "
-                        "text=%s "
-                        "gloss=%s "
-                        "poses_len=%s "
-                        "provider=%s "
-                        "fallback=%s",
-                        session.session_id,
-                        msg.text[:30],
-                        gloss,
-                        (
-                            len(poses)
-                            if hasattr(
-                                poses,
-                                "__len__",
-                            )
-                            else "?"
-                        ),
-                        provider,
-                        is_fallback,
-                    )
-
-                    await websocket.send_json(
-                        TranslationPose(
-                            session_id=session.session_id,
-                            gloss=gloss,
-                            frames=poses.tolist(),
-                            fps=25,
-                            latency_ms=round(
-                                max(
-                                    model_latency,
-                                    total_latency,
-                                ),
-                                3,
-                            ),
-                            is_fallback=bool(
-                                is_fallback
-                            ),
-                        ).model_dump()
-                    )
+                    continue
 
                 # ============================================================
                 # Unknown message

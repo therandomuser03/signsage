@@ -17,17 +17,15 @@ def test_lexicon_loads():
 def test_lexicon_inventory_phrases():
     """Lexicon should contain expected phrases."""
     lex = DemoLexicon.load(ROOT / "demo_prototypes")
-    phrases = lex.inventory()
-    expected = {"Hello", "Thank you", "Yes", "No", "Help", "Please", "Sorry", "Good morning",
-                "How are you", "I need help"}
-    for phrase in expected:
-        assert phrase in phrases, f"Expected {phrase!r} in lexicon, got {phrases}"
+    assert set(lex.inventory()) == {
+        "Hello", "Thank you", "Yes", "No", "Help", "Please", "Sorry", "Good morning",
+    }
 
 
 def test_dtw_match_same_phrase():
     """DTW should match a prototype to itself (distance = 0)."""
     lex = DemoLexicon.load(ROOT / "demo_prototypes")
-    hello_proto = lex.prototypes["Hello"]
+    hello_proto = lex.prototypes["Hello"][0]
     # Perturb slightly and should still match
     seq = hello_proto.copy()
     seq[0, 0] += 0.1
@@ -40,7 +38,7 @@ def test_dtw_match_hello():
     """DTW should match hello prototype correctly."""
     lex = DemoLexicon.load(ROOT / "demo_prototypes")
     # Exact match should work
-    matched, dist = lex.match(lex.prototypes["Hello"].copy(), threshold=420.0)
+    matched, dist = lex.match(lex.prototypes["Hello"][0].copy(), threshold=420.0)
     assert matched == "Hello"
 
 
@@ -52,14 +50,40 @@ def test_dtw_unmatched_returns_none():
     assert matched is None
 
 
+def test_raw_landmark_path_matches_supported_template():
+    lex = DemoLexicon.load(ROOT / "demo_prototypes")
+    raw = np.zeros((60, 1629), dtype=np.float32)
+    from app.services.pose_preprocessing import NOFACE_FEATURE_INDICES
+
+    raw[:, NOFACE_FEATURE_INDICES] = lex.prototypes["Hello"][0]
+    matched, distance, confidence, reason = lex.match_raw(
+        raw.reshape(60, 543, 3), threshold=5.0
+    )
+    assert matched == "Hello"
+    assert distance == 0.0
+    assert confidence == 1.0
+    assert reason is None
+
+
+def test_raw_landmark_path_rejects_zero_sequence():
+    lex = DemoLexicon.load(ROOT / "demo_prototypes")
+    matched, distance, confidence, reason = lex.match_raw(
+        np.zeros((8, 543, 3), dtype=np.float32), threshold=5.0
+    )
+    assert matched is None
+    assert distance > 5.0
+    assert confidence == 0.0
+    assert reason == "below_threshold"
+
+
 def test_dtw_distance_scale():
     """Different phrases should have different DTW distances."""
     lex = DemoLexicon.load(ROOT / "demo_prototypes")
     # Use threshold 420 for both calls
-    d1, _ = lex.match(lex.prototypes["Hello"].astype(np.float64), threshold=420.0)
+    d1, _ = lex.match(lex.prototypes["Hello"][0].astype(np.float64), threshold=420.0)
     # Get distance by matching against hello prototype
-    hello_proto = lex.prototypes["Hello"].astype(np.float64)
-    good_morning_proto = lex.prototypes["Good morning"].astype(np.float64)
+    hello_proto = lex.prototypes["Hello"][0].astype(np.float64)
+    good_morning_proto = lex.prototypes["Good morning"][0].astype(np.float64)
     # Compute DTW manually for distance comparison
     a = hello_proto
     b = good_morning_proto

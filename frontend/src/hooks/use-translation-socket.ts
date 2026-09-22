@@ -4,7 +4,7 @@ import { getSupabase } from "../contexts/AuthContext"
 export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected"
 
 type ServerMessage =
-  | { type: "translation.text"; session_id: string; text: string; latency_ms: number; confidence?: number; is_fallback?: boolean; gated_reason?: string | null }
+  | { type: "translation.text"; session_id: string; text: string; latency_ms: number; confidence?: number | null; match_score?: number | null; distance?: number | null; is_fallback?: boolean; gated_reason?: string | null }
   | { type: "translation.pose"; session_id: string; gloss: string; frames: number[][]; fps: number; latency_ms: number; is_fallback?: boolean }
   | { type: "error"; session_id: string; message: string; code: string }
 
@@ -52,7 +52,9 @@ export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
   const socketRef = useRef<WebSocket | null>(null)
   const sessionIdRef = useRef(sessionId())
   const onMessageRef = useRef(onMessage)
-  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting")
+  const [connectionState, setConnectionState] = useState<ConnectionState>(
+    baseEndpoint ? "connecting" : "disconnected",
+  )
 
   useEffect(() => {
     onMessageRef.current = onMessage
@@ -66,7 +68,6 @@ export function useTranslationSocket({ onMessage }: TranslationSocketOptions) {
     let hasConnectedOnce = false
 
     if (!baseEndpoint) {
-      setConnectionState("disconnected")
       onMessageRef.current({
         type: "error",
         session_id: sessionIdRef.current,

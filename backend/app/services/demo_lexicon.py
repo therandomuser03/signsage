@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 
-# Small alias table mapping common rephrasings to one of the ten supported
+# Small alias table mapping common rephrasings to one of the eight supported
 # demo phrases. Keys/values are compared after `_slug()` normalization, so
 # case and punctuation don't matter. This is a bounded, hand-authored lookup
 # -- not general English understanding -- matching the "bounded phrase
@@ -41,6 +41,17 @@ PHRASE_TEXT_ALIASES: dict[str, str] = {
     "i need some help": "i need help",
     "help me": "help",
 }
+
+SUPPORTED_DEMO_PHRASES = frozenset({
+    "Hello",
+    "Thank you",
+    "Yes",
+    "No",
+    "Please",
+    "Sorry",
+    "Help",
+    "Good morning",
+})
 
 
 def _slug(text: str) -> str:
@@ -82,34 +93,36 @@ def _dtw_distance(a: np.ndarray, b: np.ndarray) -> float:
 
 
 class DemoLexicon:
-    """DTW matcher for functional demo phrases.
+    """DTW matcher for controlled live sign recognition.
 
     Prototypes are 60x225 noface features (pose 33 + hands 21+21) as stored in demo_prototypes/*.json
     Each file is {phrase: str, frames: list[list[float]]} with frames as 60x225.
     ponytail: noface ignores collapsed face (468) per ablation finding noface val loss better.
     """
 
-    def __init__(self, prototypes: dict[str, np.ndarray]):
-        # phrase -> np[ T, 225]
+    def __init__(self, prototypes: dict[str, list[np.ndarray]]):
+        # phrase -> list[np[ T, 225]]
         self.prototypes = prototypes
 
     @classmethod
     def load(cls, directory: Path) -> "DemoLexicon":
-        protos: dict[str, np.ndarray] = {}
+        protos: dict[str, list[np.ndarray]] = {}
         if not directory.is_dir():
             return cls(protos)
         for p in sorted(directory.glob("*.json")):
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
                 phrase = str(data.get("phrase", p.stem)).strip()
+                if phrase not in SUPPORTED_DEMO_PHRASES:
+                    continue
                 frames = np.asarray(data.get("frames"), dtype=np.float32)
                 if frames.ndim == 2 and frames.shape[1] == 225:
-                    protos[phrase] = frames
+                    protos.setdefault(phrase, []).append(frames)
                 elif frames.ndim == 2 and frames.shape[1] == 1629:
                     # allow 1629 and auto-select noface indices
                     from app.services.pose_preprocessing import NOFACE_FEATURE_INDICES
 
-                    protos[phrase] = frames[:, NOFACE_FEATURE_INDICES]
+                    protos.setdefault(phrase, []).append(frames[:, NOFACE_FEATURE_INDICES])
             except Exception:
                 continue
         return cls(protos)
@@ -134,14 +147,55 @@ class DemoLexicon:
                 return None, float("inf")
         best_phrase = None
         best_dist = float("inf")
-        for phrase, proto in self.prototypes.items():
-            d = _dtw_distance(seq_noface.astype(np.float64), proto.astype(np.float64))
-            if d < best_dist:
-                best_dist = d
-                best_phrase = phrase
+        query = seq_noface.astype(np.float64)
+        for phrase, templates in self.prototypes.items():
+            for proto in templates:
+                d = _dtw_distance(query, proto.astype(np.float64))
+                if d < best_dist:
+                    best_dist = d
+                    best_phrase = phrase
         if best_dist <= threshold:
             return best_phrase, best_dist
         return None, best_dist
+
+    def match_raw(
+        self,
+        landmarks: np.ndarray,
+        *,
+        threshold: float,
+        min_frames: int = 8,
+    ) -> tuple[str | None, float, float, str | None]:
+        """Match raw [T,543,3] MediaPipe landmarks against templates.
+
+        Match score is a normalized threshold distance, not model accuracy.
+        """
+        if not self.is_available():
+            return None, float("inf"), 0.0, "templates_unavailable"
+
+        from app.services.pose_preprocessing import (
+            NOFACE_FEATURE_INDICES,
+            normalize_pose_sequence,
+            validate_landmark_array,
+        )
+
+        try:
+            sequence = validate_landmark_array(landmarks)
+        except ValueError:
+            return None, float("inf"), 0.0, "invalid_landmarks"
+
+        if sequence.shape[0] < min_frames:
+            return None, float("inf"), 0.0, "too_short"
+
+        normalized = normalize_pose_sequence(sequence)
+        demo_features = normalized[:, NOFACE_FEATURE_INDICES]
+        phrase, distance = self.match(demo_features, threshold=threshold)
+        confidence = max(0.0, min(1.0, 1.0 - (distance / threshold))) if np.isfinite(distance) else 0.0
+        return (
+            phrase,
+            distance,
+            confidence,
+            None if phrase is not None else "below_threshold",
+        )
 
     def inventory(self) -> list[str]:
         return sorted(self.prototypes.keys())
@@ -158,13 +212,13 @@ class DemoLexicon:
         skeleton for bounded demo phrases rather than a (fabricated) full
         body pose.
         """
-        proto = self.prototypes.get(phrase)
-        if proto is None or proto.shape[0] == 0:
+        templates = self.prototypes.get(phrase)
+        if not templates:
             return None
         from app.services.pose_preprocessing import (
             TRUE_HAND_FEATURE_DIM,
             reconstruct_full_frame_from_hands,
         )
 
-        hand_features = proto[:, -TRUE_HAND_FEATURE_DIM:]
+        hand_features = templates[0][:, -TRUE_HAND_FEATURE_DIM:]
         return reconstruct_full_frame_from_hands(hand_features)

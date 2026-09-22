@@ -12,6 +12,7 @@ import { PrivacyPage } from "./pages/PrivacyPage"
 import { ArchivePage } from "./pages/ArchivePage"
 import { AuthPage } from "./pages/AuthPage"
 import { NotFoundPage } from "./pages/NotFoundPage"
+import { TemplateCapturePage } from "./pages/TemplateCapturePage"
 
 function useHashRoute(): [string, (hash: string) => void] {
   const getRoute = () => window.location.pathname + window.location.search || "/"
@@ -72,6 +73,8 @@ function AppShell() {
       <div className="flex flex-col min-h-[calc(100vh-4rem)]">
         {route.startsWith("/auth") ? (
           <AuthPage navigate={navigate} />
+        ) : route.startsWith("/developer/templates") ? (
+          <TemplateCapturePage />
         ) : route.startsWith("/translate") ? (
           AUTH_DISABLED ? (
             <WorkspacePage initialMode={route === "/translate/text" ? "text" : "sign"} navigate={navigate} />

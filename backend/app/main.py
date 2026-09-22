@@ -25,14 +25,13 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
 
     logger.info(
-        "Loading SignSage models from %s using device=%s",
-        settings.resolved_model_dir,
-        settings.device,
+        "Loading live landmark templates from %s",
+        settings.resolve(settings.demo_prototypes_dir),
     )
     manager = ModelManager.load(settings)
     app.state.model_manager = manager
-    logger.info("SignSage models loaded on %s", manager.device)
-    logger.info("Sign->Text live input mode: raw MediaPipe landmarks")
+    logger.info("Live landmark matcher loaded on %s", manager.device)
+    logger.info("Sign->Text input: raw MediaPipe landmarks")
 
     yield
 

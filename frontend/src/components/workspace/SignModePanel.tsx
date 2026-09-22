@@ -3,14 +3,10 @@ import { FilesetResolver, HolisticLandmarker } from "@mediapipe/tasks-vision"
 import {
   flattenHolisticLandmarks,
   hasReliableSignLandmarks,
-  poseMotion,
-  TEMPORAL_MIN_FRAMES,
-  TEMPORAL_MOTION_THRESHOLD,
-  TEMPORAL_PAUSE_MS,
   type HolisticLandmarks,
 } from "../../lib/mediapipe/landmarks"
 
-type CaptureStatus = "off" | "loading" | "ready" | "warning" | "error"
+type CaptureStatus = "off" | "loading" | "ready" | "warning" | "processing" | "error"
 
 const POSE_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24],
@@ -121,7 +117,8 @@ export function SignModePanel({
   caption: string
   captionLatency: number | null
   captionMeta?: {
-    confidence?: number
+    match_score?: number | null
+    distance?: number | null
     is_fallback?: boolean
     gated_reason?: string | null
   } | null
@@ -140,11 +137,10 @@ export function SignModePanel({
   const frameRequestRef = useRef<number | null>(null)
 
   const bufferedFramesRef = useRef<number[][]>([])
-  const previousFrameRef = useRef<number[] | null>(null)
-  const pauseSinceRef = useRef<number | null>(null)
+  const isCapturingRef = useRef(false)
 
   const finishSentenceRef = useRef<
-    (t: "manual" | "motion_pause") => void
+    () => void
   >(() => undefined)
 
   const [captureStatus, setCaptureStatus] =
@@ -156,24 +152,14 @@ export function SignModePanel({
   const [bufferedFrameCount, setBufferedFrameCount] =
     useState(0)
 
-  const [pauseMs, setPauseMs] =
-    useState(TEMPORAL_PAUSE_MS)
-
-  const [waitingPause, setWaitingPause] =
-    useState(false)
-
-  const pauseMsRef = useRef(pauseMs)
-
-  useEffect(() => {
-    pauseMsRef.current = pauseMs
-  }, [pauseMs])
+  const [isCapturing, setIsCapturing] = useState(false)
 
   /*
    * Finish the current sentence and send the buffered landmark
    * sequence to the backend.
    */
   const finishSentence = useCallback(
-    (trigger: "manual" | "motion_pause") => {
+    () => {
       const raw = bufferedFramesRef.current
 
       if (raw.length === 0) {
@@ -188,11 +174,11 @@ export function SignModePanel({
        * can begin accumulating immediately.
        */
       bufferedFramesRef.current = []
-      previousFrameRef.current = null
-      pauseSinceRef.current = null
+      isCapturingRef.current = false
+      setIsCapturing(false)
 
       setBufferedFrameCount(0)
-      setWaitingPause(false)
+      setCaptureStatus("processing")
 
       /*
        * Send every raw frame using the API contract:
@@ -209,20 +195,17 @@ export function SignModePanel({
        * through prepare_landmarks(..., input_mode="raw"). Do not normalize
        * here to avoid double-normalization / distribution shift.
        */
-      const sent =
-        raw.every((landmarks) =>
-          send({
-            type: "landmarks.frame",
-            timestamp_ms: Math.round(
-              performance.now()
-            ),
-            landmarks,
-          })
-        ) &&
+      const framesSent = raw.every((landmarks) =>
         send({
-          type: "sentence.boundary",
-          trigger,
+          type: "landmarks.frame",
+          timestamp_ms: Math.round(performance.now()),
+          landmarks,
         })
+      )
+      const sent = framesSent && send({
+        type: "sentence.boundary",
+        trigger: "manual",
+      })
 
       setCaptureNote(
         sent
@@ -272,14 +255,28 @@ export function SignModePanel({
     }
 
     bufferedFramesRef.current = []
-    previousFrameRef.current = null
-    pauseSinceRef.current = null
+    isCapturingRef.current = false
 
     setBufferedFrameCount(0)
-    setWaitingPause(false)
+    setIsCapturing(false)
 
     setCaptureStatus("off")
     setCaptureNote("Camera off")
+  }, [])
+
+  const startSigning = useCallback(() => {
+    if (captureStatus !== "ready") return
+    bufferedFramesRef.current = []
+    setBufferedFrameCount(0)
+    isCapturingRef.current = true
+    setIsCapturing(true)
+    setCaptureNote("Signing. Stop when gesture is complete.")
+  }, [captureStatus])
+
+  const stopAndRecognize = useCallback(() => {
+    isCapturingRef.current = false
+    setIsCapturing(false)
+    finishSentenceRef.current()
   }, [])
 
   /*
@@ -367,9 +364,7 @@ export function SignModePanel({
       landmarkerRef.current = landmarker
 
       setCaptureStatus("ready")
-      setCaptureNote(
-        "Signing. Pause after sentence or press Send."
-      )
+      setCaptureNote("Camera ready. Press Start signing.")
 
       /*
        * Process the camera continuously.
@@ -428,13 +423,7 @@ export function SignModePanel({
            * animation loop. The callback may run many
            * times per second.
            */
-          setCaptureStatus((current) => {
-            if (current !== "ready") {
-              return "ready"
-            }
-
-            return current
-          })
+          setCaptureStatus((current) => current === "warning" ? "ready" : current)
 
           /*
            * Flatten the 543 landmarks into the
@@ -452,54 +441,9 @@ export function SignModePanel({
            * keeps collecting frames until a sentence
            * boundary occurs.
            */
-          bufferedFramesRef.current.push(
-            frame
-          )
-
-          setBufferedFrameCount(
-            bufferedFramesRef.current.length
-          )
-
-          /*
-           * Estimate motion between consecutive
-           * landmark frames.
-           */
-          const motion =
-            previousFrameRef.current
-              ? poseMotion(
-                  previousFrameRef.current,
-                  frame
-                )
-              : Infinity
-
-          previousFrameRef.current = frame
-
-          /*
-           * Detect a sufficiently long pause.
-           */
-          if (
-            motion <
-              TEMPORAL_MOTION_THRESHOLD &&
-            bufferedFramesRef.current.length >=
-              TEMPORAL_MIN_FRAMES
-          ) {
-            pauseSinceRef.current ??=
-              performance.now()
-
-            setWaitingPause(true)
-
-            if (
-              performance.now() -
-                pauseSinceRef.current >=
-                pauseMsRef.current
-            ) {
-              finishSentenceRef.current(
-                "motion_pause"
-              )
-            }
-          } else {
-            pauseSinceRef.current = null
-            setWaitingPause(false)
+          if (isCapturingRef.current) {
+            bufferedFramesRef.current.push(frame)
+            setBufferedFrameCount(bufferedFramesRef.current.length)
           }
         } else {
           /*
@@ -613,9 +557,7 @@ export function SignModePanel({
               </span>
 
               {bufferedFrameCount} frames ·{" "}
-              {waitingPause
-                ? "pause…"
-                : "buffering"}
+              {isCapturing ? "capturing" : "ready"}
             </span>
           </div>
 
@@ -630,8 +572,8 @@ export function SignModePanel({
             </span>
 
             <span className="text-on-surface-variant">
-              {waitingPause
-                ? `Waiting ${pauseMs} ms pause`
+              {isCapturing
+                ? "Manual capture · landmarks only"
                 : "Zero-Cloud · Landmarks only"}
             </span>
           </div>
@@ -659,76 +601,46 @@ export function SignModePanel({
             </p>
 
             <div className="flex gap-2">
-              {captureStatus === "off" ||
-              captureStatus === "error" ? (
+              {captureStatus === "off" || captureStatus === "error" ? (
                 <button
-                  onClick={() =>
-                    void startCamera()
-                  }
+                  onClick={() => void startCamera()}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-sm hover:bg-[#1ABC9C] transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[16px]">
-                    videocam
-                  </span>
-
-                  Start
+                  <span className="material-symbols-outlined text-[16px]">videocam</span>
+                  Start camera
+                </button>
+              ) : isCapturing ? (
+                <button
+                  onClick={stopAndRecognize}
+                  disabled={bufferedFrameCount === 0}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-sm hover:bg-[#1ABC9C] disabled:opacity-40"
+                >
+                  <span className="material-symbols-outlined text-[16px]">stop_circle</span>
+                  Stop and recognize
                 </button>
               ) : (
                 <button
-                  onClick={stopCamera}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded bg-surface-container-high text-on-surface font-label-sm text-sm hover:bg-surface-container-highest"
+                  onClick={startSigning}
+                  disabled={captureStatus !== "ready"}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-sm hover:bg-[#1ABC9C] disabled:opacity-40"
                 >
-                  <span className="material-symbols-outlined text-[15px]">
-                    pause_circle
-                  </span>
-
-                  Stop
+                  <span className="material-symbols-outlined text-[16px]">gesture</span>
+                  Start signing
                 </button>
               )}
 
               <button
-                onClick={() =>
-                  finishSentence("manual")
-                }
-                disabled={
-                  bufferedFrameCount === 0 ||
-                  captureStatus === "loading"
-                }
+                onClick={stopCamera}
+                disabled={captureStatus === "off" || captureStatus === "loading"}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-surface-container-high text-on-surface font-label-md text-sm border border-outline-variant/40 hover:border-primary disabled:opacity-40"
               >
-                <span className="material-symbols-outlined text-[16px]">
-                  send
-                </span>
-
-                Send
+                <span className="material-symbols-outlined text-[16px]">videocam_off</span>
+                Stop camera
               </button>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 font-technical-data text-xs text-on-surface-variant">
-            <span>
-              Pause {pauseMs} ms
-            </span>
-
-            <input
-              type="range"
-              min={300}
-              max={1200}
-              step={50}
-              value={pauseMs}
-              onChange={(e) =>
-                setPauseMs(
-                  Number(e.target.value)
-                )
-              }
-              className="flex-1 accent-primary h-1"
-            />
-
-            <span className="text-outline text-[11px]">
-              short ↔ conversational
-            </span>
-          </div>
         </div>
+          </div>
 
         {error && (
           <div className="rounded bg-error-container/20 border border-error/30 px-3 py-2 font-technical-data text-xs text-error">
@@ -797,7 +709,7 @@ export function SignModePanel({
             <>
               <blockquote
                 className={`font-headline-lg text-headline-lg leading-tight tracking-tight ${
-                  captionMeta?.is_fallback
+                    captionMeta?.gated_reason
                     ? "text-on-surface-variant italic"
                     : "text-on-surface"
                 }`}
@@ -805,13 +717,9 @@ export function SignModePanel({
                 “{caption}”
               </blockquote>
 
-              {captionMeta?.is_fallback && (
+              {captionMeta?.gated_reason && (
                 <span className="font-technical-data text-xs text-secondary self-start px-2 py-0.5 rounded bg-secondary/10 border border-secondary/20">
-                  Demo/fallback ·{" "}
-                  {captionMeta.gated_reason ??
-                    "low confidence"}{" "}
-                  — try demo: Hello / Thank you /
-                  Yes / No
+                  Landmark matcher rejected input · {captionMeta.gated_reason}
                 </span>
               )}
             </>
@@ -829,18 +737,14 @@ export function SignModePanel({
           {captionLatency !== null && (
             <span className="font-technical-data text-xs text-primary self-end">
               {captionLatency.toFixed(0)} ms ·{" "}
-              {captionMeta?.is_fallback
-                ? `Fallback ${
-                    captionMeta.confidence?.toFixed(
-                      2
-                    ) ?? ""
-                  }`
-                : "Transformer beam-5"}{" "}
-              {captionMeta?.confidence !=
+              Controlled vocabulary{" "}
+              {captionMeta?.match_score !=
                 null &&
-                `· conf ${captionMeta.confidence.toFixed(
+                `· match score ${captionMeta.match_score.toFixed(
                   2
                 )}`}
+              {captionMeta?.distance != null &&
+                ` · distance ${captionMeta.distance.toFixed(2)}`}
             </span>
           )}
 

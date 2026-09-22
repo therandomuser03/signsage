@@ -81,7 +81,7 @@ class CapabilityFeatures(BaseModel):
     groq_gloss_enabled: bool
     ollama_gloss_enabled: bool
     landmark_input_mode: Literal["normalized", "raw"]
-    demo_fallback_available: bool = False
+    controlled_vocabulary_available: bool = False
 
 
 class WebSocketMessageTypes(BaseModel):
@@ -160,7 +160,9 @@ class TranslationText(BaseModel):
     session_id: str
     text: str
     latency_ms: float
-    confidence: float = 0.5
+    confidence: float | None = None
+    match_score: float | None = None
+    distance: float | None = None
     is_fallback: bool = False
     gated_reason: str | None = None
 

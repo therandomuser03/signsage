@@ -76,12 +76,9 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
 
-    # Functional fallback for collapsed Sign→Text checkpoint (Image 1 "this is why sacrifices.")
-    # When true, low-confidence/attractor outputs are replaced by demo lexicon DTW match or honest placeholder.
-    enable_demo_fallback: bool = True
     demo_prototypes_dir: Path = Path("./demo_prototypes")
     translation_confidence_threshold: float = 0.45
-    demo_match_threshold: float = 6.5
+    template_match_threshold: float = 3.0
 
     @field_validator("cors_origins", mode="before")
     @classmethod
