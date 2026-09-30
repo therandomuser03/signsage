@@ -1,0 +1,16 @@
+{
+  "HELLO": { "id": "HELLO", "label": "Hello", "animationUrl": "/models/avatar/signs/hello.glb" },
+  "THANK_YOU": { "id": "THANK_YOU", "label": "Thank you", "animationUrl": "/models/avatar/signs/thank_you.glb" },
+  "SORRY": { "id": "SORRY", "label": "Sorry", "animationUrl": "/models/avatar/signs/sorry.glb" },
+  "PLEASE": { "id": "PLEASE", "label": "Please", "animationUrl": "/models/avatar/signs/please.glb" },
+  "YES": { "id": "YES", "label": "Yes", "animationUrl": "/models/avatar/signs/yes.glb" },
+  "NO": { "id": "NO", "label": "No", "animationUrl": "/models/avatar/signs/no.glb" },
+  "HELP": { "id": "HELP", "label": "Help", "animationUrl": "/models/avatar/signs/help.glb" },
+  "WATER": { "id": "WATER", "label": "Water", "animationUrl": "/models/avatar/signs/water.glb" },
+  "FOOD": { "id": "FOOD", "label": "Food", "animationUrl": "/models/avatar/signs/food.glb" },
+  "NAME": { "id": "NAME", "label": "Name", "animationUrl": "/models/avatar/signs/name.glb" },
+  "YOU": { "id": "YOU", "label": "You", "animationUrl": "/models/avatar/signs/you.glb" },
+  "ME": { "id": "ME", "label": "Me", "animationUrl": "/models/avatar/signs/me.glb" },
+  "WHERE": { "id": "WHERE", "label": "Where", "animationUrl": "/models/avatar/signs/where.glb" },
+  "HOW": { "id": "HOW", "label": "How", "animationUrl": "/models/avatar/signs/how.glb" }
+}

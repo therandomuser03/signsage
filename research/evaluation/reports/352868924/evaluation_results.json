@@ -1,0 +1,38 @@
+{
+  "sign_to_text_metrics": {
+    "Transformer Sign→Text": {
+      "WER": 1.0045594428859836,
+      "BLEU": 0.24291864245846076,
+      "ROUGE-L": 0.08907932935380948,
+      "exact_match": 0.0,
+      "nonempty_output": 1.0
+    },
+    "Trivial baseline": {
+      "WER": 1.0313263215201167,
+      "BLEU": 0.3963830781722135,
+      "ROUGE-L": 0.022588702883552907,
+      "exact_match": 0.00024685262898049864,
+      "nonempty_output": 1.0
+    }
+  },
+  "output_diversity_fraction": 0.009874105159219946,
+  "top_prediction_freq": 0.44844894264790586,
+  "generated_length_stats": {
+    "mean": 8.239364765901424,
+    "median": 9.0,
+    "p90": 12.0,
+    "max": 27,
+    "empty_fraction": 0.0
+  },
+  "reference_length_stats": {
+    "mean": 10.882333580185962,
+    "median": 11.0,
+    "p90": 18.0,
+    "max": 50
+  },
+  "mean_confidence_proxy": 0.13305618839535677,
+  "p10_confidence_proxy": 0.10156524628400802,
+  "transformer_beats_trivial": true,
+  "output_diversity_ok": false,
+  "phase_0_status": "NO-GO"
+}

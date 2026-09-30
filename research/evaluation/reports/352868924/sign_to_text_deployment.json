@@ -1,0 +1,65 @@
+{
+  "project": "SignSage",
+  "task": "ISL_to_English",
+  "dataset": "iSign v1.1",
+  "feature_dim": 1629,
+  "model_input_dim": 3258,
+  "motion_features": "per-frame delta of normalized landmarks; first frame zero",
+  "landmarks": 543,
+  "coordinates": 3,
+  "coordinate_order": [
+    "x",
+    "y",
+    "z"
+  ],
+  "max_frames": 160,
+  "max_tokens": 96,
+  "vocab_size": 16000,
+  "tokenizer": "SentencePiece unigram trained on training targets only",
+  "tokenizer_model": "tokenizer/signsage_en_sp.model",
+  "special_token_ids": {
+    "pad": 0,
+    "unk": 1,
+    "bos": 2,
+    "eos": 3
+  },
+  "normalization_version": "pose_normalize_v1",
+  "normalization": "root-center on body hips (23,24), divide by per-sequence body landmark std; NaN/Inf -> 0",
+  "landmark_contract_file": "landmark_contract.json",
+  "model_architecture": {
+    "input_dim": 3258,
+    "raw_feature_dim": 1629,
+    "vocab_size": 16000,
+    "d_model": 192,
+    "nhead": 4,
+    "layers": 3,
+    "ff": 512,
+    "dropout": 0.15,
+    "max_frames": 160,
+    "max_tokens": 96
+  },
+  "decoding": {
+    "decoder_runtime": "constrained_greedy",
+    "max_decode_tokens": 94,
+    "min_output_tokens": 1,
+    "beam_width_qualitative": 4,
+    "repetition_penalty": 1.15,
+    "no_repeat_ngram_size": 3
+  },
+  "inference_package": {
+    "name": "signsage_inference",
+    "version": "1.0.0",
+    "entrypoint": "signsage_inference.loader.load_pipeline",
+    "bundle_relative_path": "inference/"
+  },
+  "checkpoint_metadata": {
+    "epoch": 3,
+    "val_loss": 5.261140275129023
+  },
+  "raw_video_required_by_model": false,
+  "training_rows": 99699,
+  "validation_rows": 11927,
+  "test_rows": 12153,
+  "video_level_split": true,
+  "checkpoint": "checkpoint/signsage_transformer_full.pt"
+}

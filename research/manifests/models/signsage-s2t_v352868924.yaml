@@ -1,0 +1,91 @@
+# SignSage research run manifest — CONFIRMED (previously drafted with pending fields)
+# Location: research/manifests/models/signsage-s2t_v352868924.yaml
+# Every field below was verified directly from the real 592 MB Kaggle output
+# (reassembled from your split ezyZip.z01 + ezyZip.zip upload) and by actually
+# loading the real checkpoint + tokenizer through the backend in
+# signsage-backend.zip. Nothing here is inferred from screenshots anymore.
+
+model_id: signsage-s2t
+architecture: spatial-temporal-transformer
+
+kaggle:
+  notebook: anubhab27/signsage
+  script_version_id: 352868924
+  url: https://www.kaggle.com/code/anubhab27/signsage/log?scriptVersionId=352868924
+  accelerator: "GPU T4 x2"
+  runtime_seconds: 31586.1
+  runtime_human: "~8h 46m"
+  output_size_bytes: 613307251   # confirmed exact: sum of all 51 files in results.zip
+
+dataset:
+  source: iSign (Hugging Face)
+  cached_copy: isign/iSign_v1.1.csv   # 9,808,778 bytes — do NOT commit; keep local/external only
+  note: "Reproducible from Hugging Face; the CSV is a convenience cache, not canonical."
+
+# Three DISTINCT checkpoints confirmed via CRC32 (all different — not duplicates
+# of each other, despite near-identical file sizes ~115.2 MB each):
+checkpoints:
+  full:                                    # the one actually used in the deployment bundle
+    file: signsage_transformer_full.pt
+    size_bytes: 120817995
+    crc32: e9e42994
+    role: "Canonical — matches signsage_deployment_bundle.zip's checkpoint/ exactly (verified)"
+  latest:
+    file: signsage_transformer_full.latest.pt
+    size_bytes: 120820935
+    crc32: 174a7c0d
+    role: "Most recent epoch snapshot, distinct from 'full'"
+  recovery:
+    file: signsage_transformer_recovery.pt
+    size_bytes: 120819675
+    crc32: 3c3b13a0
+    role: "Resume/recovery snapshot, distinct from both others"
+
+artifacts:
+  deployment_bundle: signsage_deployment_bundle.zip   # 111,774,002 bytes — CANONICAL, use this form
+  deployment_bundle_unzipped_folder: "signsage_outputs/signsage_deployment_bundle/  -- CONFIRMED byte-identical to the .zip via matching CRC32 on every contract file + the checkpoint. Discard; do not keep both."
+  loose_reports_folder: "signsage_outputs/reports/  -- CONFIRMED byte-identical duplicates (CRC32-matched) of evaluation_results.json, landmark_contract.json, sign_to_text_deployment.json, token_vocabulary.json, tokenizer/signsage_en_sp.model already inside the deployment bundle. Discard those 5 files."
+  reports_unique_files: "signsage_outputs/reports/tokenizer/signsage_en_sp.vocab (297,111 bytes) and train_text.txt (6,115,615 bytes) do NOT appear inside the deployment bundle -- these are the ONLY files in reports/ worth keeping."
+  tokenizer: tokenizer/signsage_en_sp.model
+  landmark_contract: landmark_contract.json
+  evaluation_results: evaluation_results.json
+  knowledge_db: signsage_knowledge.db          # 57,344 bytes -- goes under experiments/, not artifacts/
+  knowledge_manifest: signsage_knowledge_manifest.json
+  storage_location: research/artifacts/352868924/   # git-ignored
+
+metrics:   # read directly from evaluation_results.json, not re-derived
+  wer: 1.0045594428859836
+  bleu: 0.24291864245846076
+  rouge_l: 0.08907932935380948
+  exact_match: 0.0
+  trivial_baseline_wer: 1.0313263215201167
+  trivial_baseline_bleu: 0.3963830781722135
+  output_diversity_fraction: 0.009874105159219946
+  top_prediction_freq: 0.44844894264790586
+  mean_confidence_proxy: 0.13305618839535677
+  transformer_beats_trivial: true
+  output_diversity_ok: false
+  phase_0_status: "NO-GO"
+
+status: verified_no_go   # upgraded from pending_verification -- this is now confirmed, not provisional
+promoted_to_backend: false
+
+backend_validation:
+  # Confirmed by actually running signsage-backend's scripts/model_check.py
+  # and SignToTextAdapter.transcribe() against this exact real bundle.
+  bundle_loads: true
+  contract_cross_validation: passed
+  activity_gate_self_test: passed
+  sample_transcription_on_random_input: "the police said that"
+  note: >
+    The random-noise-input transcription independently reproduces this run's
+    own documented collapse mode (top_prediction_freq 44.84%, dominant output
+    "the police said that the police have been arrested." per RESULTS.md) --
+    strong evidence the backend port is numerically faithful AND that the
+    NO-GO verdict is real, not a backend bug.
+
+notes: >
+  All fields above were confirmed directly, not inferred, by reassembling the
+  user's split zip upload (ezyZip.z01 + ezyZip.zip -> results.zip, 613,307,251
+  bytes across 51 files) and cross-checking CRC32 values plus running the
+  actual backend against the real checkpoint and tokenizer.

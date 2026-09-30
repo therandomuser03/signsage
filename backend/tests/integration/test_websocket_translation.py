@@ -1,0 +1,90 @@
+"""Integration test for the /ws/translate route end-to-end: connect, stream
+landmark frames, signal a sentence boundary, and confirm a real translation
+comes back -- using the fake_bundle fixture as a stand-in for a promoted
+model. Also covers the two most important error paths.
+"""
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+pytest.importorskip("torch")
+fastapi_testclient = pytest.importorskip("fastapi.testclient")
+
+
+@pytest.fixture
+def promoted_client(fake_bundle, monkeypatch):
+    monkeypatch.setenv("SIGNSAGE_MODEL_BUNDLE_DIR", str(fake_bundle))
+    monkeypatch.setenv("SIGNSAGE_MODEL_PROMOTED", "true")
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    from app.ml.models.registry import reset_registry
+
+    reset_registry()
+
+    from app.main import app
+
+    client = fastapi_testclient.TestClient(app)
+    yield client
+
+    get_settings.cache_clear()
+    reset_registry()
+
+
+def test_websocket_happy_path_returns_a_translation(promoted_client):
+    rng = np.random.default_rng(2)
+    with promoted_client.websocket_connect("/ws/translate") as ws:
+        for _ in range(30):
+            ws.send_json({"type": "landmarks.frame", "landmarks": rng.normal(size=(543, 3)).tolist()})
+        ws.send_json({"type": "sentence.boundary"})
+        response = ws.receive_json()
+
+    assert response["type"] == "translation.text"
+    assert response["accepted"] is True
+    assert isinstance(response["text"], str)
+
+
+def test_websocket_rejects_unknown_message_type(promoted_client):
+    with promoted_client.websocket_connect("/ws/translate") as ws:
+        ws.send_json({"type": "not.a.real.type"})
+        response = ws.receive_json()
+
+    assert response["type"] == "error"
+    assert response["code"] == "UNKNOWN_MESSAGE_TYPE"
+
+
+def test_websocket_rejects_sentence_boundary_with_no_buffered_frames(promoted_client):
+    with promoted_client.websocket_connect("/ws/translate") as ws:
+        ws.send_json({"type": "sentence.boundary"})
+        response = ws.receive_json()
+
+    assert response["type"] == "error"
+    assert response["code"] == "EMPTY_SEQUENCE"
+
+
+def test_rest_endpoint_refuses_when_model_not_promoted(fake_bundle, monkeypatch):
+    """The default-safe state: SIGNSAGE_MODEL_PROMOTED unset/false must
+    refuse to serve, even with a perfectly loadable bundle available."""
+    monkeypatch.setenv("SIGNSAGE_MODEL_BUNDLE_DIR", str(fake_bundle))
+    monkeypatch.setenv("SIGNSAGE_MODEL_PROMOTED", "false")
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    from app.ml.models.registry import reset_registry
+
+    reset_registry()
+    from app.main import app
+
+    client = fastapi_testclient.TestClient(app)
+    frames = [{"landmarks": np.zeros((543, 3)).tolist()} for _ in range(5)]
+    resp = client.post("/api/v1/translation/sign-to-text", json={"frames": frames})
+
+    assert resp.status_code == 503
+    assert resp.json()["code"] == "MODEL_NOT_PROMOTED"
+
+    get_settings.cache_clear()
+    reset_registry()

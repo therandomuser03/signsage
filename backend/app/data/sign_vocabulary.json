@@ -1,0 +1,19 @@
+{
+  "_comment": "Single source of truth for the avatar sign vocabulary. Must equal the keys of frontend/public/models/avatar/manifest.json (enforced by tests/contract).",
+  "gloss_ids": [
+    "HELLO",
+    "THANK_YOU",
+    "SORRY",
+    "PLEASE",
+    "YES",
+    "NO",
+    "HELP",
+    "WATER",
+    "FOOD",
+    "NAME",
+    "YOU",
+    "ME",
+    "WHERE",
+    "HOW"
+  ]
+}
