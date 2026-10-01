@@ -155,7 +155,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="relative overflow-hidden px-6 pb-20 pt-36 md:pb-32 md:pt-44">
         <div
-          className="absolute inset-0 opacity-70 [mask-image:linear-gradient(to_bottom,black_72%,transparent)]"
+          className="absolute inset-0 opacity-70 mask-[linear-gradient(to_bottom,black_72%,transparent)]"
           aria-hidden="true"
         >
           <GhostFibers
@@ -235,7 +235,7 @@ export default function LandingPage() {
         </div>
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-background to-transparent"
+          className="absolute inset-x-0 top-0 h-32 bg-linear-to-b from-background to-transparent"
         />
         <div className="relative z-10 mx-auto max-w-6xl">
           <Reveal>
@@ -310,7 +310,7 @@ export default function LandingPage() {
                 {i < ISL_FLOW.length - 1 && (
                   <ArrowDown
                     aria-hidden="true"
-                    className="ml-[26px] h-5 w-5 text-foreground/25"
+                    className="ml-6.5 h-5 w-5 text-foreground/25"
                   />
                 )}
               </Reveal>
