@@ -7,13 +7,19 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.ml.preprocessing.landmarks import COORDINATES_PER_LANDMARK, TOTAL_LANDMARKS
 
+import math
+
 
 def validate_landmark_rows(rows: List[List[float]]) -> List[List[float]]:
-    """Every landmark must be exactly [x, y, z]; ragged input would otherwise
-    crash numpy conversion deep inside the pipeline."""
+    """Every landmark must be exactly [x, y, z] of finite numbers; ragged or
+    non-finite input would otherwise crash numpy conversion deep inside the
+    pipeline (or poison the model with NaN)."""
     for row in rows:
         if len(row) != COORDINATES_PER_LANDMARK:
             raise ValueError(f"each landmark must have {COORDINATES_PER_LANDMARK} coordinates")
+        for value in row:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError("landmark coordinates must be finite numbers")
     return rows
 
 

@@ -41,17 +41,32 @@ WebSocket and Supabase URLs should be configured through environment variables r
 
 ## 3. Backend
 
-The documented hosting target is Render.
-
-Typical configuration:
+The documented hosting target is Render (see `render.yaml` at the repo root).
 
 ```text
-Root: backend/
-Install: pip install -r requirements.txt
-Start: uvicorn <application>:app --host 0.0.0.0 --port $PORT
+Runtime: docker (build context: backend/, see backend/Dockerfile)
+Install: pip install .  (CPU-only torch first, then the app)
+Start:   bash scripts/fetch_bundle.sh && exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
+Health:  GET /api/v1/health
 ```
 
-The exact module path must follow the repository's actual backend entry point.
+The application entry point is `app.main:app`. The server binds `0.0.0.0` and
+uses Render's injected `$PORT` (the `SIGNSAGE_PORT` setting is the local-dev
+equivalent only).
+
+Model weights are NOT baked into the image. At start,
+`backend/scripts/fetch_bundle.sh` downloads `SIGNSAGE_BUNDLE_URL` (a
+`signsage_deployment_bundle.zip`) into `SIGNSAGE_MODEL_BUNDLE_DIR`
+(`/models/signsage_deployment_bundle`, a 2 GB persistent disk), verifies the
+optional `SIGNSAGE_BUNDLE_SHA256` checksum, and requires the entries
+`app/infrastructure/storage/model_storage.py` checks for
+(`checkpoint/`, `tokenizer/`, `landmark_contract.json`,
+`sign_to_text_deployment.json`). Without a bundle URL the server still starts
+and `/health` honestly reports `model_bundle_found: false`; translation
+endpoints then refuse with `MODEL_UNAVAILABLE` instead of faking readiness.
+
+`SIGNSAGE_ALLOW_UNPROMOTED_DEV` is deliberately absent from `render.yaml`:
+production never serves an unpromoted checkpoint.
 
 ## 4. Important hosting limitation
 

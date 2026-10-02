@@ -19,8 +19,11 @@ export class Connection {
   private attempts = 0;
   private closedByUser = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private readonly opts: ConnectionOptions;
 
-  constructor(private readonly opts: ConnectionOptions) {}
+  constructor(opts: ConnectionOptions) {
+    this.opts = opts;
+  }
 
   private setStatus(status: ConnectionStatus) {
     this.status = status;

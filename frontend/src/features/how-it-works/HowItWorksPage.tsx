@@ -140,8 +140,8 @@ export default function HowItWorksPage() {
             </h2>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <StartCta className="px-6 py-3.5" />
-              <Button variant="outline" asChild className="px-6 py-3.5">
-                <Link to="/capabilities">Explore capabilities</Link>
+              <Button variant="outline" className="px-6 py-3.5" render={<Link to="/capabilities" />}>
+                Explore capabilities
               </Button>
             </div>
           </Reveal>

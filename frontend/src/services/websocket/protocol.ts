@@ -18,6 +18,9 @@ export interface TranslationTextMessage {
   confidence: number;
   result_type: ResultType;
   history_id?: string | null;
+  /** False = stabilizing interim from the rolling window (may be superseded);
+   *  true = finalized by an explicit sentence.boundary. */
+  final: boolean;
 }
 export interface ErrorMessage { type: "error"; code: string; message: string }
 export type ServerMessage = AuthOkMessage | TranslationTextMessage | ErrorMessage;

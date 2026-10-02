@@ -35,6 +35,16 @@ and `POST /api/v1/translation/sign-to-text` will refuse to serve
 translations (`ModelNotPromotedError`) rather than silently returning
 NO-GO-quality output as if it were reliable.
 
+## Local-development override (dev machines only)
+
+`SIGNSAGE_ALLOW_UNPROMOTED_DEV=true` lets a local backend load and serve
+the configured checkpoint despite the NO-GO gate, so the real
+camera -> WebSocket -> inference -> UI path can be exercised end to end.
+It changes availability, not quality: `/models` still reports
+`promoted: false` with the NO-GO evaluation status, and the startup log
+emits a loud `[MODEL]` warning while it is set. NEVER enable in
+production -- `render.yaml` deliberately omits this variable.
+
 ## Promoting a future GO run
 
 1. Confirm `evaluation_results.json` passes both deployment-gate checks.

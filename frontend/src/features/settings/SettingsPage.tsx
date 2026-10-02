@@ -132,9 +132,7 @@ export default function SettingsPage() {
               <p className="text-sm text-foreground/55">
                 You’re browsing as a guest. Sign in to sync history.
               </p>
-              <Button asChild>
-                <Link to="/login">Sign in</Link>
-              </Button>
+              <Button render={<Link to="/login" />}>Sign in</Button>
             </div>
           )}
         </CardContent>
@@ -253,10 +251,8 @@ export default function SettingsPage() {
               </p>
             </div>
             <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" disabled={clearing}>
-                  Delete all
-                </Button>
+              <AlertDialogTrigger render={<Button variant="destructive" disabled={clearing} />}>
+                Delete all
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>

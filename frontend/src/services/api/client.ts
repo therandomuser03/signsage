@@ -9,11 +9,19 @@ import { ApiError, NetworkError } from "./errors";
 export type AccessTokenProvider = () => Promise<string | null>;
 
 export class ApiClient {
+  private readonly baseUrl: string;
+  private readonly getAccessToken?: AccessTokenProvider;
+  private readonly fetchImpl: typeof fetch;
+
   constructor(
-    private readonly baseUrl: string,
-    private readonly getAccessToken?: AccessTokenProvider,
-    private readonly fetchImpl: typeof fetch = (...args) => fetch(...args),
-  ) {}
+    baseUrl: string,
+    getAccessToken?: AccessTokenProvider,
+    fetchImpl: typeof fetch = (...args) => fetch(...args),
+  ) {
+    this.baseUrl = baseUrl;
+    this.getAccessToken = getAccessToken;
+    this.fetchImpl = fetchImpl;
+  }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {};

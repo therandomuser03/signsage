@@ -65,6 +65,24 @@ def test_websocket_rejects_sentence_boundary_with_no_buffered_frames(promoted_cl
     assert response["code"] == "EMPTY_SEQUENCE"
 
 
+def test_rolling_interim_then_final(promoted_client):
+    """Streaming semantics: a trailing-window interim arrives with final=false
+    while signing continues; sentence.boundary finalizes with final=true.
+    Exactly 80 frames hits the default window once, so exactly one interim
+    is expected before the boundary."""
+    rng = np.random.default_rng(11)
+    with promoted_client.websocket_connect("/ws/translate") as ws:
+        for _ in range(80):
+            ws.send_json({"type": "landmarks.frame", "landmarks": rng.normal(size=(543, 3)).tolist()})
+        interim = ws.receive_json()
+        ws.send_json({"type": "sentence.boundary"})
+        final = ws.receive_json()
+
+    assert interim["type"] == "translation.text" and interim["final"] is False
+    assert interim["accepted"] is True
+    assert final["type"] == "translation.text" and final["final"] is True
+
+
 def test_rest_endpoint_refuses_when_model_not_promoted(fake_bundle, monkeypatch):
     """The default-safe state: SIGNSAGE_MODEL_PROMOTED unset/false must
     refuse to serve, even with a perfectly loadable bundle available."""

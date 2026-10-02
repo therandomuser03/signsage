@@ -75,15 +75,17 @@ class SignTransformer(nn.Module):
         layers=3,
         ff=512,
         dropout=0.15,
+        norm_first=False,
     ):
         super().__init__()
         self.pad_idx = pad_idx
+        self.norm_first = norm_first
         self.input_proj = FrameProjection(input_dim, d_model)
         self.src_pos = PositionalEncoding(d_model, max_frames + 4)
         self.tok_embed = nn.Embedding(vocab_size, d_model, padding_idx=pad_idx)
         self.tgt_pos = PositionalEncoding(d_model, max_tokens + 4)
-        enc = nn.TransformerEncoderLayer(d_model, nhead, ff, dropout, batch_first=True, norm_first=False)
-        dec = nn.TransformerDecoderLayer(d_model, nhead, ff, dropout, batch_first=True, norm_first=False)
+        enc = nn.TransformerEncoderLayer(d_model, nhead, ff, dropout, batch_first=True, norm_first=norm_first)
+        dec = nn.TransformerDecoderLayer(d_model, nhead, ff, dropout, batch_first=True, norm_first=norm_first)
         self.encoder = nn.TransformerEncoder(enc, layers)
         self.decoder = nn.TransformerDecoder(dec, layers)
         self.out = nn.Linear(d_model, vocab_size)

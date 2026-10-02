@@ -175,11 +175,13 @@ export default function SavedSignsPage() {
                   Details
                 </Button>
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" aria-label={`Remove ${item.output_text}`}>
-                      <Trash2 aria-hidden="true" />
-                      Remove
-                    </Button>
+                  <AlertDialogTrigger
+                    render={
+                      <Button variant="ghost" size="sm" aria-label={`Remove ${item.output_text}`} />
+                    }
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Remove
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>

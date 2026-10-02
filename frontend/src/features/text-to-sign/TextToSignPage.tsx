@@ -193,24 +193,22 @@ export default function TextToSignPage() {
                 {working ? "Generating…" : "Generate"}
               </Button>
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex-1">
-                    <Button
-                      variant="outline"
-                      onClick={() => void play()}
-                      disabled={
-                        !manifest ||
-                        !avatarReady ||
-                        working ||
-                        state.isPlaying ||
-                        text.trim().length === 0
-                      }
-                      className="w-full"
-                    >
-                      <Play aria-hidden="true" />
-                      {state.isPlaying ? "Playing…" : "Play"}
-                    </Button>
-                  </span>
+                <TooltipTrigger render={<span className="flex-1" />}>
+                  <Button
+                    variant="outline"
+                    onClick={() => void play()}
+                    disabled={
+                      !manifest ||
+                      !avatarReady ||
+                      working ||
+                      state.isPlaying ||
+                      text.trim().length === 0
+                    }
+                    className="w-full"
+                  >
+                    <Play aria-hidden="true" />
+                    {state.isPlaying ? "Playing…" : "Play"}
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   {avatarReady

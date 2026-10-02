@@ -9,7 +9,7 @@ import type { GlossSequence, SignManifest, SignPlaybackState } from "../types";
 type GlossMapper = (text: string, manifest: SignManifest) => GlossSequence | Promise<GlossSequence>;
 
 export function useSignAnimation(
-  avatarRef: React.RefObject<AvatarViewerHandle>,
+  avatarRef: React.RefObject<AvatarViewerHandle | null>,
   manifest: SignManifest,
   mapper: GlossMapper = localGlossMapper
 ) {
@@ -44,5 +44,5 @@ export function useSignAnimation(
     [avatarRef, manifest, mapper]
   );
 
-  return { ...state, unmatchedWords, perform };
+  return { state, unmatchedWords, perform };
 }

@@ -59,6 +59,10 @@ class TranslationTextMessage(BaseModel):
     confidence: float
     result_type: str
     history_id: Optional[str] = None
+    # Streaming semantics: False = stabilizing interim from the rolling
+    # window (do not persist, may be superseded); True = finalized by an
+    # explicit sentence.boundary.
+    final: bool = False
 
 
 class ErrorCode:

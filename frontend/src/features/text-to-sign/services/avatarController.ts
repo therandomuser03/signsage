@@ -29,8 +29,10 @@ export class AvatarController {
   private clipCache = new Map<string, THREE.AnimationClip>();
   private manifest: SignManifest;
   private rafId: number | null = null;
+  private canvas: HTMLCanvasElement;
 
-  constructor(private canvas: HTMLCanvasElement, manifest: SignManifest) {
+  constructor(canvas: HTMLCanvasElement, manifest: SignManifest) {
+    this.canvas = canvas;
     this.manifest = manifest;
 
     this.gltfLoader.register((parser) => new VRMLoaderPlugin(parser));

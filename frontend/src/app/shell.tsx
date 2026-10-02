@@ -110,11 +110,9 @@ function UserArea() {
 
   if (!email) {
     return (
-      <Button variant="ghost" size="sm" asChild className="w-full justify-start">
-        <Link to="/login">
-          <LogIn aria-hidden="true" />
-          Sign in
-        </Link>
+      <Button variant="ghost" size="sm" className="w-full justify-start" render={<Link to="/login" />}>
+        <LogIn aria-hidden="true" />
+        Sign in
       </Button>
     );
   }
@@ -123,17 +121,19 @@ function UserArea() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="Account menu"
-          className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted"
-        >
-          <Avatar className="h-8 w-8">
-            <AvatarFallback>{initial}</AvatarFallback>
-          </Avatar>
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{email}</span>
-        </button>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Account menu"
+            className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted"
+          />
+        }
+      >
+        <Avatar className="h-8 w-8">
+          <AvatarFallback>{initial}</AvatarFallback>
+        </Avatar>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{email}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate font-normal text-foreground/60">
@@ -161,11 +161,9 @@ function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/">
-                <SignSageLogo className="h-8 w-8" />
-                <span className="font-semibold tracking-tight">SignSage</span>
-              </Link>
+            <SidebarMenuButton size="lg" render={<Link to="/" />}>
+              <SignSageLogo className="h-8 w-8" />
+              <span className="font-semibold tracking-tight">SignSage</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -177,14 +175,17 @@ function AppSidebar() {
             <SidebarMenu>
               {NAV.slice(0, 2).map((item) => (
                 <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton asChild tooltip={item.label}>
-                    <NavLink
-                      to={item.to}
-                      className={({ isActive }) => cn(isActive && ACTIVE)}
-                    >
-                      <item.icon aria-hidden="true" />
-                      <span>{item.label}</span>
-                    </NavLink>
+                  <SidebarMenuButton
+                    tooltip={item.label}
+                    render={
+                      <NavLink
+                        to={item.to}
+                        className={({ isActive }) => cn(isActive && ACTIVE)}
+                      />
+                    }
+                  >
+                    <item.icon aria-hidden="true" />
+                    <span>{item.label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -197,14 +198,17 @@ function AppSidebar() {
             <SidebarMenu>
               {NAV.slice(2, 4).map((item) => (
                 <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton asChild tooltip={item.label}>
-                    <NavLink
-                      to={item.to}
-                      className={({ isActive }) => cn(isActive && ACTIVE)}
-                    >
-                      <item.icon aria-hidden="true" />
-                      <span>{item.label}</span>
-                    </NavLink>
+                  <SidebarMenuButton
+                    tooltip={item.label}
+                    render={
+                      <NavLink
+                        to={item.to}
+                        className={({ isActive }) => cn(isActive && ACTIVE)}
+                      />
+                    }
+                  >
+                    <item.icon aria-hidden="true" />
+                    <span>{item.label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -215,11 +219,14 @@ function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Settings">
-              <NavLink to="/app/settings" className={({ isActive }) => cn(isActive && ACTIVE)}>
-                <Settings aria-hidden="true" />
-                <span>Settings</span>
-              </NavLink>
+            <SidebarMenuButton
+              tooltip="Settings"
+              render={
+                <NavLink to="/app/settings" className={({ isActive }) => cn(isActive && ACTIVE)} />
+              }
+            >
+              <Settings aria-hidden="true" />
+              <span>Settings</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

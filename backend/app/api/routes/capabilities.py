@@ -35,7 +35,7 @@ def _bundle_found(settings: Settings) -> bool:
 @router.get("/capabilities", response_model=CapabilitiesResponse)
 def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResponse:
     reason = None
-    if not settings.model_promoted:
+    if not settings.model_promoted and not settings.allow_unpromoted_dev:
         reason = "model_not_promoted"
     elif not _bundle_found(settings):
         reason = "model_bundle_missing"

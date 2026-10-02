@@ -12,6 +12,7 @@ WORKDIR /srv
 # then the app. `pip install .` sees torch already satisfied.
 COPY pyproject.toml ./
 COPY app ./app
+COPY scripts ./scripts
 RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu "torch>=2.0" \
  && pip install .
 

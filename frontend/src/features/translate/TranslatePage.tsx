@@ -42,10 +42,8 @@ import { apiClient } from "@/services/api/instance";
 import { getAccessToken } from "@/services/supabase/auth";
 import { TranslationSocket } from "@/services/websocket/client";
 import type { ConnectionStatus } from "@/services/websocket/connection";
-import type {
-  CapabilitiesResponse,
-  TranslationTextMessage,
-} from "@/services/websocket/protocol";
+import type { TranslationTextMessage } from "@/services/websocket/protocol";
+import type { CapabilitiesResponse } from "@/types/api";
 import { HolisticExtractor, type HolisticFrame } from "./landmarks";
 import { loadPrefs } from "@/features/settings/preferences";
 
@@ -90,6 +88,7 @@ export default function TranslatePage() {
   const lastSendRef = useRef(0);
   const framesSentRef = useRef(0);
   const phaseRef = useRef<Phase>("idle");
+  const everOpenRef = useRef(false);
 
   const [phase, setPhaseState] = useState<Phase>("idle");
   const [cameraMessage, setCameraMessage] = useState<string | null>(null);
@@ -100,6 +99,7 @@ export default function TranslatePage() {
   const [socketStatus, setSocketStatus] = useState<ConnectionStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
   const [results, setResults] = useState<TranslationTextMessage[]>([]);
+  const [partial, setPartial] = useState<TranslationTextMessage | null>(null);
   const [framesSent, setFramesSent] = useState(0);
   const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
   const [mirrorPreview] = useState(() => loadPrefs().mirrorPreview);
@@ -184,8 +184,24 @@ export default function TranslatePage() {
     const socket = new TranslationSocket({
       url: config.wsUrl,
       getAccessToken,
-      onStatus: setSocketStatus,
-      onTranslation: (msg) => setResults((prev) => [msg, ...prev]),
+      // Bounded auto-reconnect: the backend keeps per-connection state, so a
+      // reconnect starts a fresh backend session. close() cancels retries.
+      maxReconnectAttempts: 5,
+      reconnectBaseDelayMs: 500,
+      onStatus: (s) => {
+        if (s === "open") everOpenRef.current = true;
+        // A reconnect starts a fresh backend session: drop the stale partial.
+        if (s === "connecting" && everOpenRef.current) setPartial(null);
+        setSocketStatus(s);
+      },
+      onTranslation: (msg) => {
+        if (msg.final) {
+          setPartial(null);
+          setResults((prev) => [msg, ...prev]);
+        } else {
+          setPartial(msg);
+        }
+      },
       onError: (msg) => setSocketError(msg.message),
     });
     socketRef.current = socket;
@@ -236,6 +252,8 @@ export default function TranslatePage() {
 
     framesSentRef.current = 0;
     setFramesSent(0);
+    everOpenRef.current = false;
+    setPartial(null);
     lastSendRef.current = 0;
     connectSocket();
     setPhase("live");
@@ -261,11 +279,13 @@ export default function TranslatePage() {
     socketRef.current?.close();
     socketRef.current = null;
     stopTracks();
+    setPartial(null);
     setPhase("idle");
   }, [stopTracks]);
 
   const clearResults = useCallback(() => {
     setResults([]);
+    setPartial(null);
     framesSentRef.current = 0;
     setFramesSent(0);
   }, []);
@@ -273,6 +293,9 @@ export default function TranslatePage() {
   const running = phase === "live" || phase === "paused";
   const busy = phase === "starting-camera" || phase === "loading-detector";
   const latest = results[0] ?? null;
+  // A finalized result wins; otherwise show the stabilizing live partial.
+  const display = latest ?? partial;
+  const showingPartial = latest === null && partial !== null;
   const modelAvailable = capabilities?.sign_to_text_available ?? null;
   const noSignRecently =
     phase === "live" &&
@@ -318,7 +341,9 @@ export default function TranslatePage() {
             {socketStatus === "open"
               ? "Connected"
               : socketStatus === "connecting"
-                ? "Connecting"
+                ? everOpenRef.current
+                  ? "Reconnecting…"
+                  : "Connecting"
                 : "Disconnected"}
           </Badge>
         </div>
@@ -412,7 +437,7 @@ export default function TranslatePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!latest ? (
+              {!display ? (
                 <Empty>
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
@@ -429,20 +454,25 @@ export default function TranslatePage() {
               ) : (
                 <div className="space-y-3">
                   <p className="text-4xl font-semibold tracking-tight">
-                    {latest.text}
+                    {display.text}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant={latest.accepted ? "default" : "secondary"}>
-                      {latest.accepted ? "accepted" : latest.reason}
-                    </Badge>
-                    <Badge variant="outline">{latest.result_type}</Badge>
+                    {showingPartial ? (
+                      <Badge variant="secondary">live — stabilizing…</Badge>
+                    ) : (
+                      <Badge variant={display.accepted ? "default" : "secondary"}>
+                        {display.accepted ? "accepted" : display.reason}
+                      </Badge>
+                    )}
+                    <Badge variant="outline">{display.result_type}</Badge>
                     <Badge variant="outline">
-                      {Math.round(latest.confidence * 100)}% confidence
+                      {Math.round(display.confidence * 100)}% confidence
                     </Badge>
                   </div>
                   <p className="text-xs text-foreground/50">
-                    Confidence is reported by the backend for this result —
-                    not a guarantee.
+                    {showingPartial
+                      ? "Partial result from the live window — keep signing; press Stop to finalize."
+                      : "Confidence is reported by the backend for this result — not a guarantee."}
                   </p>
                 </div>
               )}
@@ -492,13 +522,11 @@ export default function TranslatePage() {
         <CardContent className="flex flex-wrap items-center gap-2 pt-6">
           {!running ? (
             <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button onClick={() => void start()} disabled={busy}>
-                    {busy ? <Spinner aria-hidden="true" /> : <Play aria-hidden="true" />}
-                    {phase === "error" ? "Retry" : "Start"}
-                  </Button>
-                </span>
+              <TooltipTrigger render={<span />}>
+                <Button onClick={() => void start()} disabled={busy}>
+                  {busy ? <Spinner aria-hidden="true" /> : <Play aria-hidden="true" />}
+                  {phase === "error" ? "Retry" : "Start"}
+                </Button>
               </TooltipTrigger>
               <TooltipContent>
                 Open the camera, load landmark detection, and connect.
@@ -524,32 +552,28 @@ export default function TranslatePage() {
             </>
           )}
           <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="outline"
-                  onClick={clearResults}
-                  disabled={results.length === 0 && framesSent === 0}
-                >
-                  <Eraser aria-hidden="true" />
-                  Clear
-                </Button>
-              </span>
+            <TooltipTrigger render={<span />}>
+              <Button
+                variant="outline"
+                onClick={clearResults}
+                disabled={results.length === 0 && framesSent === 0}
+              >
+                <Eraser aria-hidden="true" />
+                Clear
+              </Button>
             </TooltipTrigger>
             <TooltipContent>Clears this session’s local results.</TooltipContent>
           </Tooltip>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="ghost"
-                  onClick={connectSocket}
-                  disabled={!running || socketStatus === "connecting"}
-                >
-                  <PlugZap aria-hidden="true" />
-                  Reconnect
-                </Button>
-              </span>
+            <TooltipTrigger render={<span />}>
+              <Button
+                variant="ghost"
+                onClick={connectSocket}
+                disabled={!running || socketStatus === "connecting"}
+              >
+                <PlugZap aria-hidden="true" />
+                Reconnect
+              </Button>
             </TooltipTrigger>
             <TooltipContent>Drop and re-open the live connection.</TooltipContent>
           </Tooltip>

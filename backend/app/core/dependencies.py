@@ -19,7 +19,7 @@ from app.services.translation_service import TranslationService
 
 
 def build_translation_service(settings: Settings) -> TranslationService:
-    pipeline = get_sign_to_text_pipeline(settings)
+    pipeline = get_sign_to_text_pipeline(settings, allow_unpromoted=settings.allow_unpromoted_dev)
     return TranslationService(pipeline, settings)
 
 

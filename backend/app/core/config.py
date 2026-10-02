@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     # evaluation_results.json genuinely passes. See backend/models/README.md.
     model_promoted: bool = False
 
+    # Local-development escape hatch for the NO-GO gate above: when True,
+    # the backend loads and serves the configured checkpoint even though it
+    # has not passed the deployment gate. Default False; NEVER enable in
+    # production (render.yaml deliberately omits it). Served output is still
+    # labelled unpromoted via /models and /capabilities -- this flag changes
+    # availability, not quality claims.
+    allow_unpromoted_dev: bool = False
+
     device: str = "cpu"  # set to "cuda" only if a GPU is actually available at serve time
 
     # --- Acceptance gates (mirrors the notebook's predict_live_landmarks) --
@@ -52,6 +60,15 @@ class Settings(BaseSettings):
     # --- Session buffering --------------------------------------------------
     max_frames_per_sequence: int = 160  # should match landmark_contract.json max_frames
     max_sequence_seconds: float = 12.0
+
+    # --- Rolling (streaming) inference --------------------------------------
+    # Interim translations run on the trailing window every stride frames, so
+    # users see partial results without pressing Stop. Values derive from the
+    # serving cadence (~10 landmark frames/s) and measured CPU inference cost
+    # (~50-70 ms for an 80-frame window): a 2 s cadence costs <5% overhead.
+    # Window must stay <= max_frames_per_sequence (the model's own max).
+    stream_window_frames: int = 80
+    stream_stride_frames: int = 20
 
     # --- Avatar gloss generation (English->ISL, see services/avatar_gloss_service.py) ---
     # Both optional: unset means that stage is skipped and the deterministic

@@ -178,11 +178,11 @@ export default function HistoryPage() {
           </Button>
           {items.length > 0 && (
             <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" disabled={clearing}>
-                  <Trash2 aria-hidden="true" />
-                  Clear all
-                </Button>
+              <AlertDialogTrigger
+                render={<Button variant="outline" size="sm" disabled={clearing} />}
+              >
+                <Trash2 aria-hidden="true" />
+                Clear all
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -237,11 +237,11 @@ export default function HistoryPage() {
             </div>
             <div className="flex gap-2">
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" aria-label="Filter by direction">
-                    {DIRECTION_LABEL[direction]}
-                    <ChevronDown aria-hidden="true" />
-                  </Button>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" aria-label="Filter by direction" />}
+                >
+                  {DIRECTION_LABEL[direction]}
+                  <ChevronDown aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {(Object.keys(DIRECTION_LABEL) as DirectionFilter[]).map((d) => (
@@ -292,9 +292,7 @@ export default function HistoryPage() {
               </EmptyHeader>
               {items.length === 0 && !filtering && (
                 <EmptyContent>
-                  <Button asChild>
-                    <a href="/app/translate">Start translating</a>
-                  </Button>
+                  <Button render={<a href="/app/translate" />}>Start translating</Button>
                 </EmptyContent>
               )}
             </Empty>

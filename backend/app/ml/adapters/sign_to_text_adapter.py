@@ -117,6 +117,8 @@ class SignToTextAdapter:
             layers=int(mc.get("layers", 3)),
             ff=int(mc.get("ff", 512)),
             dropout=0.0,  # inference: disable dropout regardless of the training value
+            # Pre-352868924 bundles predate this key and are post-norm (False).
+            norm_first=bool(mc.get("norm_first", False)),
         ).to(torch_device)
         model.load_state_dict(payload["state_dict"])
         model.eval()

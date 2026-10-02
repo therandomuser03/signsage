@@ -24,9 +24,18 @@ async def lifespan(app: FastAPI):
     # Warm the model at startup so the first user doesn't wait for the checkpoint
     # load. A failure is logged, not fatal: /health and /capabilities report it.
     current = get_settings()
-    if current.model_promoted:
+    if current.model_promoted or current.allow_unpromoted_dev:
+        if current.allow_unpromoted_dev and not current.model_promoted:
+            logger.warning(
+                "[MODEL] SIGNSAGE_ALLOW_UNPROMOTED_DEV is set: serving an "
+                "UNPROMOTED checkpoint for local development only. Do not "
+                "enable in production."
+            )
         try:
-            await run_in_threadpool(get_sign_to_text_pipeline, current)
+            await run_in_threadpool(
+                get_sign_to_text_pipeline, current,
+                allow_unpromoted=current.allow_unpromoted_dev,
+            )
             logger.info("Sign->Text model loaded at startup.")
         except Exception as exc:  # noqa: BLE001
             logger.error("Sign->Text model failed to load at startup: %s", exc)

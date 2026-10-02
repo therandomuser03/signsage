@@ -13,6 +13,10 @@ export interface TranslationSocketOptions {
   onAuthenticated?: (userId: string) => void;
   onStatus?: (status: ConnectionStatus) => void;
   webSocketFactory?: (url: string) => WebSocket;
+  /** 0 (default) = never auto-reconnect. The server keeps per-connection
+   * state, so a reconnect starts a fresh backend session. */
+  maxReconnectAttempts?: number;
+  reconnectBaseDelayMs?: number;
 }
 
 /**
@@ -23,11 +27,15 @@ export interface TranslationSocketOptions {
  */
 export class TranslationSocket {
   private readonly connection: Connection;
+  private readonly opts: TranslationSocketOptions;
 
-  constructor(private readonly opts: TranslationSocketOptions) {
+  constructor(opts: TranslationSocketOptions) {
+    this.opts = opts;
     this.connection = new Connection({
       url: opts.url,
       webSocketFactory: opts.webSocketFactory,
+      maxReconnectAttempts: opts.maxReconnectAttempts,
+      reconnectBaseDelayMs: opts.reconnectBaseDelayMs,
       onStatus: opts.onStatus,
       onOpen: () => void this.authenticate(),
       onMessage: (data) => this.handle(data),

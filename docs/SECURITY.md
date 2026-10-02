@@ -41,6 +41,25 @@ The current documentation records iSign as CC BY-NC-SA 4.0 and warns against com
 
 Dataset access instructions belong in research documentation; the dataset itself does not.
 
+### 5a. Model weights inherit the data license (review before any public/commercial use)
+
+The repository code is MIT-licensed, but Sign→Text **weights trained on iSign
+derive from CC BY-NC-SA 4.0 data** and do NOT automatically carry the code's
+MIT terms. Before any public or commercial deployment of a trained checkpoint,
+review and record answers to:
+
+1. Whether the iSign license (including NonCommercial and ShareAlike) permits
+   the intended use of the derived weights, or a separate agreement is needed.
+2. Whether serving predictions from those weights (including via the Render
+   download-at-start bundle) counts as commercial use in the deployment context.
+3. Attribution and ShareAlike obligations for the bundle and any adapted model.
+4. Whether the tokenizer/vocabulary derived from dataset text needs the same treatment.
+
+This does not block local research development (training, evaluation, dev-only
+inference). It does block presenting an iSign-trained checkpoint as cleared
+for unrestricted commercial deployment. The promotion gate must include this
+license review alongside the quality evidence.
+
 ## 6. Safety boundary
 
 SignSage must not be presented as a replacement for certified human interpreters in legal, medical, emergency, or other high-stakes contexts.

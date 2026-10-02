@@ -67,6 +67,12 @@ def test_auth_required_needs_auth_before_translating(make_client, fake_bundle):
     (json.dumps({"type": "nope"}), "UNKNOWN_MESSAGE_TYPE"),
     (json.dumps({"type": "landmarks.frame", "landmarks": [[0, 0, 0]]}), "INVALID_MESSAGE"),
     (json.dumps({"type": "landmarks.frame", "landmarks": [[0, 0]] * 543}), "INVALID_MESSAGE"),
+    (json.dumps({"type": "landmarks.frame",
+                 "landmarks": [[float("nan"), 0, 0]] + [[0, 0, 0]] * 542}), "INVALID_MESSAGE"),
+    (json.dumps({"type": "landmarks.frame",
+                 "landmarks": [[float("inf"), 0, 0]] + [[0, 0, 0]] * 542}), "INVALID_MESSAGE"),
+    (json.dumps({"type": "landmarks.frame",
+                 "landmarks": [["x", 0, 0]] + [[0, 0, 0]] * 542}), "INVALID_MESSAGE"),
     (json.dumps({"type": "auth"}), "INVALID_MESSAGE"),
 ])
 def test_hostile_or_malformed_messages_get_a_coded_error_and_do_not_kill_the_socket(make_client, fake_bundle, payload, code):
@@ -89,3 +95,13 @@ def test_unpromoted_model_closes_with_model_unavailable(make_client):
     c = make_client(promoted=False)
     with c.websocket_connect("/ws/translate") as ws:
         assert ws.receive_json()["code"] == "MODEL_UNAVAILABLE"
+
+
+def test_dev_flag_serves_unpromoted_bundle_without_flipping_promotion(make_client, fake_bundle):
+    c = make_client(bundle=fake_bundle, promoted=False, allow_unpromoted_dev="true")
+    with c.websocket_connect("/ws/translate") as ws:
+        _frames(ws)
+        ws.send_json({"type": "sentence.boundary"})
+        msg = ws.receive_json()
+    assert msg["type"] == "translation.text"
+    assert c.get("/api/v1/models").json()["models"][0]["promoted"] is False

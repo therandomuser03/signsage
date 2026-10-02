@@ -2,8 +2,13 @@ import type { ErrorBody } from "../../types/api";
 
 /** Any non-2xx response. `code` is the backend's stable error code (e.g. UNAUTHORIZED, MODEL_NOT_PROMOTED). */
 export class ApiError extends Error {
-  constructor(public readonly status: number, public readonly code: string, message: string) {
+  public readonly status: number;
+  public readonly code: string;
+
+  constructor(status: number, code: string, message: string) {
     super(message);
+    this.status = status;
+    this.code = code;
     this.name = "ApiError";
   }
 

@@ -127,12 +127,8 @@ function TermsDialog({ onAgree }: { onAgree: () => void }) {
         </p>
       </div>
       <DialogFooter>
-        <DialogClose asChild>
-          <Button variant="outline">Close</Button>
-        </DialogClose>
-        <DialogClose asChild>
-          <Button onClick={onAgree}>Agree</Button>
-        </DialogClose>
+        <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+        <DialogClose render={<Button onClick={onAgree} />}>Agree</DialogClose>
       </DialogFooter>
     </DialogContent>
   );
@@ -172,12 +168,8 @@ function DataDialog({ onAgree }: { onAgree: () => void }) {
         </p>
       </div>
       <DialogFooter>
-        <DialogClose asChild>
-          <Button variant="outline">Close</Button>
-        </DialogClose>
-        <DialogClose asChild>
-          <Button onClick={onAgree}>Agree</Button>
-        </DialogClose>
+        <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+        <DialogClose render={<Button onClick={onAgree} />}>Agree</DialogClose>
       </DialogFooter>
     </DialogContent>
   );
@@ -263,10 +255,10 @@ function SignupForm() {
           <Label htmlFor="consent-terms" className="text-sm font-normal leading-6">
             I agree to the{" "}
             <Dialog>
-              <DialogTrigger asChild>
-                <button type="button" className="font-medium underline underline-offset-4">
-                  Terms and Conditions
-                </button>
+              <DialogTrigger
+                render={<button type="button" className="font-medium underline underline-offset-4" />}
+              >
+                Terms and Conditions
               </DialogTrigger>
               <TermsDialog onAgree={() => setTerms(true)} />
             </Dialog>
@@ -283,10 +275,10 @@ function SignupForm() {
           <Label htmlFor="consent-data" className="text-sm font-normal leading-6">
             I understand and agree to the{" "}
             <Dialog>
-              <DialogTrigger asChild>
-                <button type="button" className="font-medium underline underline-offset-4">
-                  collection and processing of data
-                </button>
+              <DialogTrigger
+                render={<button type="button" className="font-medium underline underline-offset-4" />}
+              >
+                collection and processing of data
               </DialogTrigger>
               <DataDialog onAgree={() => setData(true)} />
             </Dialog>{" "}

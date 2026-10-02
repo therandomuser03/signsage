@@ -19,9 +19,11 @@ still doesn't work well.
 **Phase 0 model evaluation: NO-GO for general translation**
 
 The research checkpoints are not sufficiently reliable for open-vocabulary
-ISL translation. The application therefore uses a bounded demo fallback for
-a small set of supported phrases while preserving the research models for
-experimentation.
+ISL translation, so live translation is gated off by default
+(`SIGNSAGE_MODEL_PROMOTED=false` → the backend answers `MODEL_UNAVAILABLE`
+instead of serving NO-GO-quality output as if it were reliable). The research
+models remain available for experimentation via the dev-only
+`SIGNSAGE_ALLOW_UNPROMOTED_DEV` flag (see `backend/models/README.md`).
 
 Full numbers: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md)
 (run `20260916T144755Z`, also mirrored into
@@ -34,11 +36,10 @@ which is what the running backend actually serves via `/api/v1/models`).
   of them reliably beat guessing.
 - **Text→Pose**: the generative GRU model's output is near-static (~7.9% of
   ground-truth motion energy).
-- Because of this, **both directions use a bounded, honestly-labelled demo fallback**
-  for a fixed set of ~10 phrases (Hello, Thank you, Yes, No, Help, Please, Sorry, Good
-  morning, How are you, I need help), backed by real recorded clips in
-  `backend/demo_prototypes/`. Outside that set, the general research models run and the
-  UI says so.
+- Because of this, **live Sign→Text refuses to serve while unpromoted**:
+  low-motion or low-confidence output is returned as an honest rejection
+  (`accepted: false` with a reason), never as a fabricated translation, and
+  nothing is persisted to history unless the result is presentable.
 
 This is disclosed in the app itself (Research & Benchmarks page, the red NO-GO banner,
 and inline notes in the translator) rather than hidden behind favorable-looking numbers.
@@ -50,17 +51,16 @@ and ML contracts are documented separately in `docs/`.
 
 ```text
 Browser: getUserMedia → MediaPipe Holistic (WASM) → 543 landmarks/frame (1629 floats)
-  → hip-center + scale normalize → buffer → WebSocket (landmarks.frame, sentence.boundary)
-Backend: FastAPI → buffered sequence → Sign→Text Transformer
-  → if output looks unreliable, DTW-match against 10 recorded demo phrases → translation.text
+  → raw coordinates (backend normalizes) → ~10 fps → WebSocket (landmarks.frame, sentence.boundary)
+Backend: FastAPI → per-connection buffer → Sign→Text Transformer
+  → acceptance gate (motion + confidence) → translation.text (or honest rejection)
 ```
 
 ```text
-Browser: text input → WebSocket (text.input)
-Backend: match against 10 supported phrases (+ aliases like "hi"→"Hello")
-  → match found: real recorded hand-motion clip → translation.pose (is_fallback=true)
-  → no match: gloss → Text→Pose GRU (near-static, disclosed) → translation.pose
-Browser: renders hands (always) + body pose skeleton (only for the GRU path) on Canvas 2D
+Browser: text input → REST (avatar gloss) → gloss ID sequence
+Backend: deterministic word lookup, optionally LLM-assisted mapping (Groq → Ollama → lookup)
+  → pre-authored avatar clips only; unknown words are dropped, never guessed
+Browser: single VRM avatar plays the clips back-to-back on Canvas/WebGL
 ```
 
 Raw camera video **never** leaves the browser — only extracted landmark coordinates are
@@ -137,8 +137,9 @@ npm run dev
 ```
 
 Frontend runs at `http://127.0.0.1:5173` and connects to the backend WebSocket at
-`ws://127.0.0.1:8000/api/v1/ws/translate` by default (`VITE_SIGNSAGE_WS_URL` in
-`.env.local` overrides this). Supabase auth is optional — the translator works without
+`ws://127.0.0.1:8000/ws/translate` by default (`VITE_SIGNSAGE_WS_URL` in
+`.env.local` overrides this; `VITE_SIGNSAGE_API_URL` overrides the REST base
+and the WS URL is derived from it when unset). Supabase auth is optional — the translator works without
 signing in; auth vars are only needed if you want account/session features.
 
 To build for deployment: `npm run build` (outputs to `frontend/dist/`).
@@ -154,30 +155,32 @@ Supabase auth is entirely optional for the demo.
 ## Demo flow
 
 1. Start the backend, then the frontend, then open the app in a browser and allow
-   camera + microphone permission when prompted.
-2. **ISL → English**: open the Translator, switch to Sign mode, and sign one of the
-   supported phrases (see the on-screen phrase list) in front of your camera, pausing
-   briefly at the end. A caption appears; the app labels whether it came from the
-   bounded demo match or the research model.
-3. **English → ISL**: switch to Text mode and type one of the same supported phrases
-   (or a close rephrasing, e.g. "hi", "thanks"). A recorded hand-motion clip plays on
-   the pose canvas, labelled as a recorded demo clip. Typing something outside that set
-   falls through to the generative model, which is visibly near-static — the UI says
-   so rather than hiding it.
-4. If you kill and restart the backend mid-session, the frontend now reconnects
-   automatically instead of requiring a page reload.
+   camera permission when prompted.
+2. **ISL → English**: open Sign → Text under `/app`, press Start, and sign
+   toward the camera (a landmark overlay confirms detection; a frame counter
+   shows what is being streamed). Press Stop to end the sentence: the buffered
+   sequence is sent for inference and the result appears with its acceptance
+   state, result type, and backend-reported confidence. With the default
+   `SIGNSAGE_MODEL_PROMOTED=false` the backend honestly reports the model as
+   unavailable instead of translating; set `SIGNSAGE_ALLOW_UNPROMOTED_DEV=true`
+   locally (dev only, never production) to exercise the real inference path
+   against a configured checkpoint.
+3. **English → ISL**: open Text → Sign and type text. Known dictionary words
+   map to pre-authored avatar clips; unknown words are dropped, never guessed.
+   Backend-assisted gloss needs the gloss service; failures fall through to
+   the deterministic lookup.
+4. If the backend drops mid-session, the frontend retries the connection with
+   bounded backoff (5 attempts) and shows Reconnecting…; leaving the page
+   closes the socket and stops the camera.
 
 ## Known limitations (not hidden, not "fixed" by hiding them)
 
-- **Open-vocabulary translation does not work reliably in either direction.** Only the
-  ~10 bounded demo phrases are dependable; this is a research prototype, not a general
-  ISL translator.
-- **The bounded demo clips only have real captured hand motion**, not full-body pose
-  (a pre-existing data-capture quirk — see `docs/DECISIONS.md` / the code comments in
-  `backend/app/services/pose_preprocessing.py`). The pose canvas therefore renders
-  hands for demo clips rather than a fabricated full-body skeleton.
-- **The no-face ablation Transformer checkpoint is loaded but not served** by the live
-  Sign→Text flow; its outputs are unverified in this build.
+- **Open-vocabulary translation does not work reliably in either direction.**
+  Sign→Text is gated off until a checkpoint passes the deployment gate; this
+  is a research prototype, not a general ISL translator.
+- **Text→Sign covers a fixed dictionary only** (see
+  `backend/app/data/sign_vocabulary.json`): unknown words are dropped, and
+  the avatar plays pre-authored clips — no generative pose model is served.
 - No offline/on-device inference mode — the backend must be reachable over the network.
 - This is a Phase 0 research checkpoint, not a validated clinical, legal, or safety
   tool, and not a substitute for a certified human ISL interpreter.

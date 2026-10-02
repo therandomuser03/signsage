@@ -20,6 +20,27 @@ These endpoints do not perform the streaming translation itself.
 
 ## 2. Client → server WebSocket messages
 
+> Canonical source: `backend/app/schemas/websocket.py` (checked by
+> `backend/tests/contract/test_frontend_contract.py` and mirrored in
+> `frontend/src/services/websocket/protocol.ts`). Where this section
+> disagrees with that schema, the schema wins. Known stale fields below:
+> the live protocol has no `session_id`/`timestamp_ms` envelope, no
+> `trigger` on `sentence.boundary` (only optional `save_history`), no
+> `text.input` message, and no `translation.pose` / `latency_ms` reply —
+> the real reply is `translation.text{text, accepted, reason, confidence,
+> result_type, history_id}`. Every coordinate must be a finite number
+> (NaN/±Inf rejected as `INVALID_MESSAGE`). Route: `POST`-less
+> WebSocket at `/ws/translate` (unversioned).
+>
+> Streaming: while frames stream, the backend runs interim inference on the
+> trailing `SIGNSAGE_STREAM_WINDOW_FRAMES` (default 80) every
+> `SIGNSAGE_STREAM_STRIDE_FRAMES` (default 20) and emits stabilizing
+> `translation.text` with `final: false` under repeat-agreement (first accepted
+> prediction immediately, updates only after repeating on two consecutive
+> windows; rejected windows emit nothing). `sentence.boundary` finalizes with
+> `final: true` and consumes the buffer. Interims are never persisted to
+> history.
+
 ### `landmarks.frame`
 
 ```json

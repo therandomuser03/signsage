@@ -1,0 +1,45 @@
+# Render blueprint for the SignSage FastAPI backend.
+# Deploy via the Render dashboard (New > Blueprint) or `render blueprint launch`.
+# Secrets and the bundle URL are set in the dashboard, never in this file.
+#
+# Model weights are NOT baked into the image: scripts/fetch_bundle.sh downloads
+# SIGNSAGE_BUNDLE_URL into the persistent disk at start (skipped when already
+# present). Without a bundle URL the server still starts and /api/v1/health
+# honestly reports model_bundle_found=false.
+services:
+  - type: web
+    name: signsage-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    # Fetch the model bundle, then serve. $PORT is injected by Render.
+    startCommand: bash scripts/fetch_bundle.sh && exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: signsage-models
+      mountPath: /models
+      sizeGB: 2
+    envVars:
+      - key: SIGNSAGE_MODEL_BUNDLE_DIR
+        value: /models/signsage_deployment_bundle
+      - key: SIGNSAGE_MODEL_PROMOTED
+        value: "false"
+      - key: SIGNSAGE_DEVICE
+        value: cpu
+      - key: SIGNSAGE_LOG_LEVEL
+        value: INFO
+      # Production browser origin(s), JSON list. No wildcard (credentials on).
+      - key: SIGNSAGE_CORS_ORIGINS
+        value: '["https://<your-vercel-app>.vercel.app"]'
+      # Deployment-bundle download (set in dashboard; required for inference):
+      - key: SIGNSAGE_BUNDLE_URL
+        sync: false
+      - key: SIGNSAGE_BUNDLE_SHA256
+        sync: false
+      # Optional: Supabase (auth/history), Groq/Ollama (avatar gloss).
+      - key: SIGNSAGE_SUPABASE_URL
+        sync: false
+      - key: SIGNSAGE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SIGNSAGE_GROQ_API_KEY
+        sync: false

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Accordion,
@@ -43,6 +44,9 @@ const SECTIONS = [
 
 export default function PrivacyPage() {
   const { theme } = useTheme();
+  // Base UI accordion holds an array of open values; slicing to the last
+  // entry preserves the previous single-open collapsible behavior.
+  const [openSections, setOpenSections] = useState<string[]>(["camera"]);
 
   return (
     <main className="overflow-x-clip bg-background text-foreground">
@@ -101,7 +105,11 @@ export default function PrivacyPage() {
       <section className="px-6 pb-24">
         <div className="mx-auto max-w-4xl">
           <Reveal>
-            <Accordion type="single" collapsible defaultValue="camera" className="w-full">
+            <Accordion
+              value={openSections}
+              onValueChange={(v) => setOpenSections(v.slice(-1))}
+              className="w-full"
+            >
               {SECTIONS.map((section) => (
                 <AccordionItem key={section.value} value={section.value}>
                   <AccordionTrigger className="text-left text-lg font-semibold">
