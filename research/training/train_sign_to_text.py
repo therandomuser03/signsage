@@ -29,6 +29,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import sys
 import time
@@ -124,8 +125,12 @@ class ZipPoseSource(PoseSource):
 
 
 class RemoteConcatFile(io.RawIOBase):
-    """Seekable view over the 4-part iSign pose ZIP on Hugging Face (ported
-    from signsage.ipynb cell 8; streams members via bounded HTTP ranges)."""
+    """Seekable view over the 4-part iSign pose ZIP on Hugging Face.
+
+    The four parts are consecutive byte ranges of ONE ZIP archive; this
+    presents them as one file so zipfile can read the ZIP64 central
+    directory, then fetch only requested members via bounded HTTP ranges.
+    Nothing is ever fully downloaded (at most 8 cached 32 MiB chunks)."""
 
     PARTS = [
         "iSign-poses_v1.1_part_aa",
@@ -146,18 +151,23 @@ class RemoteConcatFile(io.RawIOBase):
         self.total_size = int(sum(self.sizes))
         self.pos = 0
         self.token = token
-        self.chunk_size = chunk_mb * 1024 * 1024
+        self.chunk_size = int(chunk_mb * 1024 * 1024)
         self.session = requests.Session()
         self.session.headers.update({"Authorization": f"Bearer {token}", "User-Agent": "SignSage-v2/1.0"})
         from collections import OrderedDict
         self.cache: OrderedDict = OrderedDict()
+        self.resolved: dict = {}  # part idx -> post-redirect CDN URL (re-resolved on expiry)
 
     def _probe(self, url: str, token: str) -> int:
-        r = self._requests.get(url, headers={"Authorization": f"Bearer {token}", "Range": "bytes=0-0"},
+        r = self._requests.get(url, headers={"Authorization": f"Bearer {token}", "Range": "bytes=0-0",
+                                             "User-Agent": "SignSage-v2/1.0"},
                                timeout=(20, 60), allow_redirects=True)
         if r.status_code != 206:
             raise RuntimeError(f"Could not probe remote part size: HTTP {r.status_code}")
-        return int(r.headers.get("Content-Range", "0/0").rsplit("/", 1)[-1])
+        total = r.headers.get("Content-Range", "0/0").rsplit("/", 1)[-1]
+        if not total.isdigit():
+            raise RuntimeError(f"Could not parse total size from Content-Range: {r.headers.get('Content-Range')!r}")
+        return int(total)
 
     def readable(self): return True
 
@@ -166,45 +176,92 @@ class RemoteConcatFile(io.RawIOBase):
     def tell(self): return self.pos
 
     def seek(self, offset, whence=os.SEEK_SET):
-        self.pos = min(int(offset if whence == os.SEEK_SET else self.pos + offset), self.total_size)
+        if whence == os.SEEK_SET:
+            new = offset
+        elif whence == os.SEEK_CUR:
+            new = self.pos + offset
+        elif whence == os.SEEK_END:
+            new = self.total_size + offset
+        else:
+            raise ValueError("invalid whence")
+        if new < 0:
+            raise ValueError("negative seek position")
+        self.pos = min(int(new), self.total_size)
         return self.pos
+
+    def _part_for(self, pos):
+        idx = max(0, min(int(np.searchsorted(self.starts, pos, side="right") - 1), len(self.urls) - 1))
+        return idx, pos - self.starts[idx]
+
+    def _fetch(self, part_idx, local_start, n):
+        key = (part_idx, (local_start // self.chunk_size) * self.chunk_size)
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            returned_start, content = self.cache[key]
+            piece = content[local_start - returned_start:local_start - returned_start + n]
+            if len(piece) == n:
+                return piece
+            self.cache.pop(key, None)  # never serve a short/corrupt entry
+        chunk_start = key[1]
+        chunk_end = min(self.sizes[part_idx] - 1, chunk_start + self.chunk_size - 1)
+        last = None
+        for attempt in range(5):
+            try:
+                request_url = self.resolved.get(part_idx, self.urls[part_idx])
+                r = self.session.get(request_url, headers={"Range": f"bytes={chunk_start}-{chunk_end}"},
+                                     timeout=(20, 180), allow_redirects=True)
+                if r.status_code != 206 and request_url != self.urls[part_idx]:
+                    self.resolved.pop(part_idx, None)  # cached CDN link expired; re-resolve once
+                    r = self.session.get(self.urls[part_idx], headers={"Range": f"bytes={chunk_start}-{chunk_end}"},
+                                         timeout=(20, 180), allow_redirects=True)
+                if r.status_code != 206:
+                    raise RuntimeError(f"range request failed: HTTP {r.status_code}")
+                m = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", r.headers.get("Content-Range", "").strip())
+                if not m:
+                    raise RuntimeError(f"Invalid Content-Range: {r.headers.get('Content-Range')!r}")
+                rs, re_, total = map(int, m.groups())
+                if total != self.sizes[part_idx]:
+                    raise RuntimeError(f"part {part_idx} size changed: {total} != {self.sizes[part_idx]}")
+                if not (rs <= chunk_start and chunk_end <= re_):
+                    raise RuntimeError(f"range {rs}-{re_} does not cover {chunk_start}-{chunk_end}")
+                if len(r.content) != re_ - rs + 1:
+                    raise RuntimeError(f"incomplete range body for part {part_idx}")
+                self.resolved[part_idx] = r.url
+                self.cache[key] = (rs, r.content)
+                self.cache.move_to_end(key)
+                while len(self.cache) > 8:
+                    self.cache.popitem(last=False)
+                piece = r.content[local_start - rs:local_start - rs + n]
+                if len(piece) != n:
+                    raise RuntimeError(f"short range slice for part {part_idx}")
+                return piece
+            except (self._requests.exceptions.Timeout, self._requests.exceptions.ConnectionError,
+                    self._requests.exceptions.ChunkedEncodingError) as exc:
+                last = exc
+                self.resolved.pop(part_idx, None)
+                time.sleep(1.5 * 2 ** attempt)
+        raise ConnectionError(f"range fetch failed after retries: {key}") from last
 
     def read(self, n=-1):
         if self.pos >= self.total_size:
             return b""
-        n = min(int(n if n and n >= 0 else self.total_size - self.pos), self.total_size - self.pos)
+        if n is None or n < 0:
+            n = self.total_size - self.pos
+        n = min(int(n), self.total_size - self.pos)
         out = bytearray()
-        while len(out) < n:
-            idx = max(0, min(int(np.searchsorted(self.starts, self.pos, side="right") - 1), len(self.urls) - 1))
-            local = self.pos - self.starts[idx]
-            take = min(n - len(out), self.sizes[idx] - local)
-            key = (idx, (local // self.chunk_size) * self.chunk_size)
-            if key not in self.cache:
-                cs, ce = key[1], min(self.sizes[idx] - 1, key[1] + self.chunk_size - 1)
-                last = None
-                for attempt in range(5):
-                    try:
-                        r = self.session.get(self.urls[idx], headers={"Range": f"bytes={cs}-{ce}"},
-                                             timeout=(20, 180), allow_redirects=True)
-                        if r.status_code != 206:
-                            raise RuntimeError(f"range request failed: HTTP {r.status_code}")
-                        self.cache[key] = r.content
-                        while len(self.cache) > 8:
-                            self.cache.popitem(last=False)
-                        break
-                    except (self._requests.exceptions.Timeout, self._requests.exceptions.ConnectionError) as exc:
-                        last = exc
-                        time.sleep(1.5 * 2 ** attempt)
-                else:
-                    raise ConnectionError(f"range fetch failed after retries: {key}") from last
-            out.extend(self.cache[key][local - key[1]:local - key[1] + take])
+        remaining = n
+        while remaining:
+            part_idx, local = self._part_for(self.pos)
+            take = min(remaining, self.sizes[part_idx] - local, self.chunk_size - (local % self.chunk_size))
+            out.extend(self._fetch(part_idx, local, take))
             self.pos += take
+            remaining -= take
         return bytes(out)
 
 
 class RemotePoseSource(PoseSource):
-    def __init__(self, token: str):
-        self.zf = zipfile.ZipFile(RemoteConcatFile(token), mode="r", allowZip64=True)
+    def __init__(self, token: str, chunk_mb: int = 32):
+        self.zf = zipfile.ZipFile(RemoteConcatFile(token, chunk_mb), mode="r", allowZip64=True)
         self.names = set(self.zf.namelist())
 
     def read_member_bytes(self, uid: str) -> bytes:
@@ -213,6 +270,30 @@ class RemotePoseSource(PoseSource):
                 with self.zf.open(cand, "r") as fh:
                     return fh.read()
         raise FileNotFoundError(f"UID not found in remote pose archive: {uid}")
+
+
+def _open_pose_store(kind: str, arg: str) -> PoseSource:
+    """Open a fresh pose store; each DataLoader worker gets its own (fork-safe)."""
+    if kind == "remote":
+        return RemotePoseSource(arg)
+    if kind == "zip":
+        return ZipPoseSource(arg)
+    return DirPoseSource(arg)
+
+
+def preflight_pose_source(store: PoseSource, uid: str) -> dict:
+    """Cheap accessibility probe: EOCD + central directory already read on open;
+    here read ONE real member end-to-end (bytes -> normalized frames)."""
+    names = sorted(store.names) if hasattr(store, "names") else []
+    raw = store.read_member_bytes(uid)
+    if not raw:
+        raise RuntimeError(f"preflight: empty pose payload for {uid}")
+    frames, true_len = load_pose_item(uid, store)
+    report = {"members": len(names), "sample_members": names[:5], "probe_uid": uid,
+              "probe_bytes": len(raw), "frames": [int(x) for x in frames.shape],
+              "true_len": int(true_len)}
+    log(f"pose preflight OK: {len(names):,} members; probe {uid}: {len(raw):,} bytes, frames={frames.shape}")
+    return report
 
 
 def read_normalized_pose(uid: str, store: PoseSource) -> np.ndarray:
@@ -285,23 +366,42 @@ def decode_ids(sp, ids) -> str:
 # --------------------------------------------------------------------------
 
 class SignToTextDataset(Dataset):
-    def __init__(self, uids: np.ndarray, texts: np.ndarray, sp, store: PoseSource | None):
+    def __init__(self, uids: np.ndarray, texts: np.ndarray, sp, store: PoseSource | None,
+                 store_spec: tuple | None = None):
         self.uids = uids
         self.sp = sp
         self.store = store
+        self.store_spec = store_spec  # (kind, arg); workers open their own (fork-safe)
+        self._worker_store = None
         log(f"Pre-tokenizing {len(texts):,} captions...")
         self.token_ids = [np.asarray(encode_text(sp, t), dtype=np.int64) for t in texts]
 
     def __len__(self): return len(self.uids)
 
+    def _active_store(self):
+        if self.store_spec is None:
+            return self.store
+        try:
+            from torch.utils.data import get_worker_info
+            in_worker = get_worker_info() is not None
+        except Exception:
+            in_worker = False
+        if not in_worker:
+            if self.store is None:
+                self.store = _open_pose_store(*self.store_spec)
+            return self.store
+        if self._worker_store is None:
+            self._worker_store = _open_pose_store(*self.store_spec)
+        return self._worker_store
+
     def __getitem__(self, idx):
         uid = str(self.uids[idx])
-        if self.store is None:  # smoke mode: deterministic synthetic poses
+        if self.store is None and self.store_spec is None:  # smoke mode: deterministic synthetic poses
             rng = np.random.default_rng(abs(hash(uid)) % (2 ** 31))
             frames = rng.normal(size=(MAX_FRAMES, LANDMARK_DIM)).astype(np.float32)
             length = MAX_FRAMES
         else:
-            frames, length = load_pose_item(uid, self.store)
+            frames, length = load_pose_item(uid, self._active_store())
         return (torch.from_numpy(np.ascontiguousarray(frames)), torch.tensor(length),
                 torch.from_numpy(self.token_ids[idx].copy()).long())
 
@@ -525,6 +625,8 @@ def parse_args(argv=None):
     ap.add_argument("--lr", type=float, default=PEAK_LR)
     ap.add_argument("--max-hours", type=float, default=8.0, help="graceful stop budget")
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--preflight-only", action="store_true",
+                    help="verify pose-source accessibility (one real member) then exit before expensive stages")
     ap.add_argument("--smoke", action="store_true", help="CPU plumbing check on synthetic data")
     ap.add_argument("--seed", type=int, default=SEED)
     return ap.parse_args(argv)
@@ -553,6 +655,7 @@ def main(argv=None) -> int:
         df_va = df_tr.iloc[:4].reset_index(drop=True)
         df_te = df_tr.iloc[:4].reset_index(drop=True)
         store = None
+        store_spec = None
     else:
         if not args.csv:
             raise SystemExit("--csv is required (or use --smoke)")
@@ -574,13 +677,22 @@ def main(argv=None) -> int:
             token = os.environ.get("HF_TOKEN")
             if not token:
                 raise SystemExit("remote pose streaming needs HF_TOKEN")
-            store = RemotePoseSource(token)
+            store_spec = ("remote", token)
         elif args.pose_source and zipfile.is_zipfile(args.pose_source):
-            store = ZipPoseSource(args.pose_source)
+            store_spec = ("zip", args.pose_source)
         elif args.pose_source:
-            store = DirPoseSource(args.pose_source)
+            store_spec = ("dir", args.pose_source)
         else:
             raise SystemExit("--pose-source is required (dir | zip | remote)")
+        store = _open_pose_store(*store_spec)
+        # Cheap preflight BEFORE any expensive stage: proves the pose source
+        # can seek/read and decode ONE real member. Writes pose_preflight.json.
+        probe_uid = str(df_tr["uid"].iloc[0])
+        preflight = preflight_pose_source(store, probe_uid)
+        (out / "pose_preflight.json").write_text(json.dumps(preflight, indent=1))
+        if args.preflight_only:
+            log("preflight-only: pose source verified, exiting before expensive stages.")
+            return 0
 
     # ---- tokenizer ----
     tok_dir = out / "tokenizer"
@@ -596,7 +708,7 @@ def main(argv=None) -> int:
         sp_train_artifacts["model"] = str(tok_dir / "signsage_en_sp.model")
 
     def make_loader(frame, train: bool, batch: int | None = None):
-        ds = SignToTextDataset(frame["uid"].to_numpy(), frame["text"].to_numpy(), sp, store)
+        ds = SignToTextDataset(frame["uid"].to_numpy(), frame["text"].to_numpy(), sp, store, store_spec)
         return DataLoader(ds, batch_size=batch or args.batch, shuffle=train,
                           collate_fn=collate_sign_text,
                           num_workers=2 if device.type == "cuda" else 0,
