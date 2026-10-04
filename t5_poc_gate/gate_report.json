@@ -1,0 +1,18 @@
+{
+ "mode": "synthetic-gate",
+ "gate_n": 32,
+ "seed": 42,
+ "stage_a": {
+  "loss_first": 9.415023803710938,
+  "loss_last": 2.961620807647705,
+  "exact_match": 0.0
+ },
+ "stage_b": {
+  "loss_first": 2.7978522777557373,
+  "loss_last": 0.48409050703048706,
+  "exact_match": 0.09375
+ },
+ "git_rev": "f6dfdba7d883326528b67f5a219c4e5c38a8de4a",
+ "wall_clock_s": 2044.429579257965,
+ "verdict": "WIRING-FAIL"
+}
