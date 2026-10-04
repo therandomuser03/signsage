@@ -19,15 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { config } from "@/app/config";
@@ -100,53 +92,51 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Account</CardTitle>
-          <CardDescription>Supabase authentication.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <section>
+        <h2 className="text-base font-semibold tracking-tight">Account</h2>
+        <p className="mt-0.5 text-sm text-foreground/55">Supabase authentication.</p>
+        <div className="mt-3 rounded-xl border border-foreground/10 bg-card px-5">
           {accountState === "checking" ? (
-            <Skeleton className="h-10 w-full" aria-label="Loading account" />
+            <div className="py-4">
+              <Skeleton className="h-10 w-full" aria-label="Loading account" />
+            </div>
           ) : me ? (
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
+            <div className="divide-y divide-foreground/10 text-sm">
+              <div className="flex items-center justify-between gap-2 py-3.5">
                 <span className="text-foreground/60">Email</span>
                 <span className="font-medium">{me.email ?? "Not shared"}</span>
               </div>
-              <Separator />
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 py-3.5">
                 <span className="text-foreground/60">User ID</span>
                 <code className="max-w-48 truncate text-xs">{me.id}</code>
               </div>
-              <Separator />
-              <Button
-                variant="outline"
-                onClick={() => void signOut().then(() => setMe(null))}
-              >
-                Sign out
-              </Button>
+              <div className="py-3.5">
+                <Button
+                  variant="outline"
+                  onClick={() => void signOut().then(() => setMe(null))}
+                >
+                  Sign out
+                </Button>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 py-3.5">
               <p className="text-sm text-foreground/55">
                 You’re browsing as a guest. Sign in to sync history.
               </p>
               <Button render={<Link to="/login" />}>Sign in</Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Translation</CardTitle>
-          <CardDescription>
-            Applied immediately to Translate and Text → Sign.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
+      <section>
+        <h2 className="text-base font-semibold tracking-tight">Translation</h2>
+        <p className="mt-0.5 text-sm text-foreground/55">
+          Applied immediately to Translate and Text → Sign.
+        </p>
+        <div className="mt-3 divide-y divide-foreground/10 rounded-xl border border-foreground/10 bg-card px-5">
+          <div className="flex items-center justify-between gap-4 py-4">
             <div className="space-y-0.5">
               <Label htmlFor="prefs-save">Save translations to history</Label>
               <p className="text-sm text-foreground/55">
@@ -160,8 +150,7 @@ export default function SettingsPage() {
               onCheckedChange={(v) => updatePrefs({ ...prefs, saveHistory: v })}
             />
           </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 py-4">
             <div className="space-y-0.5">
               <Label htmlFor="prefs-mirror">Mirror camera preview</Label>
               <p className="text-sm text-foreground/55">
@@ -174,28 +163,24 @@ export default function SettingsPage() {
               onCheckedChange={(v) => updatePrefs({ ...prefs, mirrorPreview: v })}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-          <CardDescription>Light or dark interface.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <section>
+        <h2 className="text-base font-semibold tracking-tight">Appearance</h2>
+        <p className="mt-0.5 text-sm text-foreground/55">Light or dark interface.</p>
+        <div className="mt-3 rounded-xl border border-foreground/10 bg-card px-5 py-4">
           <div className="flex items-center gap-3">
             <ModeToggle />
             <p className="text-sm text-foreground/55">Toggle the interface theme.</p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Privacy & data</CardTitle>
-          <CardDescription>What SignSage actually stores.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm leading-6 text-foreground/60">
+      <section>
+        <h2 className="text-base font-semibold tracking-tight">Privacy & data</h2>
+        <p className="mt-0.5 text-sm text-foreground/55">What SignSage actually stores.</p>
+        <div className="mt-3 space-y-3 rounded-xl border border-foreground/10 bg-card px-5 py-4 text-sm leading-6 text-foreground/60">
           <p>
             Translation history stores <span className="font-medium text-foreground">text results only</span> —
             input text, output text, direction, and model version, per
@@ -206,43 +191,37 @@ export default function SettingsPage() {
             Saved signs are history records. Deleting them here removes
             them everywhere.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Application</CardTitle>
-          <CardDescription>Read-only environment info.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-2">
+      <section>
+        <h2 className="text-base font-semibold tracking-tight">Application</h2>
+        <p className="mt-0.5 text-sm text-foreground/55">Read-only environment info.</p>
+        <div className="mt-3 divide-y divide-foreground/10 rounded-xl border border-foreground/10 bg-card px-5 text-sm">
+          <div className="flex items-center justify-between gap-2 py-3.5">
             <span className="text-foreground/60">Status</span>
             <Badge variant={backend === "online" ? "default" : backend === "offline" ? "destructive" : "secondary"}>
               {backend === "checking" ? "Checking…" : backend === "online" ? "Online" : "Offline"}
             </Badge>
           </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 py-3.5">
             <span className="text-foreground/60">API</span>
             <code className="truncate text-xs">{config.apiUrl}</code>
           </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 py-3.5">
             <span className="text-foreground/60">Live socket</span>
             <code className="truncate text-xs">{config.wsUrl}</code>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle className="text-destructive">Danger zone</CardTitle>
-          <CardDescription>
-            Irreversible actions. Account deletion is not offered because
-            the backend does not support it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <section>
+        <h2 className="text-base font-semibold tracking-tight text-destructive">Danger zone</h2>
+        <p className="mt-0.5 text-sm text-foreground/55">
+          Irreversible actions. Account deletion is not offered because
+          the backend does not support it.
+        </p>
+        <div className="mt-3 rounded-xl border border-destructive/40 bg-card px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Delete all history</p>
@@ -272,13 +251,13 @@ export default function SettingsPage() {
             </AlertDialog>
           </div>
           {cleared && (
-            <p className="text-sm text-green-700 dark:text-green-400">
+            <p className="mt-3 text-sm text-green-700 dark:text-green-400">
               History cleared.
             </p>
           )}
-          {clearError && <p className="text-sm text-destructive">{clearError}</p>}
-        </CardContent>
-      </Card>
+          {clearError && <p className="mt-3 text-sm text-destructive">{clearError}</p>}
+        </div>
+      </section>
 
       <Alert>
         <FlaskConical aria-hidden="true" />

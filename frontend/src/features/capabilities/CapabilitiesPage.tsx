@@ -20,7 +20,7 @@ import { Navbar } from "@/components/navigation/Navbar";
 import { Reveal } from "@/components/reveal";
 import Silk from "@/components/Silk";
 import { useTheme } from "@/components/theme-provider";
-import { StartCta } from "@/features/auth/StartCta";
+import { Button } from "@/components/ui/button";
 
 const CAPABILITIES = [
   {
@@ -144,7 +144,9 @@ export default function CapabilitiesPage() {
               Try them yourself.
             </h2>
             <div className="mt-8">
-              <StartCta className="px-6 py-3.5" />
+              <Button className="px-6 py-3.5" render={<Link to="/start" />}>
+                Start interpreting
+              </Button>
             </div>
           </Reveal>
         </div>

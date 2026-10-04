@@ -14,7 +14,6 @@ import { Navbar } from "@/components/navigation/Navbar";
 import { Reveal } from "@/components/reveal";
 import Silk from "@/components/Silk";
 import { useTheme } from "@/components/theme-provider";
-import { StartCta } from "@/features/auth/StartCta";
 
 const STEPS = [
   {
@@ -139,7 +138,9 @@ export default function HowItWorksPage() {
               See it in action.
             </h2>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <StartCta className="px-6 py-3.5" />
+              <Button className="px-6 py-3.5" render={<Link to="/start" />}>
+                Start interpreting
+              </Button>
               <Button variant="outline" className="px-6 py-3.5" render={<Link to="/capabilities" />}>
                 Explore capabilities
               </Button>

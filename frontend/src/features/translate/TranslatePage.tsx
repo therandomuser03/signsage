@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CameraOff,
+  Camera,
   CircleAlert,
   Eraser,
-  Languages,
   Pause,
   Play,
   PlugZap,
@@ -14,29 +13,8 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { config } from "@/app/config";
 import { apiClient } from "@/services/api/instance";
 import { getAccessToken } from "@/services/supabase/auth";
@@ -101,6 +79,7 @@ export default function TranslatePage() {
   const [results, setResults] = useState<TranslationTextMessage[]>([]);
   const [partial, setPartial] = useState<TranslationTextMessage | null>(null);
   const [framesSent, setFramesSent] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
   const [mirrorPreview] = useState(() => loadPrefs().mirrorPreview);
   const mirrorClass = mirrorPreview ? "-scale-x-100" : "";
@@ -142,6 +121,13 @@ export default function TranslatePage() {
 
   useEffect(() => teardown, [teardown]);
 
+  // Session clock: ticks only while actively interpreting. Local UI state.
+  useEffect(() => {
+    if (phase !== "live") return;
+    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
   const loop = useCallback(() => {
     rafRef.current = requestAnimationFrame(loop);
     const video = videoRef.current;
@@ -166,6 +152,10 @@ export default function TranslatePage() {
 
     const socket = socketRef.current;
     if (!socket || socket.status !== "open") return;
+    // Skip empty frames (no body part detected → all-zero 543×3 payload):
+    // saves ~30KB JSON per frame with zero information loss. Low-motion but
+    // detected frames are still sent; the backend motion gate owns those.
+    if (!frame.detected) return;
     if (performance.now() - lastSendRef.current < SEND_INTERVAL_MS) return;
     lastSendRef.current = performance.now();
     try {
@@ -254,6 +244,7 @@ export default function TranslatePage() {
     setFramesSent(0);
     everOpenRef.current = false;
     setPartial(null);
+    setElapsed(0);
     lastSendRef.current = 0;
     connectSocket();
     setPhase("live");
@@ -280,6 +271,7 @@ export default function TranslatePage() {
     socketRef.current = null;
     stopTracks();
     setPartial(null);
+    setElapsed(0);
     setPhase("idle");
   }, [stopTracks]);
 
@@ -291,6 +283,7 @@ export default function TranslatePage() {
   }, []);
 
   const running = phase === "live" || phase === "paused";
+  const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   const busy = phase === "starting-camera" || phase === "loading-detector";
   const latest = results[0] ?? null;
   // A finalized result wins; otherwise show the stabilizing live partial.
@@ -303,39 +296,41 @@ export default function TranslatePage() {
     (lastSeenAt === null || Date.now() - lastSeenAt > 4000);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Sign → Text</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Live Interpreter</h1>
           <p className="mt-1 text-sm text-foreground/55">
-            Experimental interpretation. Verify before acting on results.
+            Sign naturally. Your movements appear as English in real time.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">
+        <div className="space-y-0.5 text-right text-xs">
+          <p className="flex items-center justify-end gap-1.5 font-medium">
+            <span
+              aria-hidden="true"
+              className={
+                modelAvailable === null
+                  ? "inline-block h-2 w-2 rounded-full bg-foreground/30"
+                  : modelAvailable
+                    ? "inline-block h-2 w-2 rounded-full bg-green-500"
+                    : "inline-block h-2 w-2 rounded-full bg-red-500"
+              }
+            />
             {modelAvailable === null
               ? "Model status unknown"
               : modelAvailable
-                ? "Live model"
+                ? "Ready"
                 : "Model unavailable"}
-          </Badge>
-          <Badge
-            variant={
-              socketStatus === "open"
-                ? "default"
-                : socketStatus === "connecting"
-                  ? "secondary"
-                  : "outline"
-            }
-          >
+          </p>
+          <p className="flex items-center justify-end gap-1.5 text-foreground/60">
             <span
               aria-hidden="true"
               className={
                 socketStatus === "open"
-                  ? "mr-1.5 inline-block h-2 w-2 rounded-full bg-green-500"
+                  ? "inline-block h-2 w-2 rounded-full bg-green-500"
                   : socketStatus === "connecting"
-                    ? "mr-1.5 inline-block h-2 w-2 rounded-full bg-yellow-500 motion-safe:animate-pulse"
-                    : "mr-1.5 inline-block h-2 w-2 rounded-full bg-foreground/30"
+                    ? "inline-block h-2 w-2 rounded-full bg-yellow-500 motion-safe:animate-pulse"
+                    : "inline-block h-2 w-2 rounded-full bg-foreground/30"
               }
             />
             {socketStatus === "open"
@@ -345,261 +340,308 @@ export default function TranslatePage() {
                   ? "Reconnecting…"
                   : "Connecting"
                 : "Disconnected"}
-          </Badge>
+          </p>
         </div>
       </div>
 
       {modelAvailable === false && (
-        <Alert>
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+          <CircleAlert
+            aria-hidden="true"
+            className="mt-0.5 h-4 w-4 shrink-0 text-amber-500"
+          />
+          <div className="text-sm">
+            <p className="font-medium">Translation model unavailable</p>
+            <p className="mt-0.5 text-xs text-foreground/60">
+              {capabilities?.sign_to_text_unavailable_reason ??
+                "The backend reports no usable translation model right now."}{" "}
+              Camera preview is still available.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace: camera + live translation panel */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-foreground/10 bg-black lg:col-span-2">
+        {(phase === "live" || phase === "paused") && (
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`absolute inset-0 h-full w-full object-cover ${mirrorClass}`}
+            />
+            <canvas
+              ref={canvasRef}
+              aria-hidden="true"
+              className={`absolute inset-0 h-full w-full ${mirrorClass}`}
+            />
+          </>
+        )}
+        {phase === "idle" && (
+          <video ref={videoRef} className="hidden" />
+        )}
+        {phase !== "live" && phase !== "paused" && (
+          <div className="absolute inset-0 grid place-items-center p-6 text-center">
+            {busy ? (
+              <div className="flex flex-col items-center gap-3 text-white/70">
+                <Spinner aria-hidden="true" className="h-8 w-8" />
+                <p className="text-sm">
+                  {phase === "starting-camera"
+                    ? "Requesting camera…"
+                    : "Initializing landmark detection…"}
+                </p>
+              </div>
+            ) : (
+              <div className="flex max-w-xs flex-col items-center text-white/70">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                  <Camera aria-hidden="true" className="h-7 w-7" />
+                </span>
+                <p className="mt-3 text-base font-semibold text-white">
+                  Ready to interpret
+                </p>
+                <p className="mt-1 text-sm">
+                  {phase === "error"
+                    ? (cameraMessage ??
+                      detectorMessage ??
+                      "Something went wrong. Try again.")
+                    : "Position yourself in frame and start signing."}
+                </p>
+                <Button
+                  onClick={() => void start()}
+                  disabled={busy}
+                  className="mt-5 rounded-full px-6"
+                >
+                  <Play aria-hidden="true" />
+                  {phase === "error" ? "Retry" : "Start interpreting"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+        {(phase === "live" || phase === "paused") && (
+          <>
+            <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-4">
+              <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-md">
+                <span
+                  aria-hidden="true"
+                  className={
+                    phase === "live"
+                      ? "inline-block h-1.5 w-1.5 rounded-full bg-green-500 motion-safe:animate-pulse"
+                      : "inline-block h-1.5 w-1.5 rounded-full bg-amber-400"
+                  }
+                />
+                {phase === "live" ? "Live" : "Paused"}
+              </span>
+              <span className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
+                {socketStatus === "open"
+                  ? "Connected"
+                  : socketStatus === "connecting"
+                    ? everOpenRef.current
+                      ? "Reconnecting…"
+                      : "Connecting"
+                    : "Disconnected"}
+              </span>
+            </div>
+            {noSignRecently && (
+              <div className="absolute inset-x-0 top-16 flex justify-center px-4">
+                <p className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] text-white/75 backdrop-blur-md">
+                  No sign detected — position your hands in frame.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+        </div>
+        <div className="flex min-h-64 flex-col rounded-xl border border-foreground/10 bg-card lg:min-h-0">
+          <div className="border-b border-foreground/10 px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+              Live translation
+            </p>
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground/60">
+              <span
+                aria-hidden="true"
+                className={
+                  display
+                    ? "inline-block h-1.5 w-1.5 rounded-full bg-green-500"
+                    : "inline-block h-1.5 w-1.5 rounded-full bg-foreground/30"
+                }
+              />
+              {display
+                ? showingPartial
+                  ? "live · stabilizing"
+                  : "final"
+                : running
+                  ? "listening"
+                  : "waiting"}
+            </p>
+          </div>
+          <div className="flex flex-1 flex-col justify-center px-5 py-5">
+            {display ? (
+              <>
+                <p className="text-2xl font-semibold tracking-tight">
+                  {display.text}
+                </p>
+                <p className="mt-2 text-xs text-foreground/55">
+                  {showingPartial
+                    ? "Partial result from the live window — keep signing; press Stop to finalize."
+                    : `${display.accepted ? "accepted" : display.reason} · ${display.result_type} · ${Math.round(display.confidence * 100)}% confidence`}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold tracking-tight text-foreground/40">
+                  {running ? "Listening…" : "Waiting for signing…"}
+                </p>
+                <p className="mt-2 text-xs text-foreground/55">
+                  {running
+                    ? "Sign toward the camera — interpretation appears here."
+                    : "Start a session and sign toward the camera."}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      {(cameraMessage || detectorMessage) && phase === "error" && (
+        <Alert variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <AlertTitle>Translation model unavailable</AlertTitle>
+          <AlertTitle>
+            {cameraMessage ? "Camera unavailable" : "Detection unavailable"}
+          </AlertTitle>
           <AlertDescription>
-            {capabilities?.sign_to_text_unavailable_reason ??
-              "The backend reports no usable translation model right now."}{" "}
-            You can still run the camera and landmark overlay, but no
-            interpretation will arrive.
+            {cameraMessage ?? detectorMessage}
           </AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardContent className="pt-6">
-            <div className="relative grid aspect-video place-items-center overflow-hidden rounded-xl bg-muted">
-              {(phase === "live" || phase === "paused") && (
-                <>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={`absolute inset-0 h-full w-full object-cover ${mirrorClass}`}
-                  />
-                  <canvas
-                    ref={canvasRef}
-                    aria-hidden="true"
-                    className={`absolute inset-0 h-full w-full ${mirrorClass}`}
-                  />
-                </>
-              )}
-              {phase === "idle" && (
-                <video ref={videoRef} className="hidden" />
-              )}
-              {phase !== "live" && phase !== "paused" && (
-                <div className="flex max-w-xs flex-col items-center gap-2 p-6 text-center text-foreground/40">
-                  {busy ? (
-                    <>
-                      <Spinner aria-hidden="true" className="h-8 w-8" />
-                      <p className="text-sm">
-                        {phase === "starting-camera"
-                          ? "Requesting camera…"
-                          : "Initializing landmark detection…"}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <CameraOff aria-hidden="true" className="h-10 w-10" />
-                      <p className="text-sm">
-                        {cameraMessage ??
-                          detectorMessage ??
-                          "Press Start to open the camera and begin a session."}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-              {phase === "paused" && (
-                <span className="absolute left-3 top-3">
-                  <Badge variant="secondary">Paused</Badge>
-                </span>
-              )}
-            </div>
-            {(cameraMessage || detectorMessage) && phase === "error" && (
-              <Alert variant="destructive" className="mt-4">
-                <CircleAlert aria-hidden="true" />
-                <AlertTitle>
-                  {cameraMessage ? "Camera unavailable" : "Detection unavailable"}
-                </AlertTitle>
-                <AlertDescription>
-                  {cameraMessage ?? detectorMessage}
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Current interpretation</CardTitle>
-              <CardDescription>
-                Latest result on this connection.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!display ? (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <Languages aria-hidden="true" className="h-6 w-6" />
-                    </EmptyMedia>
-                    <EmptyTitle>No sign detected</EmptyTitle>
-                    <EmptyDescription>
-                      {running
-                        ? "Sign toward the camera to begin."
-                        : "Start a session and interpretation appears here."}
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-4xl font-semibold tracking-tight">
-                    {display.text}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {showingPartial ? (
-                      <Badge variant="secondary">live — stabilizing…</Badge>
-                    ) : (
-                      <Badge variant={display.accepted ? "default" : "secondary"}>
-                        {display.accepted ? "accepted" : display.reason}
-                      </Badge>
-                    )}
-                    <Badge variant="outline">{display.result_type}</Badge>
-                    <Badge variant="outline">
-                      {Math.round(display.confidence * 100)}% confidence
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-foreground/50">
-                    {showingPartial
-                      ? "Partial result from the live window — keep signing; press Stop to finalize."
-                      : "Confidence is reported by the backend for this result — not a guarantee."}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Session</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-foreground/60">Frames sent</span>
-                <span className="font-medium tabular-nums">{framesSent}</span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-foreground/60">Results</span>
-                <span className="font-medium tabular-nums">{results.length}</span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-foreground/60">Backend</span>
-                <span className="font-medium">
-                  {backendOnline === null
-                    ? "Checking…"
-                    : backendOnline
-                      ? "Online"
-                      : "Offline"}
-                </span>
-              </div>
-              {socketError && (
-                <p className="text-xs leading-5 text-destructive">{socketError}</p>
-              )}
-              {noSignRecently && (
-                <p className="text-xs leading-5 text-foreground/55">
-                  No body landmarks seen for a few seconds — move into
-                  frame and keep signing.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 pt-6">
+      {/* Session bar */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-foreground/10 bg-card px-4 py-3 text-xs">
+        <span className="flex items-center gap-1.5 font-medium">
+          <span
+            aria-hidden="true"
+            className={
+              socketStatus === "open"
+                ? "inline-block h-2 w-2 rounded-full bg-green-500"
+                : socketStatus === "connecting"
+                  ? "inline-block h-2 w-2 rounded-full bg-yellow-500 motion-safe:animate-pulse"
+                  : "inline-block h-2 w-2 rounded-full bg-foreground/30"
+            }
+          />
+          {socketStatus === "open"
+            ? "Connected"
+            : socketStatus === "connecting"
+              ? everOpenRef.current
+                ? "Reconnecting…"
+                : "Connecting"
+              : "Disconnected"}
+        </span>
+        <span className="font-medium tabular-nums" aria-label="Session time">
+          {elapsedLabel}
+        </span>
+        <span className="text-foreground/60">
+          Frames{" "}
+          <span className="font-medium text-foreground tabular-nums">
+            {framesSent}
+          </span>{" "}
+          ·{" "}
+          <span className="font-medium text-foreground tabular-nums">
+            {results.length}
+          </span>{" "}
+          results · Backend{" "}
+          <span className="font-medium text-foreground">
+            {backendOnline === null
+              ? "Checking…"
+              : backendOnline
+                ? "Online"
+                : "Offline"}
+          </span>
+        </span>
+        {socketError && (
+          <span className="text-destructive">{socketError}</span>
+        )}
+        {noSignRecently && (
+          <span className="text-foreground/60">
+            No body landmarks seen for a few seconds — move into frame and
+            keep signing.
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1">
           {!running ? (
-            <Tooltip>
-              <TooltipTrigger render={<span />}>
-                <Button onClick={() => void start()} disabled={busy}>
-                  {busy ? <Spinner aria-hidden="true" /> : <Play aria-hidden="true" />}
-                  {phase === "error" ? "Retry" : "Start"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Open the camera, load landmark detection, and connect.
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              onClick={() => void start()}
+              disabled={busy}
+              size="sm"
+              className="rounded-full px-4"
+            >
+              {busy ? <Spinner aria-hidden="true" /> : <Play aria-hidden="true" />}
+              {phase === "error" ? "Retry session" : "Start session"}
+            </Button>
           ) : (
             <>
               {phase === "live" ? (
-                <Button variant="outline" onClick={pause}>
+                <Button variant="ghost" size="sm" onClick={pause}>
                   <Pause aria-hidden="true" />
                   Pause
                 </Button>
               ) : (
-                <Button onClick={resume}>
+                <Button size="sm" onClick={resume} className="rounded-full px-4">
                   <Play aria-hidden="true" />
                   Resume
                 </Button>
               )}
-              <Button variant="outline" onClick={stop}>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={stop}
+                className="rounded-full px-4"
+              >
                 <Square aria-hidden="true" />
-                Stop
+                Stop session
               </Button>
             </>
           )}
-          <Tooltip>
-            <TooltipTrigger render={<span />}>
-              <Button
-                variant="outline"
-                onClick={clearResults}
-                disabled={results.length === 0 && framesSent === 0}
-              >
-                <Eraser aria-hidden="true" />
-                Clear
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Clears this session’s local results.</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger render={<span />}>
-              <Button
-                variant="ghost"
-                onClick={connectSocket}
-                disabled={!running || socketStatus === "connecting"}
-              >
-                <PlugZap aria-hidden="true" />
-                Reconnect
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Drop and re-open the live connection.</TooltipContent>
-          </Tooltip>
-        </CardContent>
-      </Card>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={connectSocket}
+            disabled={!running || socketStatus === "connecting"}
+          >
+            <PlugZap aria-hidden="true" />
+            Reconnect
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearResults}
+            disabled={results.length === 0 && framesSent === 0}
+          >
+            <Eraser aria-hidden="true" />
+            Clear
+          </Button>
+        </span>
+      </div>
 
       {results.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Session results</CardTitle>
-            <CardDescription>Newest first. Local to this session.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y divide-foreground/10">
-              {results.map((r, i) => (
-                <li key={`${r.history_id ?? "live"}-${i}`} className="py-3 first:pt-0 last:pb-0">
-                  <p className="font-medium">{r.text}</p>
-                  <p className="mt-0.5 text-xs text-foreground/50">
-                    {r.accepted ? "accepted" : r.reason} · {r.result_type} ·{" "}
-                    {Math.round(r.confidence * 100)}% confidence
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        <div>
+          <h2 className="text-sm font-medium">Session results</h2>
+          <p className="mt-0.5 text-xs text-foreground/50">
+            Newest first. Local to this session.
+          </p>
+          <ul className="mt-2 divide-y divide-foreground/10 border-t border-foreground/10">
+            {results.map((r, i) => (
+              <li key={`${r.history_id ?? "live"}-${i}`} className="py-3">
+                <p className="font-medium">{r.text}</p>
+                <p className="mt-0.5 text-xs text-foreground/50">
+                  {r.accepted ? "accepted" : r.reason} · {r.result_type} ·{" "}
+                  {Math.round(r.confidence * 100)}% confidence
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

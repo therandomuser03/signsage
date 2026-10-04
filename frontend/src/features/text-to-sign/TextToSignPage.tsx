@@ -4,13 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -123,29 +116,31 @@ export default function TextToSignPage() {
             lookup — not natural ISL grammar.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">
+        <div className="space-y-0.5 text-right text-xs">
+          <p className="font-medium">
             {manifest ? `${Object.keys(manifest).length} signs` : "Loading library…"}
-          </Badge>
-          <Badge variant="outline">
+          </p>
+          <p className="text-foreground/60">
             {avatarReady === null
               ? "Checking avatar…"
               : avatarReady
                 ? "Avatar ready"
                 : "Avatar unavailable"}
-          </Badge>
+          </p>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Enter text</CardTitle>
-            <CardDescription>
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-foreground/10 bg-card">
+          <div className="border-b border-foreground/10 px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+              01 · Your message
+            </p>
+            <p className="mt-1 text-xs text-foreground/60">
               Unknown words are dropped, never guessed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </p>
+          </div>
+          <div className="space-y-4 px-5 py-5">
             <Tabs
               value={mode}
               onValueChange={(v) => {
@@ -234,18 +229,20 @@ export default function TextToSignPage() {
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Visual sign output</CardTitle>
-            <CardDescription>
+        <div className="rounded-xl border border-foreground/10 bg-card">
+          <div className="border-b border-foreground/10 px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+              02 · Sign sequence
+            </p>
+            <p className="mt-1 text-xs text-foreground/60">
               Pre-authored clips on one avatar. No generative model involved.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="aspect-video overflow-hidden rounded-xl bg-muted">
+            </p>
+          </div>
+          <div className="px-5 py-5">
+            <div className="aspect-video overflow-hidden rounded-lg bg-muted">
               {manifest && avatarReady ? (
                 <AvatarViewer
                   ref={avatarRef}
@@ -277,19 +274,12 @@ export default function TextToSignPage() {
                 </Empty>
               )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Sign / gloss sequence</CardTitle>
-          <CardDescription>
-            Machine representation between your text and the visual output.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!sequence ? (
+            <div className="mt-5 border-t border-foreground/10 pt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+                Gloss sequence
+              </p>
+              <div className="mt-3">
+              {!sequence ? (
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -332,10 +322,13 @@ export default function TextToSignPage() {
                   </AlertDescription>
                 </Alert>
               )}
-            </div>
+              </div>
           )}
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
+  </div>
   );
 }

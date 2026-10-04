@@ -43,15 +43,22 @@ export function Navbar() {
           ${
             scrolled
               ? `
-                h-14
+                relative h-14
                 max-w-5xl
+                overflow-hidden
                 rounded-full
-                border border-transparent
-                bg-card/70
+                border border-black/10
+                bg-gradient-to-b from-white/60 via-white/30 to-white/10
                 px-4
-                shadow-[0_8px_40px_rgba(0,0,0,0.08)]
+                shadow-[0_8px_32px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.3),inset_0_-1px_1px_rgba(255,255,255,0.08)]
                 backdrop-blur-2xl
-                backdrop-saturate-150
+                backdrop-saturate-200
+                backdrop-brightness-125
+                dark:border-white/15
+                dark:from-white/10
+                dark:via-white/5
+                dark:to-transparent
+                dark:backdrop-brightness-110
               `
               : `
                 h-20
@@ -66,11 +73,23 @@ export function Navbar() {
           }
         `}
       >
+        {scrolled && (
+          <>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/40 via-white/10 to-transparent dark:from-white/15 dark:via-white/5"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(60%_100%_at_50%_0%,rgba(255,255,255,0.35),transparent_70%)] dark:bg-[radial-gradient(60%_100%_at_50%_0%,rgba(255,255,255,0.1),transparent_70%)]"
+            />
+          </>
+        )}
         {/* Logo */}
         <Link
           to="/"
           className={`
-            flex items-center gap-2
+            relative z-10 flex items-center gap-2
             font-semibold tracking-tight
             transition-all duration-500
             ${
@@ -97,7 +116,7 @@ export function Navbar() {
         {/* Navigation */}
         <div
           className={`
-            hidden items-center gap-7
+            relative z-10 hidden items-center gap-7
             text-sm md:flex
             transition-all duration-500
             ${
@@ -130,7 +149,7 @@ export function Navbar() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="relative z-10 flex items-center gap-2">
           <Link
             to="/login"
             className={`

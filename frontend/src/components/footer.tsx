@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { SignSageLogo } from "@/components/logo";
-import { StartCta } from "@/features/auth/StartCta";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const PRODUCT = [
   { label: "Sign → Text", to: "/app/translate" },
@@ -73,10 +72,13 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <StartCta
+                <Button
                   variant="link"
-                  className={cn("h-auto p-0 text-sm text-foreground/55 hover:text-foreground")}
-                />
+                  className="h-auto p-0 text-sm text-foreground/55 hover:text-foreground"
+                  render={<Link to="/start" />}
+                >
+                  Start interpreting
+                </Button>
               </li>
             </ul>
           </nav>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bookmark,
@@ -52,18 +52,21 @@ import { getAccessToken, onAuthChange, signOut } from "@/services/supabase/auth"
 import { cn } from "@/lib/utils";
 
 const ACTIVE =
-  "bg-muted font-medium text-foreground [&>svg]:text-green-700 dark:[&>svg]:text-green-400";
+  "bg-green-500/10 font-medium text-foreground [&>svg]:text-green-600 dark:[&>svg]:text-green-400";
 
-const NAV = [
-  { to: "/app/translate", label: "Translate", icon: Languages },
+const INTERPRET_NAV = [
+  { to: "/app/translate", label: "Live Interpreter", icon: Languages },
   { to: "/app/text-to-sign", label: "Text → Sign", icon: Hand },
+];
+
+const LIBRARY_NAV = [
   { to: "/app/history", label: "History", icon: History },
   { to: "/app/saved-signs", label: "Saved Signs", icon: Bookmark },
 ];
 
 const TITLES: Record<string, string> = {
-  "/app": "Translate",
-  "/app/translate": "Translate",
+  "/app": "Live Interpreter",
+  "/app/translate": "Live Interpreter",
   "/app/text-to-sign": "Text → Sign",
   "/app/history": "History",
   "/app/saved-signs": "Saved Signs",
@@ -112,7 +115,7 @@ function UserArea() {
     return (
       <Button variant="ghost" size="sm" className="w-full justify-start" render={<Link to="/login" />}>
         <LogIn aria-hidden="true" />
-        Sign in
+        <span className="group-data-[collapsible=icon]:hidden">Sign in</span>
       </Button>
     );
   }
@@ -133,7 +136,7 @@ function UserArea() {
         <Avatar className="h-8 w-8">
           <AvatarFallback>{initial}</AvatarFallback>
         </Avatar>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{email}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium group-data-[collapsible=icon]:hidden">{email}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate font-normal text-foreground/60">
@@ -155,16 +158,54 @@ function UserArea() {
   );
 }
 
+function NavItems({
+  items,
+}: {
+  items: { to: string; label: string; icon: typeof Languages }[];
+}) {
+  return (
+    <SidebarMenu>
+      {items.map((item) => (
+        <SidebarMenuItem key={item.to}>
+          <SidebarMenuButton
+            tooltip={item.label}
+            render={
+              <NavLink
+                to={item.to}
+                className={({ isActive }) => cn(isActive && ACTIVE)}
+              />
+            }
+          >
+            <item.icon aria-hidden="true" />
+            <span>{item.label}</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
+}
+
 function AppSidebar() {
   return (
-    <Sidebar variant="inset">
+    <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link to="/" />}>
-              <SignSageLogo className="h-8 w-8" />
-              <span className="font-semibold tracking-tight">SignSage</span>
-            </SidebarMenuButton>
+            <div className="flex w-full items-center gap-1">
+              <SidebarMenuButton
+                size="lg"
+                className="flex-1"
+                render={<Link to="/" />}
+              >
+                <SignSageLogo className="h-8 w-8" />
+                <span className="font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                  SignSage
+                </span>
+              </SidebarMenuButton>
+              <span className="group-data-[collapsible=icon]:hidden">
+                <SidebarTrigger aria-label="Collapse navigation" />
+              </span>
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -172,47 +213,13 @@ function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Interpret</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV.slice(0, 2).map((item) => (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton
-                    tooltip={item.label}
-                    render={
-                      <NavLink
-                        to={item.to}
-                        className={({ isActive }) => cn(isActive && ACTIVE)}
-                      />
-                    }
-                  >
-                    <item.icon aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            <NavItems items={INTERPRET_NAV} />
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupLabel>Library</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV.slice(2, 4).map((item) => (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton
-                    tooltip={item.label}
-                    render={
-                      <NavLink
-                        to={item.to}
-                        className={({ isActive }) => cn(isActive && ACTIVE)}
-                      />
-                    }
-                  >
-                    <item.icon aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            <NavItems items={LIBRARY_NAV} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
@@ -231,11 +238,12 @@ function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
         <Separator />
-        <UserArea />
-        <Separator />
-        <div className="flex items-center justify-end gap-2 px-1 py-1">
+        <div className="flex items-center justify-between gap-2 px-1 py-1 group-data-[collapsible=icon]:hidden">
+          <span className="text-sm text-foreground/60">Appearance</span>
           <ModeToggle />
         </div>
+        <Separator />
+        <UserArea />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
@@ -244,10 +252,10 @@ function AppSidebar() {
 
 export function AppShell() {
   const { pathname } = useLocation();
-  const title = TITLES[pathname] ?? "Translate";
+  const title = TITLES[pathname] ?? "Live Interpreter";
 
   return (
-    <SidebarProvider>
+    <SidebarProvider style={{ "--sidebar-width": "15rem" } as CSSProperties}>
       <AppSidebar />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 backdrop-blur-md">

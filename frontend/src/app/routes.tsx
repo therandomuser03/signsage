@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppShell } from "./shell";
 import LandingPage from "@/features/landing/LandingPage";
 import AboutPage from "@/features/about/AboutPage";
-import { LoginPage, SignupPage } from "@/features/auth/AuthPages";
+import { LoginPage, SignupPage, StartPage } from "@/features/auth/AuthPages";
 import HowItWorksPage from "@/features/how-it-works/HowItWorksPage";
 import CapabilitiesPage from "@/features/capabilities/CapabilitiesPage";
 import PrivacyPage from "@/features/privacy/PrivacyPage";
@@ -40,6 +40,10 @@ export const router = createBrowserRouter([
   {
     path: "/signup",
     element: <SignupPage />,
+  },
+  {
+    path: "/start",
+    element: <StartPage />,
   },
   {
     path: "/app",

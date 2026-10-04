@@ -5,7 +5,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Hand,
   History as HistoryIcon,
+  Languages,
   RefreshCw,
   Search,
   Trash2,
@@ -26,15 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,14 +45,6 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { apiClient } from "@/services/api/instance";
 import { ApiError } from "@/services/api/errors";
 import type { Direction, HistoryItem } from "@/types/api";
@@ -166,7 +152,7 @@ export default function HistoryPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Translation History</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">History</h1>
           <p className="mt-2 leading-7 text-foreground/55">
             Review your previous SignSage sessions.
           </p>
@@ -211,16 +197,12 @@ export default function HistoryPage() {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sessions</CardTitle>
-          <CardDescription>
-            {state === "ready"
-              ? `${total} saved translation${total === 1 ? "" : "s"}${truncated ? ` — showing the latest ${items.length}` : ""}. Only text results are stored; no camera recordings.`
-              : "Stored server-side, per account."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div className="space-y-4">
+        <p className="text-sm text-foreground/55">
+          {state === "ready"
+            ? `${total} saved translation${total === 1 ? "" : "s"}${truncated ? ` — showing the latest ${items.length}` : ""}. Only text results are stored; no camera recordings.`
+            : "Stored server-side, per account."}
+        </p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
@@ -298,62 +280,47 @@ export default function HistoryPage() {
             </Empty>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Result</TableHead>
-                      <TableHead>Direction</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>When</TableHead>
-                      <TableHead>
-                        <span className="sr-only">Actions</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visible.map((item) => (
-                      <TableRow
-                        key={item.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelected(item)}
-                      >
-                        <TableCell className="max-w-64 font-medium">
-                          <span className="block truncate">{item.output_text}</span>
-                          {item.confidence != null && (
-                            <span className="text-xs font-normal text-foreground/50">
-                              {Math.round(item.confidence * 100)}% confidence
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {item.direction === "sign_to_text" ? "Sign → Text" : "Text → Sign"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-foreground/60">
+              <div>
+                {visible.map((item) => {
+                  const DirectionIcon =
+                    item.direction === "sign_to_text" ? Languages : Hand;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelected(item)}
+                      className="group flex cursor-pointer items-center gap-4 border-t border-foreground/10 py-4 transition-colors last:border-b hover:bg-muted/40 sm:px-3"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground/60 transition-colors group-hover:text-green-600 dark:group-hover:text-green-500">
+                        <DirectionIcon aria-hidden="true" className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">
+                          {item.output_text}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-foreground/50">
+                          {item.direction === "sign_to_text" ? "Sign → Text" : "Text → Sign"}
+                          {" · "}
                           {item.result_type}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-foreground/60">
+                          {item.confidence != null &&
+                            ` · ${Math.round(item.confidence * 100)}% confidence`}
+                          {" · "}
                           {formatDateTime(item.created_at)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Delete ${item.output_text}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void removeItem(item.id);
-                            }}
-                          >
-                            <Trash2 aria-hidden="true" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </span>
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${item.output_text}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void removeItem(item.id);
+                        }}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
               {pageCount > 1 && (
                 <div className="flex items-center justify-between pt-2 text-sm text-foreground/55">
@@ -384,8 +351,7 @@ export default function HistoryPage() {
               )}
             </>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       <HistoryDetailDialog item={selected} onClose={() => setSelected(null)} />
     </div>

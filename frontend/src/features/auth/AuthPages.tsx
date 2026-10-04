@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,6 +12,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -22,11 +29,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { FlickeringGrid } from "@/components/ui/flickering-grid";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ModeToggle } from "@/components/mode-toggle";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/components/ui/toast";
 import { isSupabaseConfigured } from "@/services/supabase/client";
-import { signIn, signUp } from "@/services/supabase/auth";
+import { getAccessToken, resetPassword, signIn, signInWithGoogle, signUp } from "@/services/supabase/auth";
+import { SignSageLogo } from "@/components/logo";
+
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email address."),
@@ -39,48 +50,18 @@ function useCredentialsForm() {
   return useForm<Credentials>();
 }
 
-function CredentialFields({
-  mode,
-  register,
-  errors,
-}: {
-  mode: "login" | "signup";
-  register: ReturnType<typeof useCredentialsForm>["register"];
-  errors: ReturnType<typeof useCredentialsForm>["formState"]["errors"];
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor={`${mode}-email`}>Email</Label>
-        <Input
-          id={`${mode}-email`}
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          aria-invalid={Boolean(errors.email)}
-          {...register("email")}
-        />
-        {errors.email && (
-          <p className="text-sm text-destructive">{errors.email.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${mode}-password`}>Password</Label>
-        <Input
-          id={`${mode}-password`}
-          type="password"
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          placeholder="••••••••"
-          aria-invalid={Boolean(errors.password)}
-          {...register("password")}
-        />
-        {errors.password && (
-          <p className="text-sm text-destructive">{errors.password.message}</p>
-        )}
-      </div>
-    </>
-  );
+/** Internal redirect target. Only same-origin paths — never //host or scheme. */
+function safeNext(value: string | null, fallback: string): string {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : fallback;
 }
+
+function useNext(fallback = "/app") {
+  const [params] = useSearchParams();
+  const next = safeNext(params.get("next"), fallback);
+  const q = `?next=${encodeURIComponent(next)}`;
+  return { next, loginTo: `/login${q}`, signupTo: `/signup${q}` };
+}
+
 
 function TermsDialog({ onAgree }: { onAgree: () => void }) {
   return (
@@ -177,9 +158,11 @@ function DataDialog({ onAgree }: { onAgree: () => void }) {
 
 function LoginForm() {
   const navigate = useNavigate();
+  const { next, signupTo } = useNext();
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useCredentialsForm();
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const { register, handleSubmit, getValues, formState: { errors } } = useCredentialsForm();
 
   const onSubmit = (values: Credentials) => {
     const parsed = credentialsSchema.safeParse(values);
@@ -187,32 +170,115 @@ function LoginForm() {
     setServerError(null);
     setBusy(true);
     signIn(parsed.data.email, parsed.data.password)
-      .then(() => navigate("/app"))
-      .catch((e: unknown) =>
-        setServerError(e instanceof Error ? e.message : "Authentication failed.")
-      )
+      .then(() => {
+        toast.add({ title: "Signed in", description: "Welcome back.", type: "success" });
+        navigate(next);
+      })
+      .catch((e: unknown) => {
+        const message = e instanceof Error ? e.message : "Authentication failed.";
+        setServerError(message);
+        toast.add({ title: "Couldn’t sign you in", description: message, type: "error" });
+      })
       .finally(() => setBusy(false));
   };
 
+  const onForgotPassword = () => {
+    const parsed = z.string().email("Enter a valid email address.").safeParse(getValues("email"));
+    if (!parsed.success) {
+      toast.add({ title: "Enter your email first", description: "Type the account email above, then try again.", type: "warning" });
+      return;
+    }
+    resetPassword(parsed.data)
+      .then(() => toast.add({ title: "Reset email sent", description: "Check your inbox for the password reset link.", type: "success" }))
+      .catch((e: unknown) =>
+        toast.add({ title: "Couldn’t send reset email", description: e instanceof Error ? e.message : "Request failed.", type: "error" })
+      );
+  };
+
+  const onGoogle = () => {
+    setGoogleBusy(true);
+    signInWithGoogle().catch((e: unknown) => {
+      // OAuth redirects away on success, so only failures land here.
+      toast.add({ title: "Google sign-in failed", description: e instanceof Error ? e.message : "Request failed.", type: "error" });
+      setGoogleBusy(false);
+    });
+  };
+
   return (
-    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-4">
-      <CredentialFields mode="login" register={register} errors={errors} />
-      {serverError && (
-        <Alert variant="destructive">
-          <AlertTitle>Couldn’t sign you in</AlertTitle>
-          <AlertDescription>{serverError}</AlertDescription>
-        </Alert>
-      )}
-      <Button type="submit" className="w-full" disabled={busy}>
-        {busy && <Spinner aria-hidden="true" />}
-        Sign in
-      </Button>
+    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="login-email">Email</FieldLabel>
+          <Input
+            id="login-email"
+            type="email"
+            autoComplete="email"
+            placeholder="m@example.com"
+            aria-invalid={Boolean(errors.email)}
+            {...register("email")}
+          />
+          {errors.email && (
+            <p className="text-sm text-destructive">{errors.email.message}</p>
+          )}
+        </Field>
+        <Field>
+          <div className="flex items-center">
+            <FieldLabel htmlFor="login-password">Password</FieldLabel>
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+            >
+              Forgot your password?
+            </button>
+          </div>
+          <Input
+            id="login-password"
+            type="password"
+            autoComplete="current-password"
+            aria-invalid={Boolean(errors.password)}
+            {...register("password")}
+          />
+          {errors.password && (
+            <p className="text-sm text-destructive">{errors.password.message}</p>
+          )}
+        </Field>
+        {serverError && (
+          <Alert variant="destructive">
+            <AlertTitle>Couldn’t sign you in</AlertTitle>
+            <AlertDescription>{serverError}</AlertDescription>
+          </Alert>
+        )}
+        <Field>
+          <Button type="submit" className="w-full" disabled={busy || googleBusy}>
+            {busy && <Spinner aria-hidden="true" />}
+            Login
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={busy || googleBusy}
+            onClick={onGoogle}
+          >
+            {googleBusy && <Spinner aria-hidden="true" />}
+            Login with Google
+          </Button>
+          <FieldDescription className="text-center">
+            Don&apos;t have an account?{" "}
+            <Link to={signupTo} className="underline underline-offset-4">
+              Sign up
+            </Link>
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }
 
 function SignupForm() {
   const navigate = useNavigate();
+  const { next, loginTo } = useNext();
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -234,73 +300,135 @@ function SignupForm() {
     setServerError(null);
     setBusy(true);
     signUp(parsed.data.email, parsed.data.password)
-      .then(() => navigate("/app"))
-      .catch((e: unknown) =>
-        setServerError(e instanceof Error ? e.message : "Authentication failed.")
-      )
+      .then(() => {
+        toast.add({ title: "Account created", description: "Welcome to SignSage.", type: "success" });
+        navigate(next);
+      })
+      .catch((e: unknown) => {
+        const message = e instanceof Error ? e.message : "Authentication failed.";
+        setServerError(message);
+        toast.add({ title: "Couldn’t create your account", description: message, type: "error" });
+      })
       .finally(() => setBusy(false));
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-4">
-      <CredentialFields mode="signup" register={register} errors={errors} />
-      <div className="space-y-3 rounded-xl border border-foreground/10 p-4">
-        <div className="flex items-start gap-3">
-          <Checkbox
-            id="consent-terms"
-            checked={terms}
-            onCheckedChange={(v) => setTerms(v === true)}
-            aria-describedby="consent-error"
+    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="signup-email">Email</FieldLabel>
+          <Input
+            id="signup-email"
+            type="email"
+            autoComplete="email"
+            placeholder="m@example.com"
+            aria-invalid={Boolean(errors.email)}
+            {...register("email")}
           />
-          <Label htmlFor="consent-terms" className="text-sm font-normal leading-6">
-            I agree to the{" "}
-            <Dialog>
-              <DialogTrigger
-                render={<button type="button" className="font-medium underline underline-offset-4" />}
-              >
-                Terms and Conditions
-              </DialogTrigger>
-              <TermsDialog onAgree={() => setTerms(true)} />
-            </Dialog>
-            .
-          </Label>
-        </div>
-        <div className="flex items-start gap-3">
-          <Checkbox
-            id="consent-data"
-            checked={data}
-            onCheckedChange={(v) => setData(v === true)}
-            aria-describedby="consent-error"
+          {errors.email && (
+            <p className="text-sm text-destructive">{errors.email.message}</p>
+          )}
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="signup-password">Password</FieldLabel>
+          <Input
+            id="signup-password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="••••••••"
+            aria-invalid={Boolean(errors.password)}
+            {...register("password")}
           />
-          <Label htmlFor="consent-data" className="text-sm font-normal leading-6">
-            I understand and agree to the{" "}
-            <Dialog>
-              <DialogTrigger
-                render={<button type="button" className="font-medium underline underline-offset-4" />}
-              >
-                collection and processing of data
-              </DialogTrigger>
-              <DataDialog onAgree={() => setData(true)} />
-            </Dialog>{" "}
-            required to use SignSage.
-          </Label>
+          {errors.password && (
+            <p className="text-sm text-destructive">{errors.password.message}</p>
+          )}
+        </Field>
+        <div className="space-y-3 rounded-lg border border-border/80 bg-muted/20 p-3">
+          <div className="flex items-start gap-2.5">
+            <Checkbox
+              id="consent-terms"
+              checked={terms}
+              onCheckedChange={(v) => setTerms(v === true)}
+              aria-describedby="consent-error"
+              className="mt-0.5 shrink-0"
+            />
+            <label
+              htmlFor="consent-terms"
+              className="text-xs leading-relaxed text-muted-foreground select-none cursor-pointer"
+            >
+              I agree to the{" "}
+              <Dialog>
+                <DialogTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                    />
+                  }
+                >
+                  Terms and Conditions
+                </DialogTrigger>
+                <TermsDialog onAgree={() => setTerms(true)} />
+              </Dialog>
+              .
+            </label>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <Checkbox
+              id="consent-data"
+              checked={data}
+              onCheckedChange={(v) => setData(v === true)}
+              aria-describedby="consent-error"
+              className="mt-0.5 shrink-0"
+            />
+            <label
+              htmlFor="consent-data"
+              className="text-xs leading-relaxed text-muted-foreground select-none cursor-pointer"
+            >
+              I understand the{" "}
+              <Dialog>
+                <DialogTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                    />
+                  }
+                >
+                  data collection and processing
+                </DialogTrigger>
+                <DataDialog onAgree={() => setData(true)} />
+              </Dialog>{" "}
+              required to use SignSage.
+            </label>
+          </div>
+          {consentError && (
+            <p id="consent-error" role="alert" className="text-xs text-destructive">
+              {consentError}
+            </p>
+          )}
         </div>
-        {consentError && (
-          <p id="consent-error" role="alert" className="text-sm text-destructive">
-            {consentError}
-          </p>
+        {serverError && (
+          <Alert variant="destructive">
+            <AlertTitle>Couldn’t create your account</AlertTitle>
+            <AlertDescription>{serverError}</AlertDescription>
+          </Alert>
         )}
-      </div>
-      {serverError && (
-        <Alert variant="destructive">
-          <AlertTitle>Couldn’t create your account</AlertTitle>
-          <AlertDescription>{serverError}</AlertDescription>
-        </Alert>
-      )}
-      <Button type="submit" className="w-full" disabled={busy}>
-        {busy && <Spinner aria-hidden="true" />}
-        Create account
-      </Button>
+        <Field>
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy && <Spinner aria-hidden="true" />}
+            Create account
+          </Button>
+          <FieldDescription className="text-center">
+            Already have an account?{" "}
+            <Link to={loginTo} className="underline underline-offset-4">
+              Sign in
+            </Link>
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }
@@ -309,23 +437,38 @@ function AuthShell({
   title,
   description,
   mode,
-  switchTo,
-  switchLabel,
 }: {
   title: string;
   description: string;
   mode: "login" | "signup";
-  switchTo: string;
-  switchLabel: string;
 }) {
   return (
-    <div className="mx-auto grid min-h-[calc(100svh-4rem)] w-full max-w-md place-items-center px-4 py-12">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-2xl">{title}</CardTitle>
+    <div className="relative grid min-h-[calc(100svh-4rem)] place-items-center overflow-hidden px-4 py-12">
+      <FlickeringGrid
+        aria-hidden="true"
+        className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]"
+        color="rgb(34, 197, 94)"
+        squareSize={3}
+        gridGap={8}
+        flickerChance={0.15}
+        maxOpacity={0.35}
+      />
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 sm:p-6">
+        <Button variant="ghost" size="sm" className="pointer-events-auto" render={<Link to="/" />}>
+          <ArrowLeft aria-hidden="true" />
+          Back to Home
+        </Button>
+        <span className="pointer-events-auto">
+          <ModeToggle />
+        </span>
+      </div>
+      <Card className="relative mx-auto w-full max-w-sm">
+        <CardHeader className="items-center justify-items-center text-center">
+          <SignSageLogo className="mb-2 h-12 w-12" />
+          <CardTitle className="text-xl font-semibold tracking-tight">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           {!isSupabaseConfigured() ? (
             <Alert>
               <AlertTitle>Sign-in is not configured</AlertTitle>
@@ -339,12 +482,6 @@ function AuthShell({
           ) : (
             <SignupForm />
           )}
-          <p className="text-center text-sm text-foreground/55">
-            {switchLabel}{" "}
-            <Link to={switchTo} className="font-medium text-foreground underline underline-offset-4">
-              {mode === "login" ? "Create one" : "Sign in"}
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>
@@ -354,11 +491,9 @@ function AuthShell({
 export function LoginPage() {
   return (
     <AuthShell
-      title="Welcome back"
-      description="Sign in to sync history across devices."
+      title="Login to your account"
+      description="Enter your email below to login to your account"
       mode="login"
-      switchTo="/signup"
-      switchLabel="No account yet?"
     />
   );
 }
@@ -367,10 +502,30 @@ export function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      description="One account for history and saved data."
+      description="Enter your email below to create your account"
       mode="signup"
-      switchTo="/login"
-      switchLabel="Already have an account?"
     />
+  );
+}
+
+/** Auth-checking page: signed in → the app, otherwise → login (which returns here). */
+export function StartPage() {
+  const navigate = useNavigate();
+  const { next, loginTo } = useNext("/app/translate");
+
+  useEffect(() => {
+    let live = true;
+    void getAccessToken().then((token) => {
+      if (live) navigate(token ? next : loginTo, { replace: true });
+    });
+    return () => {
+      live = false;
+    };
+  }, [navigate, next, loginTo]);
+
+  return (
+    <div className="grid min-h-[calc(100svh-4rem)] place-items-center px-4">
+      <Spinner aria-label="Checking sign-in status" />
+    </div>
   );
 }

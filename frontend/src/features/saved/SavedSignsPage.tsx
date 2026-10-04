@@ -19,14 +19,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -134,9 +126,8 @@ export default function SavedSignsPage() {
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6">
-            <Empty>
+        <div className="py-8">
+          <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <Bookmark aria-hidden="true" className="h-6 w-6" />
@@ -149,27 +140,24 @@ export default function SavedSignsPage() {
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
-          </CardContent>
-        </Card>
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((item) => (
-            <Card key={item.id} className="flex flex-col">
-              <CardHeader>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    {item.direction === "sign_to_text" ? "Sign → Text" : "Text → Sign"}
-                  </Badge>
-                  <Badge variant="outline">{item.result_type}</Badge>
-                </div>
-                <CardTitle className="line-clamp-2 text-xl">
-                  {item.output_text}
-                </CardTitle>
-                <CardDescription>
-                  Saved {formatDateTime(item.created_at)}
-                </CardDescription>
-              </CardHeader>
-              <CardFooter className="mt-auto flex gap-2 pt-0">
+            <div key={item.id} className="flex flex-col rounded-xl border border-foreground/10 bg-card p-5">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">
+                  {item.direction === "sign_to_text" ? "Sign → Text" : "Text → Sign"}
+                </Badge>
+                <Badge variant="outline">{item.result_type}</Badge>
+              </div>
+              <p className="mt-3 line-clamp-2 text-xl font-semibold tracking-tight">
+                {item.output_text}
+              </p>
+              <p className="mt-1 text-xs text-foreground/50">
+                Saved {formatDateTime(item.created_at)}
+              </p>
+              <div className="mt-auto flex gap-2 pt-4">
                 <Button variant="outline" size="sm" onClick={() => setSelected(item)}>
                   <Eye aria-hidden="true" />
                   Details
@@ -202,8 +190,8 @@ export default function SavedSignsPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              </CardFooter>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}

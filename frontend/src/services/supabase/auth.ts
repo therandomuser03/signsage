@@ -24,6 +24,25 @@ export async function signOut(): Promise<void> {
   if (error) throw error;
 }
 
+/** Google OAuth via Supabase. Redirects away on success; throws honestly (e.g. provider not enabled) on failure. */
+export async function signInWithGoogle() {
+  const { data, error } = await getSupabase().auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: `${window.location.origin}/app` },
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Sends a Supabase password-reset email. Throws on failure. */
+export async function resetPassword(email: string) {
+  const { data, error } = await getSupabase().auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/login`,
+  });
+  if (error) throw error;
+  return data;
+}
+
 /** Subscribe to sign-in/out; returns an unsubscribe function. No-op when auth isn't configured. */
 export function onAuthChange(callback: (signedIn: boolean) => void): () => void {
   if (!isSupabaseConfigured()) return () => undefined;
