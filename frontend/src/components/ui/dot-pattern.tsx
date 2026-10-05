@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from "react"
+import React, { useMemo, useEffect, useId, useRef, useState } from "react"
 import { motion } from "motion/react"
 
 import { cn } from "@/lib/utils"
@@ -88,23 +88,27 @@ export function DotPattern({
     return () => window.removeEventListener("resize", updateDimensions)
   }, [])
 
-  const dots = Array.from(
-    {
-      length:
-        Math.ceil(dimensions.width / width) *
-        Math.ceil(dimensions.height / height),
-    },
-    (_, i) => {
-      const col = i % Math.ceil(dimensions.width / width)
-      const row = Math.floor(i / Math.ceil(dimensions.width / width))
-      return {
-        x: col * width + cx + x,
-        y: row * height + cy + y,
-        delay: Math.random() * 5,
-        duration: Math.random() * 3 + 2,
-      }
-    }
-  )
+  const dots = useMemo(() => {
+    if (dimensions.width === 0 || dimensions.height === 0) return [];
+    const cols = Math.ceil(dimensions.width / width);
+    const rows = Math.ceil(dimensions.height / height);
+    return Array.from(
+      { length: cols * rows },
+      (_, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        // Deterministic pseudo-random based on index for consistent renders
+        const rand1 = ((i * 9301 + 49297) % 233280) / 233280; // simple LCG
+        const rand2 = ((i * 7141 + 54773) % 259200) / 259200; // another LCG
+        return {
+          x: col * width + cx + x,
+          y: row * height + cy + y,
+          delay: rand1 * 5,
+          duration: rand2 * 3 + 2,
+        };
+      },
+    );
+  }, [dimensions.width, dimensions.height, width, height, cx, cy, x, y]);
 
   return (
     <svg

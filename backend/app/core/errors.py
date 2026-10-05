@@ -38,6 +38,14 @@ class InvalidLandmarksError(SignSageError):
     status_code = 422
 
 
+class InferenceTimeoutError(SignSageError):
+    # Shares the SESSION_ERROR code with the WebSocket protocol (no new error
+    # vocabulary, no frontend change): both transports report a timed-out
+    # inference as SESSION_ERROR with a message saying so.
+    code = "SESSION_ERROR"
+    status_code = 503
+
+
 class AuthError(SignSageError):
     code = "UNAUTHORIZED"
     status_code = 401

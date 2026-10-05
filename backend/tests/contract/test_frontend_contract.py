@@ -70,6 +70,32 @@ def test_landmark_constants_match():
     assert int(re.search(r"COORDINATES_PER_LANDMARK\s*=\s*(\d+)", proto).group(1)) == COORDINATES_PER_LANDMARK
 
 
+def test_landmark_component_order_matches_backend():
+    """Frontend assembly order must equal backend COMPONENT_ORDER exactly --
+    a silent reorder on either side would mistranslate every frame."""
+    from app.ml.preprocessing.landmarks import (
+        COMPONENT_ORDER,
+        COMPONENT_RANGES,
+        FACE_LANDMARK_COUNT,
+        HAND_LANDMARK_COUNT,
+        POSE_LANDMARK_COUNT,
+        TOTAL_LANDMARKS,
+    )
+
+    src = _read("src/features/translate/landmarks.ts")
+    for name in COMPONENT_ORDER:
+        assert f'"{name}"' in src, f"landmarks.ts is missing component {name}"
+    block = re.search(r"export const COMPONENT_ORDER = \[(.*?)\]", src, re.DOTALL).group(1)
+    frontend_order = re.findall(r'"([A-Z_]+_LANDMARKS)"', block)
+    assert frontend_order == list(COMPONENT_ORDER), f"order drift: {frontend_order}"
+    assert int(re.search(r"POSE_COUNT\s*=\s*(\d+)", src).group(1)) == POSE_LANDMARK_COUNT
+    assert int(re.search(r"FACE_COUNT\s*=\s*(\d+)", src).group(1)) == FACE_LANDMARK_COUNT
+    assert int(re.search(r"HAND_COUNT\s*=\s*(\d+)", src).group(1)) == HAND_LANDMARK_COUNT
+    assert POSE_LANDMARK_COUNT + FACE_LANDMARK_COUNT + 2 * HAND_LANDMARK_COUNT == TOTAL_LANDMARKS
+    for name, (start, end) in COMPONENT_RANGES.items():
+        assert f"{name}: [{start}, {end}]" in src, f"landmarks.ts range for {name} drifted"
+
+
 @pytest.mark.parametrize("model_path", [
     "app.schemas.common:HealthResponse", "app.schemas.common:CapabilitiesResponse",
     "app.schemas.common:ModelInfo", "app.schemas.auth:MeResponse",

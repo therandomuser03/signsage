@@ -17,7 +17,9 @@ from .landmarks import (
     BODY_LANDMARK_COUNT,
     COORDINATES_PER_LANDMARK,
     HIP_LANDMARK_INDICES,
+    RAW_FEATURE_DIM,
     TOTAL_LANDMARKS,
+    assert_landmark_dtype,
 )
 
 
@@ -28,7 +30,17 @@ def normalize_pose_sequence(flat: np.ndarray) -> np.ndarray:
         flat: (frames, 543*3) raw landmark coordinates.
     Returns:
         float32 (frames, 543*3) normalized coordinates.
+
+    Raises:
+        ValueError: if `flat` is not numeric (T, 1629) -- incompatible
+            representations are rejected here, never silently reshaped.
     """
+    flat = np.asarray(flat)
+    assert_landmark_dtype(flat)
+    if flat.ndim != 2 or flat.shape[1] != RAW_FEATURE_DIM:
+        raise ValueError(
+            f"Expected flat landmarks shaped (T, {RAW_FEATURE_DIM}), received {flat.shape}"
+        )
     x = flat.reshape(flat.shape[0], TOTAL_LANDMARKS, COORDINATES_PER_LANDMARK).astype(np.float32)
 
     hip = x[:, list(HIP_LANDMARK_INDICES), :]

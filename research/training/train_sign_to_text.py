@@ -51,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app.ml.models.sign_to_text import SignTransformer, causal_mask, padding_mask  # noqa: E402
 from app.ml.preprocessing.landmarks import (  # noqa: E402
+    COMPONENT_ORDER,
     COORDINATES_PER_LANDMARK,
     TOTAL_LANDMARKS,
 )
@@ -296,11 +297,30 @@ def preflight_pose_source(store: PoseSource, uid: str) -> dict:
     return report
 
 
+def verify_pose_layout(pose, uid: str) -> None:
+    """Fail loudly if a .pose file's header components do not start with the
+    canonical COMPONENT_ORDER. The reader below slices the first 543 points
+    positionally, so a reordered header would silently mistrain -- rejected
+    here instead."""
+    names = [c.name for c in pose.header.components]
+    if names[: len(COMPONENT_ORDER)] != list(COMPONENT_ORDER):
+        raise ValueError(
+            f"Pose header component order {names} for {uid} does not start with "
+            f"expected {list(COMPONENT_ORDER)} -- refusing to slice positionally"
+        )
+    total = sum(len(c.points) for c in pose.header.components)
+    if total < TOTAL_LANDMARKS:
+        raise ValueError(
+            f"Pose header has only {total} points for {uid}, need {TOTAL_LANDMARKS}"
+        )
+
+
 def read_normalized_pose(uid: str, store: PoseSource) -> np.ndarray:
     """Raw .pose -> (frames, 1629) via the canonical pose_normalize_v1 path."""
     from pose_format import Pose
 
     pose = Pose.read(store.read_member_bytes(uid))
+    verify_pose_layout(pose, uid)
     data = np.asarray(np.ma.filled(pose.body.data, 0.0), dtype=np.float32)
     if data.ndim != 4 or data.shape[1] < 1:
         raise ValueError(f"Unexpected pose tensor {data.shape} for {uid}")

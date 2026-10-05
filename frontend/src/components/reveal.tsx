@@ -16,7 +16,8 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
     const el = ref.current;
     if (!el) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setVisible(true);
+      // Defer state update to avoid synchronous setState in effect body
+      setTimeout(() => setVisible(true), 0);
       return;
     }
     const observer = new IntersectionObserver(

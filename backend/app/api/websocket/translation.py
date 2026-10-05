@@ -1,6 +1,7 @@
 """WebSocket endpoint for live Sign->Text translation. Protocol: schemas/websocket.py."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -97,7 +98,10 @@ async def translate_ws(websocket: WebSocket) -> None:
                     frames = session.window(window)
                     if frames is not None:
                         try:
-                            interim = await run_in_threadpool(service.translate_sign_to_text, frames)
+                            interim = await asyncio.wait_for(
+                                run_in_threadpool(service.translate_sign_to_text, frames),
+                                timeout=settings.inference_timeout_s,
+                            )
                         except Exception as exc:  # noqa: BLE001
                             logger.warning("[INFERENCE] session %s interim failed: %s",
                                            session.session_id, exc)
@@ -122,9 +126,18 @@ async def translate_ws(websocket: WebSocket) -> None:
                 n_frames = sequence.shape[0]
                 started = time.perf_counter()
                 try:
-                    result = await run_in_threadpool(service.translate_sign_to_text, sequence)
+                    result = await asyncio.wait_for(
+                        run_in_threadpool(service.translate_sign_to_text, sequence),
+                        timeout=settings.inference_timeout_s,
+                    )
                 except ValueError as exc:
                     await _send_error(websocket, ErrorCode.INVALID_MESSAGE, str(exc))
+                    continue
+                except TimeoutError:
+                    await _send_error(
+                        websocket, ErrorCode.SESSION_ERROR,
+                        f"Inference did not complete within {settings.inference_timeout_s}s.",
+                    )
                     continue
                 latency_ms = (time.perf_counter() - started) * 1000
                 # No landmark data, no translation text: counts and gate

@@ -76,6 +76,9 @@ export default function TranslatePage() {
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [socketStatus, setSocketStatus] = useState<ConnectionStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
+  // Model/backend outage, kept separate from recognition outcomes: a dead
+  // model is not an "uncertain prediction".
+  const [modelError, setModelError] = useState<string | null>(null);
   const [results, setResults] = useState<TranslationTextMessage[]>([]);
   const [partial, setPartial] = useState<TranslationTextMessage | null>(null);
   const [framesSent, setFramesSent] = useState(0);
@@ -192,7 +195,10 @@ export default function TranslatePage() {
           setPartial(msg);
         }
       },
-      onError: (msg) => setSocketError(msg.message),
+      onError: (msg) => {
+        setSocketError(msg.message);
+        if (msg.code === "MODEL_UNAVAILABLE") setModelError(msg.message);
+      },
     });
     socketRef.current = socket;
     socket.connect();
@@ -243,7 +249,12 @@ export default function TranslatePage() {
     framesSentRef.current = 0;
     setFramesSent(0);
     everOpenRef.current = false;
+    // A new session must never present the previous session's final as
+    // current: drop stale results, partials, and model errors here.
+    setResults([]);
     setPartial(null);
+    setSocketError(null);
+    setModelError(null);
     setElapsed(0);
     lastSendRef.current = 0;
     connectSocket();
@@ -479,17 +490,38 @@ export default function TranslatePage() {
             </p>
           </div>
           <div className="flex flex-1 flex-col justify-center px-5 py-5">
-            {display ? (
+            {modelError ? (
               <>
-                <p className="text-2xl font-semibold tracking-tight">
-                  {display.text}
+                <p className="text-2xl font-semibold tracking-tight text-foreground/40">
+                  Translation unavailable
                 </p>
                 <p className="mt-2 text-xs text-foreground/55">
-                  {showingPartial
-                    ? "Partial result from the live window — keep signing; press Stop to finalize."
-                    : `${display.accepted ? "accepted" : display.reason} · ${display.result_type} · ${Math.round(display.confidence * 100)}% confidence`}
+                  {modelError} Camera preview is still available.
                 </p>
               </>
+            ) : display ? (
+              display.accepted ? (
+                <>
+                  <p className="text-2xl font-semibold tracking-tight">
+                    {display.text}
+                  </p>
+                  <p className="mt-2 text-xs text-foreground/55">
+                    {showingPartial
+                      ? "Partial result from the live window — keep signing; press Stop to finalize."
+                      : `accepted · ${display.result_type} · ${Math.round(display.confidence * 100)}% confidence`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-semibold tracking-tight text-foreground/60">
+                    Not confidently recognized
+                  </p>
+                  <p className="mt-2 text-xs text-foreground/55">
+                    {display.reason} · no text returned — keep signing or
+                    reposition your hands in frame.
+                  </p>
+                </>
+              )
             ) : (
               <>
                 <p className="text-2xl font-semibold tracking-tight text-foreground/40">
@@ -633,7 +665,11 @@ export default function TranslatePage() {
           <ul className="mt-2 divide-y divide-foreground/10 border-t border-foreground/10">
             {results.map((r, i) => (
               <li key={`${r.history_id ?? "live"}-${i}`} className="py-3">
-                <p className="font-medium">{r.text}</p>
+                <p className="font-medium">
+                  {r.accepted && r.text
+                    ? r.text
+                    : "Not confidently recognized"}
+                </p>
                 <p className="mt-0.5 text-xs text-foreground/50">
                   {r.accepted ? "accepted" : r.reason} · {r.result_type} ·{" "}
                   {Math.round(r.confidence * 100)}% confidence

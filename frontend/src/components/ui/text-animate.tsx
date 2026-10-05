@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { memo } from "react"
 import {
   AnimatePresence,
@@ -343,7 +344,7 @@ const TextAnimateBase = ({
 }: TextAnimateProps) => {
   const MotionComponent = motionElements[Component]
 
-  let segments: string[] = []
+  let segments: string[]
   switch (by) {
     case "word":
       segments = children.split(/(\s+)/)

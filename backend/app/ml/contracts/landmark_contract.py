@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.ml.preprocessing.landmarks import (
+    COMPONENT_ORDER,
+    COMPONENT_RANGES,
+    COORDINATE_ORDER,
     COORDINATES_PER_LANDMARK,
     NORMALIZATION_VERSION,
     RAW_FEATURE_DIM,
@@ -67,6 +70,32 @@ class LandmarkContract:
                 f"full_feature_mask has length {len(mask) if isinstance(mask, list) else 'N/A'}, "
                 f"expected {RAW_FEATURE_DIM}"
             )
+        # Component ORDER and RANGES are values, not just counts: a reordered
+        # bundle with the same totals must fail here, never mistranslate.
+        # Trailing extra components (e.g. POSE_WORLD_LANDMARKS) are allowed,
+        # but the serving prefix must match exactly.
+        order = data.get("component_order")
+        if not isinstance(order, list) or list(order[: len(COMPONENT_ORDER)]) != list(COMPONENT_ORDER):
+            errors.append(
+                f"component_order prefix {order!r} != expected {list(COMPONENT_ORDER)} "
+                f"(reordered bundles are rejected, not reinterpreted)"
+            )
+        ranges = data.get("component_ranges")
+        expected_ranges = {k: list(v) for k, v in COMPONENT_RANGES.items()}
+        if not isinstance(ranges, dict) or any(
+            list(ranges.get(k, [])) != v for k, v in expected_ranges.items()
+        ):
+            errors.append(
+                f"component_ranges {ranges!r} != expected {expected_ranges}"
+            )
+        coord_order = data.get("coordinate_order")
+        if coord_order is not None and list(coord_order) != list(COORDINATE_ORDER):
+            errors.append(
+                f"coordinate_order {coord_order!r} != expected {list(COORDINATE_ORDER)}"
+            )
+        max_frames = data.get("max_frames")
+        if not isinstance(max_frames, int) or isinstance(max_frames, bool) or max_frames < 2:
+            errors.append(f"max_frames={max_frames!r} must be an int >= 2")
         if errors:
             raise LandmarkContractError(
                 "landmark_contract.json failed validation:\n  - " + "\n  - ".join(errors)

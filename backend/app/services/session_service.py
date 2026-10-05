@@ -48,7 +48,11 @@ class TranslationSession:
         sees the full sequence."""
         if len(self._frames) < n:
             return None
-        return np.asarray(self._frames[-n:], dtype=np.float32)
+        from app.ml.preprocessing.landmarks import assert_landmark_shape
+
+        arr = np.asarray(self._frames[-n:], dtype=np.float32)
+        assert_landmark_shape(arr)  # fail loudly, never serve a misshapen window
+        return arr
 
     def note_interim(self, text: str) -> bool:
         """Repeat-agreement stabilization: emit the first accepted prediction
@@ -65,7 +69,10 @@ class TranslationSession:
 
     def take_sequence(self) -> np.ndarray:
         """Pop the buffered frames as a (T, 543, 3) array and reset the buffer."""
+        from app.ml.preprocessing.landmarks import assert_landmark_shape
+
         arr = np.asarray(self._frames, dtype=np.float32)
+        assert_landmark_shape(arr)  # fail loudly, never feed a ragged buffer onward
         self._frames = []
         self._sent_interim = None
         self._pending_interim = None

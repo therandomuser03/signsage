@@ -6,12 +6,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from .landmarks import assert_landmark_shape
+from .landmarks import assert_landmark_dtype, assert_landmark_shape
 from .normalization import normalize_pose_sequence
 
 
 def resize_sequence(seq: np.ndarray, target_len: int) -> np.ndarray:
     """Uniformly downsample long sequences; zero-pad short ones."""
+    if not isinstance(target_len, int) or target_len <= 0:
+        raise ValueError(f"target_len must be a positive int, received {target_len!r}")
+    seq = np.asarray(seq)
+    if seq.ndim != 2:
+        raise ValueError(f"Expected sequence shaped (T, D), received {seq.shape}")
     src_len = seq.shape[0]
     if src_len <= 0:
         raise ValueError("Empty pose sequence")
@@ -32,11 +37,19 @@ def prepare_live_landmarks(landmarks_xyz: np.ndarray, max_frames: int) -> tuple[
     true_len is min(T, max_frames) -- the real (unpadded) sequence length the
     model needs for its padding mask. Callers must NOT precompute deltas;
     the model does that internally (see ml/models/sign_to_text.py).
+
+    Raises:
+        ValueError: on any incompatible representation (wrong container,
+            non-numeric dtype, wrong shape, too few frames, bad max_frames).
     """
-    arr = np.asarray(landmarks_xyz, dtype=np.float32)
+    arr = np.asarray(landmarks_xyz)
+    assert_landmark_dtype(arr)
     assert_landmark_shape(arr)
+    arr = arr.astype(np.float32)
+    if not isinstance(max_frames, int) or max_frames < 2:
+        raise ValueError(f"max_frames must be an int >= 2, received {max_frames!r}")
     if len(arr) < 2:
-        raise ValueError("Need at least two frames.")
+        raise ValueError(f"Need at least two frames, received {len(arr)}.")
     flat = arr.reshape(len(arr), -1)
     norm = normalize_pose_sequence(flat)
     true_len = min(len(norm), max_frames)
@@ -50,7 +63,10 @@ def compute_motion_energy(landmarks_xyz: np.ndarray) -> float:
     model's output -- a static/no-signing frame sequence should not produce
     a confident-looking translation.
     """
-    arr = np.asarray(landmarks_xyz, dtype=np.float32)
+    arr = np.asarray(landmarks_xyz)
+    assert_landmark_dtype(arr)
+    assert_landmark_shape(arr)
+    arr = arr.astype(np.float32)
     if len(arr) < 2:
         return 0.0
     norm = normalize_pose_sequence(arr.reshape(len(arr), -1))

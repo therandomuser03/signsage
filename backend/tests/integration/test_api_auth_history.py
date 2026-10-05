@@ -120,3 +120,26 @@ def test_ragged_landmarks_are_rejected_with_422_not_a_crash(make_client, fake_bu
     c = make_client(bundle=fake_bundle, promoted=True)
     bad = [{"landmarks": [[0.0, 0.0]] * 543} for _ in range(3)]  # 2 coords, not 3
     assert c.post("/api/v1/translation/sign-to-text", json={"frames": bad}).status_code == 422
+
+
+def test_caller_confidence_floor_returns_unsupported_without_text(make_client, fake_bundle):
+    """accepted=false must carry text "" and a reason -- the wire equivalent
+    of {status: "uncertain", text: null}. No plausible English on uncertainty."""
+    c = make_client(bundle=fake_bundle, promoted=True)
+    rng = np.random.default_rng(3)
+    frames = [{"landmarks": rng.normal(size=(543, 3)).tolist()} for _ in range(20)]
+    body = c.post(
+        "/api/v1/translation/sign-to-text",
+        json={"frames": frames, "min_confidence": 1.0},
+    ).json()
+    assert body["accepted"] is False
+    assert body["text"] == ""
+    assert body["reason"] == "low_model_confidence"
+
+
+def test_inference_timeout_is_a_clean_503_not_a_hang(make_client, fake_bundle):
+    c = make_client(bundle=fake_bundle, promoted=True, inference_timeout_s=0)
+    rng = np.random.default_rng(3)
+    frames = [{"landmarks": rng.normal(size=(543, 3)).tolist()} for _ in range(20)]
+    r = c.post("/api/v1/translation/sign-to-text", json={"frames": frames})
+    assert r.status_code == 503 and r.json()["code"] == "SESSION_ERROR"

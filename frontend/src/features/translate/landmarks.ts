@@ -18,6 +18,29 @@ export const POSE_COUNT = 33;
 export const FACE_COUNT = 468;
 export const HAND_COUNT = 21;
 
+/** Canonical component order. Must match backend COMPONENT_ORDER exactly:
+ * POSE[0:33] + FACE[33:501] + LEFT_HAND[501:522] + RIGHT_HAND[522:543]. */
+export const COMPONENT_ORDER = [
+  "POSE_LANDMARKS",
+  "FACE_LANDMARKS",
+  "LEFT_HAND_LANDMARKS",
+  "RIGHT_HAND_LANDMARKS",
+] as const;
+
+export const COMPONENT_RANGES: Record<string, [number, number]> = {
+  POSE_LANDMARKS: [0, 33],
+  FACE_LANDMARKS: [33, 501],
+  LEFT_HAND_LANDMARKS: [501, 522],
+  RIGHT_HAND_LANDMARKS: [522, 543],
+};
+
+// Fail loudly at module load if the counts ever drift from the contract.
+if (POSE_COUNT + FACE_COUNT + HAND_COUNT * 2 !== TOTAL_LANDMARKS) {
+  throw new Error(
+    `landmark contract drift: ${POSE_COUNT}+${FACE_COUNT}+${HAND_COUNT}*2 != ${TOTAL_LANDMARKS}`
+  );
+}
+
 export type LandmarkPoint = [number, number, number];
 
 export interface HolisticFrame {

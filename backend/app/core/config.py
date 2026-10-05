@@ -48,6 +48,13 @@ class Settings(BaseSettings):
 
     device: str = "cpu"  # set to "cuda" only if a GPU is actually available at serve time
 
+    # Upper bound for one synchronous model inference (REST or WebSocket
+    # final). Inference runs in a worker thread that torch cannot cancel, so
+    # this only frees the request with a SESSION_ERROR instead of hanging it.
+    # Generous on purpose: a hung/overloaded model must fail loudly, never
+    # leave a client waiting indefinitely.
+    inference_timeout_s: float = 60.0
+
     # --- Acceptance gates (mirrors the notebook's predict_live_landmarks) --
     min_motion_energy: float = 0.002
     # The notebook's own confidence floor (LIVE_CONFIDENCE_FLOOR) was never

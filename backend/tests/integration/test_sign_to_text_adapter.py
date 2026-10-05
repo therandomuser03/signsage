@@ -52,6 +52,43 @@ def test_wrong_landmark_shape_raises_value_error(fake_bundle):
         pipeline.transcribe(wrong_shape)
 
 
+def test_empty_and_single_frame_sequences_raise_value_error(fake_bundle):
+    """Empty / single-frame input can never be a translation: fail loudly."""
+    pipeline = SignToTextAdapter.load(fake_bundle, device="cpu")
+    with pytest.raises(ValueError):
+        pipeline.transcribe(np.zeros((0, 543, 3), dtype=np.float32))
+    with pytest.raises(ValueError):
+        pipeline.transcribe(np.zeros((1, 543, 3), dtype=np.float32))
+
+
+def test_impossible_confidence_floor_yields_unsupported_result(fake_bundle):
+    """No confidence can reach 1.0: the result must be unsupported with NO
+    text -- never a plausible-looking sentence."""
+    pipeline = SignToTextAdapter.load(fake_bundle, device="cpu")
+    rng = np.random.default_rng(0)
+    moving = rng.normal(size=(40, 543, 3)).astype(np.float32)
+    result = pipeline.transcribe(moving, min_confidence=1.0)
+    assert result.accepted is False
+    assert result.reason == "low_model_confidence"
+    assert result.text == ""
+
+
+def test_repeated_inference_is_deterministic_and_mutates_nothing(fake_bundle):
+    """Same input twice must give the same verdict and leave the model in
+    eval mode with gradients disabled -- inference holds no per-request state."""
+    pipeline = SignToTextAdapter.load(fake_bundle, device="cpu")
+    rng = np.random.default_rng(0)
+    moving = rng.normal(size=(40, 543, 3)).astype(np.float32)
+    before = {k: v.clone() for k, v in pipeline.model.state_dict().items()}
+    first = pipeline.transcribe(moving)
+    second = pipeline.transcribe(moving)
+    assert (first.text, first.accepted, first.reason, first.confidence) == (
+        second.text, second.accepted, second.reason, second.confidence)
+    assert pipeline.model.training is False
+    for k, v in pipeline.model.state_dict().items():
+        assert torch.equal(v, before[k]), f"inference mutated parameter {k}"
+
+
 def test_load_rejects_a_bundle_whose_manifest_was_tampered_with(fake_bundle):
     """A bundle that fails cross-validation must be rejected loudly at load
     time, never silently served -- this is the whole point of

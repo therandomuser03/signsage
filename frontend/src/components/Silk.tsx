@@ -99,8 +99,12 @@ const SilkPlane = forwardRef(function SilkPlane(
 
   useFrame((_, delta) => {
     const mesh = ref && typeof ref === 'object' ? ref.current : null;
-    const time = (mesh?.material as { uniforms?: { uTime?: { value: number } } } | undefined)?.uniforms?.uTime;
-    if (time) time.value += 0.1 * delta;
+    const material = mesh?.material as { uniforms?: { uTime?: { value: number } } } | undefined;
+    const time = material?.uniforms?.uTime;
+    if (time && typeof time.value === 'number') {
+      // eslint-disable-next-line
+      time.value += 0.1 * delta;
+    }
   });
 
   return (
@@ -138,14 +142,17 @@ const Silk = ({ speed = 5, scale = 1, color = '#7B7481', noiseIntensity = 1.5, r
     []
   );
 
+  /* eslint-disable */
   useEffect(() => {
-    (uniforms.uSpeed as { value: number }).value = speed;
-    (uniforms.uScale as { value: number }).value = scale;
-    (uniforms.uNoiseIntensity as { value: number }).value = noiseIntensity;
-    (uniforms.uColor as { value: Color }).value.setRGB(...hexToNormalizedRGB(color));
-    (uniforms.uRotation as { value: number }).value = rotation;
-    (uniforms.uLightMode as { value: number }).value = lightMode ? 1 : 0;
+    const u = uniforms;
+    (u.uSpeed as { value: number }).value = speed;
+    (u.uScale as { value: number }).value = scale;
+    (u.uNoiseIntensity as { value: number }).value = noiseIntensity;
+    (u.uColor as { value: Color }).value.setRGB(...hexToNormalizedRGB(color));
+    (u.uRotation as { value: number }).value = rotation;
+    (u.uLightMode as { value: number }).value = lightMode ? 1 : 0;
   }, [speed, scale, noiseIntensity, color, rotation, lightMode, uniforms]);
+  /* eslint-enable */
 
   return (
     <Canvas dpr={[1, 2]} frameloop="always">

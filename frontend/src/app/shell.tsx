@@ -78,10 +78,10 @@ function UserArea() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    let live = true;
-    const resolve = async () => {
+    const live = { current: true };
+const resolve = async () => {
       const token = await getAccessToken();
-      if (!live) return;
+      if (!live.current) return;
       if (!token) {
         setEmail(null);
         setChecking(false);
@@ -89,11 +89,11 @@ function UserArea() {
       }
       try {
         const me = await apiClient.me();
-        if (live) setEmail(me.email ?? "Account");
+        if (live.current) setEmail(me.email ?? "Account");
       } catch {
-        if (live) setEmail("Account");
+        if (live.current) setEmail("Account");
       }
-      if (live) setChecking(false);
+      setChecking(false);
     };
     void resolve();
     return onAuthChange((signedIn) => {

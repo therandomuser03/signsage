@@ -10,7 +10,7 @@ const hexToRgb = (hex: string): [number, number, number] => {
   return [parseInt(match[1], 16) / 255, parseInt(match[2], 16) / 255, parseInt(match[3], 16) / 255];
 };
 
-type Uniform = { value: any };
+type Uniform = { value: number[] };
 
 const setColor = (uniform: Uniform, hex: string) => {
   const color = hexToRgb(hex);
@@ -304,7 +304,7 @@ const GhostFibers = ({
       elapsed += delta;
 
       if (now - lastRenderTime >= 1000 / frameRate - 0.5) {
-        (program.uniforms.uTime as Uniform).value = elapsed;
+        (program.uniforms.uTime as Uniform).value = [elapsed];
         render();
         lastRenderTime = now;
       }
@@ -396,28 +396,28 @@ const GhostFibers = ({
     const uniforms = context.program.uniforms as Record<string, Uniform>;
     setColor(uniforms.uLineColor, lineColor);
     setColor(uniforms.uGlowColor, glowColor);
-    uniforms.uSpeed.value = speed;
-    uniforms.uScale.value = scale;
-    uniforms.uRotation.value = rotation;
-    uniforms.uRotationSpeed.value = rotationSpeed;
-    uniforms.uLayers.value = Math.min(Math.max(Math.round(layers), 1), 10);
-    uniforms.uWaveAmplitude.value = waveAmplitude;
-    uniforms.uWaveFrequency.value = waveFrequency;
-    uniforms.uWaveSpeed.value = waveSpeed;
-    uniforms.uLayerSpeed.value = layerSpeed;
-    uniforms.uTwist.value = twist;
-    uniforms.uTwistFrequency.value = twistFrequency;
-    uniforms.uTwistSpeed.value = twistSpeed;
-    uniforms.uLineFrequency.value = lineFrequency;
-    uniforms.uLineSpacing.value = lineSpacing;
-    uniforms.uLineSharpness.value = lineSharpness;
-    uniforms.uGlowFalloff.value = glowFalloff;
-    uniforms.uGlowIntensity.value = glowIntensity;
-    uniforms.uBrightness.value = brightness;
-    uniforms.uBlueBoost.value = blueBoost;
-    uniforms.uVignette.value = vignette;
-    uniforms.uGrain.value = grain;
-    uniforms.uLightMode.value = lightMode ? 1 : 0;
+    uniforms.uSpeed.value = [speed];
+    uniforms.uScale.value = [scale];
+    uniforms.uRotation.value = [rotation];
+    uniforms.uRotationSpeed.value = [rotationSpeed];
+    uniforms.uLayers.value = [Math.min(Math.max(Math.round(layers), 1), 10)];
+    uniforms.uWaveAmplitude.value = [waveAmplitude];
+    uniforms.uWaveFrequency.value = [waveFrequency];
+    uniforms.uWaveSpeed.value = [waveSpeed];
+    uniforms.uLayerSpeed.value = [layerSpeed];
+    uniforms.uTwist.value = [twist];
+    uniforms.uTwistFrequency.value = [twistFrequency];
+    uniforms.uTwistSpeed.value = [twistSpeed];
+    uniforms.uLineFrequency.value = [lineFrequency];
+    uniforms.uLineSpacing.value = [lineSpacing];
+    uniforms.uLineSharpness.value = [lineSharpness];
+    uniforms.uGlowFalloff.value = [glowFalloff];
+    uniforms.uGlowIntensity.value = [glowIntensity];
+    uniforms.uBrightness.value = [brightness];
+    uniforms.uBlueBoost.value = [blueBoost];
+    uniforms.uVignette.value = [vignette];
+    uniforms.uGrain.value = [grain];
+    uniforms.uLightMode.value = [lightMode ? 1 : 0];
     context.setFps(fps);
     context.setPaused(paused);
     context.render();

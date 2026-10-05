@@ -1,12 +1,14 @@
 """REST Sign->Text (complete recorded sequence). Live capture uses /ws/translate."""
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 import numpy as np
 from fastapi import APIRouter, Depends
 
 from app.core.dependencies import get_optional_history_service, get_request_user, get_translation_service
+from app.core.errors import InferenceTimeoutError, InvalidLandmarksError
 from app.core.security import AuthenticatedUser
 from app.domain.translation.entities import Direction, NewHistoryRecord
 from app.domain.translation.policies import classify_result, should_persist
@@ -29,10 +31,22 @@ async def translate_sign_to_text(
     from starlette.concurrency import run_in_threadpool
 
     landmarks = np.array([f.landmarks for f in payload.frames], dtype=np.float32)
-    result = await run_in_threadpool(
-        service.translate_sign_to_text, landmarks,
-        min_motion=payload.min_motion, min_confidence=payload.min_confidence,
-    )
+    try:
+        result = await asyncio.wait_for(
+            run_in_threadpool(
+                service.translate_sign_to_text, landmarks,
+                min_motion=payload.min_motion, min_confidence=payload.min_confidence,
+            ),
+            timeout=settings.inference_timeout_s,
+        )
+    except TimeoutError as exc:
+        raise InferenceTimeoutError(
+            f"Sign->Text inference did not complete within {settings.inference_timeout_s}s."
+        ) from exc
+    except ValueError as exc:
+        # Schema-valid JSON that still violates the canonical representation
+        # (e.g. ragged frames numpy accepted): 422, never an unhandled 500.
+        raise InvalidLandmarksError(str(exc)) from exc
     history_id = None
     if user and history and payload.save_history and should_persist(result):
         history_id = await history.try_record(user, NewHistoryRecord(

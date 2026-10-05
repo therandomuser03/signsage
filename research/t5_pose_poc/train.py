@@ -23,8 +23,10 @@ normalization version, split manifest, seed, metrics, git revision.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import math
+import os
 import subprocess
 import sys
 import time
@@ -46,6 +48,34 @@ REAL_GATE_N = 64
 REAL_GATE_EM = 0.95
 
 
+def log_memory(tag: str) -> None:
+    """One-line host+GPU memory diagnostic (never spams per batch)."""
+    try:
+        import resource
+        rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+        # Linux ru_maxrss is KiB; macOS is bytes. Heuristic normalize:
+        if sys.platform == "darwin":
+            rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e9
+        rss = f"rss_max={rss_gb:.2f}G"
+    except Exception:  # noqa: BLE001
+        try:
+            with open("/proc/self/status") as fh:
+                vm = next(l for l in fh if l.startswith("VmRSS"))
+            rss = f"rss={int(vm.split()[1]) / 1e6:.2f}G"
+        except Exception:  # noqa: BLE001
+            rss = "rss=?"
+    if torch.cuda.is_available():
+        try:
+            al = torch.cuda.memory_allocated() / 1e9
+            rs = torch.cuda.memory_reserved() / 1e9
+            gpu = f" cuda_alloc={al:.2f}G cuda_res={rs:.2f}G"
+        except Exception:  # noqa: BLE001
+            gpu = ""
+    else:
+        gpu = ""
+    print(f"[mem:{tag}] {rss}{gpu}", flush=True)
+
+
 def tokenize_batch(tokenizer, texts: list[str]) -> torch.Tensor:
     enc = tokenizer(texts, padding="max_length", max_length=MAX_TOKENS,
                     truncation=True, return_tensors="pt")
@@ -55,15 +85,28 @@ def tokenize_batch(tokenizer, texts: list[str]) -> torch.Tensor:
 
 
 class ShardDataset(Dataset):
-    """Loads materialize.py .npz shards (poses fp16 -> fp32 on the fly)."""
+    """Loads materialize.py .npz shards (poses fp16 -> fp32 on the fly).
+
+    Each shard member is loaded ONCE per file (np.load returns a fresh
+    full array on every __getitem__ call, so per-row z["poses"][i] access
+    would decompress the whole shard N times and pin N full-size bases).
+    Rows are copied out so the per-shard base can be released immediately.
+    """
 
     def __init__(self, shard_paths: list[str]):
         self.rows = []
         for sp in shard_paths:
-            z = np.load(sp, allow_pickle=True)
-            for i in range(len(z["uids"])):
-                self.rows.append((z["poses"][i], int(z["lengths"][i]),
-                                  str(z["texts"][i]), str(z["uids"][i])))
+            with np.load(sp, allow_pickle=True) as z:
+                poses = z["poses"]
+                lengths = z["lengths"]
+                texts = z["texts"]
+                uids = z["uids"]
+                for i in range(len(uids)):
+                    self.rows.append((np.array(poses[i], copy=True),
+                                      int(lengths[i]),
+                                      str(texts[i]), str(uids[i])))
+            del poses, lengths, texts, uids
+            gc.collect()
 
     def __len__(self):
         return len(self.rows)
@@ -71,6 +114,55 @@ class ShardDataset(Dataset):
     def __getitem__(self, i):
         p, length, text, uid = self.rows[i]
         return torch.from_numpy(p.astype(np.float32)), length, text, uid
+
+
+class GateDataset(Dataset):
+    """Tiny in-memory 64-row gate set (fp16 rows -> fp32 on the fly)."""
+
+    def __init__(self, rows: list):
+        self.rows = rows
+
+    def __len__(self):
+        return len(self.rows)
+
+    def __getitem__(self, i):
+        p, length, text, uid = self.rows[i]
+        return torch.from_numpy(p.astype(np.float32)), length, text, uid
+
+
+def build_gate_dataset(shard_dir: Path, n: int) -> GateDataset:
+    """Collect only the first n TRAIN rows across sorted train_*.npz shards.
+
+    Reads shard-by-shard, copies just the needed rows, and releases each
+    shard's arrays before opening the next one. Never touches val/test
+    shards and never holds more than one shard + n small rows at once.
+    """
+    shard_paths = sorted(shard_dir.glob("train_*.npz"))
+    if not shard_paths:
+        raise SystemExit(f"no train_*.npz shards in {shard_dir}")
+    rows: list = []
+    shards_touched = 0
+    for sp in shard_paths:
+        if len(rows) >= n:
+            break
+        with np.load(str(sp), allow_pickle=True) as z:
+            poses = z["poses"]
+            lengths = z["lengths"]
+            texts = z["texts"]
+            uids = z["uids"]
+            take = min(n - len(rows), len(uids))
+            for i in range(take):
+                rows.append((np.array(poses[i], copy=True),
+                             int(lengths[i]),
+                             str(texts[i]), str(uids[i])))
+        shards_touched += 1
+        del poses, lengths, texts, uids
+        gc.collect()
+    if len(rows) < n:
+        raise SystemExit(f"only {len(rows)} train rows, need {n}")
+    print(f"gate dataset: {len(rows)} rows from {shards_touched} shard(s) "
+          f"(of {len(shard_paths)} train shards)", flush=True)
+    return GateDataset(rows)
 
 
 class SyntheticGateDataset(Dataset):
@@ -237,15 +329,18 @@ def run_gate(ds, loader, tokenizer, device, model, out: Path, mode: str,
              n: int, seed: int, a_steps: int, b_steps: int,
              lr_a: float, lr_b: float, t0: float,
              em_threshold: float) -> int:
+    log_memory("gate_start")
     print(f"STAGE A: frozen T5, projection only ({a_steps} steps)", flush=True)
     model.set_t5_frozen(True)
     hist_a = run_stage(model, loader, tokenizer, device, a_steps, lr_a)
+    log_memory("gate_stage_a_done")
     em_a, _ = exact_match(model, loader, tokenizer, device)
     print(f"STAGE A: loss {hist_a[0]:.4f}->{hist_a[-1]:.4f} exact_match={em_a:.1%}", flush=True)
     print(f"STAGE B: joint fine-tune ({b_steps} steps)", flush=True)
     model.set_t5_frozen(False)
     hist_b = run_stage(model, loader, tokenizer, device, b_steps, lr_b)
     em_b, ex_b = exact_match(model, loader, tokenizer, device)
+    log_memory("gate_stage_b_done")
     print(f"STAGE B: loss {hist_b[0]:.4f}->{hist_b[-1]:.4f} exact_match={em_b:.1%}", flush=True)
     for r, h in ex_b:
         print(f"  REF={r!r} HYP={h!r}", flush=True)
@@ -376,10 +471,16 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
 
+    log_memory("startup")
+    if os.environ.get("HF_TOKEN"):
+        print("HF_TOKEN configured: YES", flush=True)
+    else:
+        print("HF_TOKEN configured: NO (using cached weights if available)", flush=True)
     tokenizer = T5Tokenizer.from_pretrained(T5_CHECKPOINT)
     model = PoseT5().to(device)
     print(f"params={model.trainable_summary()} "
           f"amp={'on' if device.type == 'cuda' else 'off (CPU fallback)'}", flush=True)
+    log_memory("model")
     collate = partial(collate_pose_text, tokenizer=tokenizer)
 
     if args.synthetic_gate:
@@ -392,22 +493,36 @@ def main(argv=None) -> int:
     if args.real_gate:
         if not args.shards:
             raise SystemExit("--real-gate needs --shards <materialize.py dir>")
-        train_ds = ShardDataset(sorted(map(str, Path(args.shards).glob("train_*.npz"))))
-        if len(train_ds) < args.gate_n:
-            raise SystemExit(f"only {len(train_ds)} train rows, need {args.gate_n}")
-        gate_ds = Subset(train_ds, list(range(args.gate_n)))  # first 64 TRAIN rows
-        loader = DataLoader(gate_ds, batch_size=args.batch, shuffle=True, collate_fn=collate)
+        shard_dir = Path(args.shards)
+        log_memory("shard_discovery")
+        gate_ds = build_gate_dataset(shard_dir, args.gate_n)
+        log_memory("gate_dataset")
+        # Gate safety: single-process loading, no worker duplication of data,
+        # no persistent workers, no aggressive prefetch, no pinned copies.
+        loader = DataLoader(gate_ds, batch_size=args.batch, shuffle=True,
+                            collate_fn=collate, num_workers=0,
+                            pin_memory=False)
         print(f"REAL GATE: {args.gate_n} materialized train rows "
               f"(hard STOP below {args.gate_threshold:.0%} EM)", flush=True)
-        return run_gate(gate_ds, loader, tokenizer, device, model, out, "real-gate",
-                        args.gate_n, args.seed, args.stage_a_steps, args.stage_b_steps,
-                        args.lr_a, args.lr_b, t0, em_threshold=args.gate_threshold)
+        try:
+            return run_gate(gate_ds, loader, tokenizer, device, model, out, "real-gate",
+                            args.gate_n, args.seed, args.stage_a_steps, args.stage_b_steps,
+                            args.lr_a, args.lr_b, t0, em_threshold=args.gate_threshold)
+        finally:
+            del loader, gate_ds
+            del model, tokenizer
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            log_memory("gate_cleanup")
 
     if not args.shards:
         raise SystemExit("need --shards <materialize.py dir>, --synthetic-gate, or --real-gate")
     shard_dir = Path(args.shards)
+    log_memory("shard_discovery")
     train_ds = ShardDataset(sorted(map(str, shard_dir.glob("train_*.npz"))))
     val_ds = ShardDataset(sorted(map(str, shard_dir.glob("val_*.npz"))))
+    log_memory("full_dataset")
     if not len(train_ds) or not len(val_ds):
         raise SystemExit("empty train or val shards -- refusing.")
     workers = 2 if device.type == "cuda" else 0

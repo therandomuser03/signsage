@@ -49,8 +49,25 @@ class SignToTextAdapter:
         exact component order documented in landmark_contract.json. Do not
         normalize or compute deltas yourself -- this method runs the entire
         preprocessing + model + decode pipeline.
+
+        Raises:
+            ValueError: if the input is not the canonical representation
+                (numeric (T, 543, 3) with T >= 2). Incompatible input is
+                rejected here with a clear error, never silently converted
+                or fed to the model.
         """
-        processed, true_len = prepare_live_landmarks(landmarks_xyz, max_frames=self.contract.model.max_frames)
+        import numpy as np
+
+        from app.ml.preprocessing.landmarks import assert_landmark_dtype, assert_landmark_shape
+
+        arr = np.asarray(landmarks_xyz)
+        assert_landmark_dtype(arr)
+        assert_landmark_shape(arr)
+        if len(arr) < 2:
+            raise ValueError(
+                f"Incompatible representation: need at least 2 frames, received {len(arr)}"
+            )
+        processed, true_len = prepare_live_landmarks(arr, max_frames=self.contract.model.max_frames)
         motion = compute_motion_energy(landmarks_xyz)
 
         ids, logps = greedy_decode_ids(

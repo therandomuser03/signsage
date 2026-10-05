@@ -97,7 +97,7 @@ export function LightRays({
   const cycleDuration = Math.max(speed, 0.1)
 
   useEffect(() => {
-    setRays(createRays(count, cycleDuration))
+    setTimeout(() => setRays(createRays(count, cycleDuration)), 0)
   }, [count, cycleDuration])
 
   return (

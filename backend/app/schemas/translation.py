@@ -32,7 +32,10 @@ class LandmarkFramePayload(BaseModel):
 class SignToTextRequest(BaseModel):
     """A complete recorded sequence (REST fallback / testing). Live capture
     should use the WebSocket route."""
-    frames: List[LandmarkFramePayload] = Field(..., min_length=2)
+    # Upper bound mirrors TranslationSession's buffer ceiling (4 * 160): an
+    # unbounded REST sequence would hit the same memory/DoS concern, so it is
+    # rejected at the schema boundary with a clear error.
+    frames: List[LandmarkFramePayload] = Field(..., min_length=2, max_length=640)
     min_motion: Optional[float] = None
     min_confidence: Optional[float] = None
     save_history: bool = True  # only takes effect for signed-in users
