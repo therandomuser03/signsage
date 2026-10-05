@@ -375,25 +375,24 @@ export default function TranslatePage() {
       {/* Workspace: camera + live translation panel */}
       <div className="grid items-stretch gap-4 lg:grid-cols-3">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-foreground/10 bg-black lg:col-span-2">
-        {(phase === "live" || phase === "paused") && (
-          <>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className={`absolute inset-0 h-full w-full object-cover ${mirrorClass}`}
-            />
-            <canvas
-              ref={canvasRef}
-              aria-hidden="true"
-              className={`absolute inset-0 h-full w-full ${mirrorClass}`}
-            />
-          </>
-        )}
-        {phase === "idle" && (
-          <video ref={videoRef} className="hidden" />
-        )}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`
+            absolute inset-0 h-full w-full object-cover ${mirrorClass}
+            ${phase === "live" || phase === "paused" ? "" : "hidden"}
+          `}
+        />
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          className={`
+            absolute inset-0 h-full w-full ${mirrorClass}
+            ${phase === "live" || phase === "paused" ? "" : "hidden"}
+          `}
+        />
         {phase !== "live" && phase !== "paused" && (
           <div className="absolute inset-0 grid place-items-center p-6 text-center">
             {busy ? (
