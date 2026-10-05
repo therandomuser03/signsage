@@ -11,6 +11,7 @@ Modes:
 
 Usage (local CPU wiring probe, no dataset):
     python train.py --synthetic-gate --out ./t5_poc_gate
+    (committed record: research/evaluation/t5_poc_gate/gate_report.json)
 
 Usage (Kaggle GPU host, after materialize.py):
     python train.py --real-gate --shards ./t5_poc_shards --out ./t5_poc_gate64

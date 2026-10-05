@@ -17,7 +17,7 @@ Before changing code, read:
 
 For model/research work, also read:
 
-- `research/outputs/phase0/RESULTS.md`
+- `research/evaluation/reports/352868924/evaluation_results.json` (verified NO-GO evidence; the historical `research/outputs/phase0/RESULTS.md` path cited by older docs is TBD/missing in this checkout)
 - `research/notebooks/signsage.ipynb`
 
 ## 2. The most important rule
@@ -35,7 +35,7 @@ When documents disagree:
 1. Actual source code and tests determine implementation.
 2. `STATUS.md` determines current project state.
 3. `API.md` determines communication contracts.
-4. `RESULTS.md` determines measured research outcomes.
+4. Historical evaluation records (e.g. `research/evaluation/reports/352868924/evaluation_results.json`; older docs cite a historical `RESULTS.md` path that is TBD/missing) determine measured research outcomes.
 5. `DECISIONS.md` explains architectural choices.
 6. `PRD.md` describes intended scope.
 

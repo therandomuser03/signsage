@@ -41,7 +41,7 @@ Status vocabulary: WORKING / PARTIALLY WORKING / BROKEN / UNUSED / EXPERIMENTAL 
 |-----------|--------|------|
 | iSign dataset in repo | MISSING by design | `research/datasets/README.md`: streamed from HF, never committed; persistent copy lives on the old laptop |
 | `research/training/*` SignTransformer V2 (canonical impl, SP-16k, export_bundle, READINESS plan, Kaggle notebook) | EXPERIMENTAL | Code defined, training not yet run |
-| T5 POC `research/t5_pose_poc/*` (materialize/train/evaluate/model, self-contained Kaggle notebook) | EXPERIMENTAL | Research-only by README; real-gate memory + Phase-3 token bugs repaired; only synthetic-gate ever executed and it FAILED correctly (`t5_poc_gate/gate_report.json`: EM 0.0→0.09375 vs 0.5 threshold, `WIRING-FAIL`, correctly blocking 5k) |
+| T5 POC `research/t5_pose_poc/*` (materialize/train/evaluate/model, self-contained Kaggle notebook) | EXPERIMENTAL | Research-only by README; real-gate memory + Phase-3 token bugs repaired; only synthetic-gate ever executed and it FAILED correctly (`research/evaluation/t5_poc_gate/gate_report.json`: EM 0.0→0.09375 vs 0.5 threshold, `WIRING-FAIL`, correctly blocking 5k) |
 | Checkpoints: 352868924 (WER 1.0046, diversity 0.99%, top-pred 44.8%) | BROKEN (as a translator) / WORKING (as a negative reference) | `promoted_to_backend:false`; reproducible collapse sample "the police said that" |
 | T5 `best.pt` | MISSING | No 5k run has produced one; PoseT5 state dict could never load through `SignToTextAdapter` (different arch + 32k vocab) |
 | Promotion (`backend/models/README`, `render.yaml` BUNDLE_URL/SHA) | WORKING gate, nothing promotable | Bar: beat-trivial + diversity_ok + `scripts/model_check` activity-gate |

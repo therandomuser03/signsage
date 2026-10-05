@@ -18,7 +18,7 @@ that; it explains exactly why each candidate set does NOT qualify.
 | iSign v1.1 (HF gated + old laptop; NOT in repo) | Continuous ISL videos with English translation targets; V1 tokenizer trained on 99,699 target sentences (`research/experiments/.../train_text.txt`, narrative-domain English, e.g. Akbar tales) | Domain only — no per-sign label inventory available locally |
 | 352868924 eval (`research/evaluation/reports/352868924/`) | WER 1.0046, EM **0.0**, diversity 0.99%, top prediction 44.8% (`"the police said that"` on random input), `div_ok: False` → verified NO-GO | Negative: zero successful recognitions |
 | T5 POC (`research/t5_pose_poc/`) | No weights exist; synthetic gate failed closed as designed | None |
-| `Let's Learn some Basic Sign.pdf` (ISLRTC, 15pp) | Image/scanned reference document; only title text + the string "SEEYOUTOMORROW" are machine-extractable — its sign contents cannot be enumerated from the file and were NOT enumerated | None — reference material, not recognition evidence, not a claim source |
+| `docs/reference/isl/Let's Learn some Basic Sign.pdf` (ISLRTC, 15pp) | Image/scanned reference document; only title text + the string "SEEYOUTOMORROW" are machine-extractable — its sign contents cannot be enumerated from the file and were NOT enumerated | None — reference material, not recognition evidence, not a claim source |
 | `sign_vocabulary.json` + avatar manifest (14 IDs) | EN→ISL **generation** vocabulary (avatar animations), contract-tested | None for recognition — wrong direction (see below) |
 
 ## SUPPORTED

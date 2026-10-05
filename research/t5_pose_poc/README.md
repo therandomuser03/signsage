@@ -27,7 +27,8 @@ checkpoint records `tokenizer: google-t5/t5-small` for reproducibility.
 
 ## Commands
 Local wiring gate (CPU, no dataset, no token):
-`backend/.venv/bin/python research/t5_pose_poc/train.py --synthetic-gate --out ./t5_poc_gate`
+`backend/.venv/bin/python research/t5_pose_poc/train.py --synthetic-gate --out ./research/evaluation/t5_poc_gate`
+(committed record: `research/evaluation/t5_poc_gate/gate_report.json`)
 
 Kaggle GPU (needs HF_TOKEN with iSign access):
 `python materialize.py --csv /path/iSign_v1.1.csv --pose-source remote --out ./t5_poc_shards`

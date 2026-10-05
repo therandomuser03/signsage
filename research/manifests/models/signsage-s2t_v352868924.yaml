@@ -80,7 +80,8 @@ backend_validation:
   note: >
     The random-noise-input transcription independently reproduces this run's
     own documented collapse mode (top_prediction_freq 44.84%, dominant output
-    "the police said that the police have been arrested." per RESULTS.md) --
+    "the police said that the police have been arrested." per the historical
+    Phase 0 evaluation record -- research/evaluation/reports/352868924/evaluation_results.json) --
     strong evidence the backend port is numerically faithful AND that the
     NO-GO verdict is real, not a backend bug.
 

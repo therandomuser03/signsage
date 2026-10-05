@@ -25,10 +25,18 @@ instead of serving NO-GO-quality output as if it were reliable). The research
 models remain available for experimentation via the dev-only
 `SIGNSAGE_ALLOW_UNPROMOTED_DEV` flag (see `backend/models/README.md`).
 
-Full numbers: [`research/outputs/phase0/RESULTS.md`](research/outputs/phase0/RESULTS.md)
-(run `20260916T144755Z`, also mirrored into
-[`backend/signsage_knowledge_manifest.json`](backend/signsage_knowledge_manifest.json),
-which is what the running backend actually serves via `/api/v1/models`).
+Full numbers for the verified NO-GO run are recorded in
+[`research/evaluation/reports/352868924/evaluation_results.json`](research/evaluation/reports/352868924/evaluation_results.json)
+(run manifest
+[`research/manifests/models/signsage-s2t_v352868924.yaml`](research/manifests/models/signsage-s2t_v352868924.yaml);
+see also [`docs/MODEL_READINESS.md`](docs/MODEL_READINESS.md)).
+The historical path `research/outputs/phase0/RESULTS.md` referenced by older
+documentation is TBD/missing in this checkout and is not used here.
+The run label `20260916T144755Z` below is a historical reference (TBD mapping
+to the verified run above).
+No checked-in `backend/signsage_knowledge_manifest.json` exists; the running
+backend reports its bundle/manifest status via `/api/v1/models` only when an
+operator-supplied bundle is configured.
 
 - **Sign→Text**: both the GRU baseline and the Transformer mode-collapsed during
   evaluation (0.6% / 3.9% unique outputs on the test set). WER is ~1.0–1.03 for every
@@ -78,7 +86,7 @@ research/   Training notebooks + Phase 0 experiment record and research artifact
 docs/       Architecture, data-model, decisions, security, testing, and development notes
 ```
 
-For the detailed repository tree, see [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md).
+For the detailed repository tree, see [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md).
 
 For the documentation map and agent workflow, see [`docs/MASTER.md`](docs/MASTER.md)
 and [`docs/AI_AGENT_GUIDE.md`](docs/AI_AGENT_GUIDE.md).
@@ -89,7 +97,7 @@ and [`docs/AI_AGENT_GUIDE.md`](docs/AI_AGENT_GUIDE.md).
 
 Start with:
 
-- [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) — detailed repository structure.
+- [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) — detailed repository structure.
 - [`docs/MASTER.md`](docs/MASTER.md) — canonical project orientation and source-of-truth hierarchy.
 - [`docs/STATUS.md`](docs/STATUS.md) — current implementation, verification, and research status.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system architecture and runtime boundaries.

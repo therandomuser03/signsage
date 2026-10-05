@@ -97,7 +97,7 @@ When documents conflict:
 1. Actual code and tests describe implementation.
 2. `API.md` describes the intended public communication contract.
 3. `STATUS.md` describes current verification state.
-4. `RESULTS.md` describes measured research outcomes.
+4. Historical evaluation records (e.g. `research/evaluation/reports/352868924/evaluation_results.json`; older docs cite a historical `RESULTS.md` path that is TBD/missing) describe measured research outcomes.
 5. `DECISIONS.md` explains why a technical choice was made.
 6. `PRD.md` describes intended scope, not implementation.
 7. Historical phase notes should not override current implementation evidence.

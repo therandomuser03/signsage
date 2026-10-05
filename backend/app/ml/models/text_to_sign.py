@@ -3,8 +3,10 @@
 Status: NOT SERVED. The training notebook's Text->Pose GRU experiment is
 gated behind RUN_TEXT_TO_POSE and is not executed by the current notebook
 run (see docs/UPDATE_NOTES.md: "Latest notebook does not run Text->Pose;
-the 20260916 result is historical only", and RESULTS.md: generated motion
-was only 7.9% of ground-truth motion -- near-static pose collapse).
+the 20260916 result is historical only", and the historical Phase 0 evaluation
+record -- see research/evaluation/reports/352868924/evaluation_results.json
+(older docs cite a historical RESULTS.md path that is TBD/missing): generated
+motion was only 7.9% of ground-truth motion -- near-static pose collapse).
 
 The actual shipped Text->Sign direction is the pre-authored VRM avatar +
 gloss-lookup pipeline in frontend/src/features/text-to-sign/ and backend
@@ -24,6 +26,7 @@ class TextToPoseModel:
     def __init__(self, *_, **__):
         raise NotImplementedError(
             "Text->Pose generative model is not served (near-static pose collapse, "
-            "see RESULTS.md). The shipped English->ISL path is the VRM avatar/gloss "
+            "see the historical Phase 0 evaluation record -- "
+            "research/evaluation/reports/352868924/evaluation_results.json). The shipped English->ISL path is the VRM avatar/gloss "
             "system -- see ml/adapters/text_to_sign_adapter.py."
         )

@@ -57,7 +57,7 @@ The current codebase/documentation describes:
 
 ### Important model status
 
-The application infrastructure can execute the Sign→Text pipeline, but the research checkpoints currently documented in `research/outputs/phase0/RESULTS.md` show severe output collapse. Therefore:
+The application infrastructure can execute the Sign→Text pipeline, but the verified research checkpoints show severe output collapse (see `research/evaluation/reports/352868924/evaluation_results.json` and `docs/MODEL_READINESS.md`; the historical path `research/outputs/phase0/RESULTS.md` cited by older documentation is TBD/missing in this checkout). Therefore:
 
 - **Pipeline availability ≠ translation quality**
 - **Passing tests ≠ model correctness**
@@ -76,7 +76,7 @@ The larger documented run used:
 
 The recorded results show severe Sign→Text output collapse and a Text→Pose motion-collapse problem. See:
 
-- `research/outputs/phase0/RESULTS.md`
+- `research/evaluation/reports/352868924/evaluation_results.json` (verified NO-GO evidence; the historical `research/outputs/phase0/RESULTS.md` path is TBD/missing)
 - `docs/PHASES.md`
 - `docs/TESTING.md`
 
