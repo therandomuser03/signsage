@@ -7,10 +7,12 @@ environment variable, e.g. SIGNSAGE_MODEL_BUNDLE_DIR.
 """
 from __future__ import annotations
 
+import json
 from functools import lru_cache
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -19,7 +21,11 @@ class Settings(BaseSettings):
     # --- Server ----------------------------------------------------------
     host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: list = ["http://localhost:5173"]
+    # Accepts a JSON array (Render/blueprint contract, e.g.
+    # '["https://app.vercel.app"]'), a single bare origin, or a
+    # comma-separated list. NoDecode keeps the raw env string so a bare
+    # (non-JSON) origin cannot crash startup with SettingsError.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     log_level: str = "INFO"
 
     # --- Sign->Text model --------------------------------------------------
@@ -113,6 +119,24 @@ class Settings(BaseSettings):
     # --- History ------------------------------------------------------------------
     history_enabled: bool = True
     history_backend: str = "supabase"  # "supabase" | "memory" (dev/tests only)
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            try:
+                parsed = json.loads(s)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                return [str(o).strip() for o in parsed if str(o).strip()]
+            if isinstance(parsed, str) and parsed.strip():
+                return [parsed.strip()]
+            return [o.strip() for o in s.split(",") if o.strip()]
+        return v
 
     @property
     def auth_enabled(self) -> bool:
