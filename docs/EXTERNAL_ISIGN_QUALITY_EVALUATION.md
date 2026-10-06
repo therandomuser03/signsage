@@ -336,7 +336,9 @@ The final status must be one of:
 
 ### This evaluation's recommendation:
 
-[TO BE FILLED AFTER EVALUATION RUN]
+**NO-GO** — the completed dataset-level evaluation (`research/evaluation/external_isign_t5/`,
+1,887 real held-out iSign samples, exact-match 0/1887 with severely degenerate output
+distribution) does not meet GO or CONDITIONAL GO status. See §16 below.
 
 **Do NOT set SIGNSAGE_MODEL_PROMOTED=true** until an explicit quality evaluation confirms GO or CONDITIONAL GO status.
 
@@ -359,3 +361,39 @@ The final status must be one of:
 **Safety gate**: `SIGNSAGE_MODEL_PROMOTED=false` (must remain throughout)
 
 **Stop condition**: After evaluation report is complete. Do not promote, deploy, integrate into frontend, retrain, or fine-tune.
+
+---
+
+## 16. Completed dataset-level evaluation (1,887 real held-out samples)
+
+The Kaggle dataset-level evaluation (`research/EXTERNAL_ISIGN_T5_KAGGLE_EVALUATION.ipynb`)
+has completed. Final artifacts (preserved exactly, source of truth):
+
+- `research/evaluation/external_isign_t5/predictions.csv` (1,887 records)
+- `research/evaluation/external_isign_t5/metrics.json`
+- `research/evaluation/external_isign_t5/confusion_matrix.csv`
+- `research/evaluation/external_isign_t5/evaluation_report.md`
+- `research/evaluation/external_isign_t5/__huggingface_repos__.json` (model/dataset provenance)
+
+## External iSign T5 Evaluation
+
+- Model: `manavdhamecha77/iSign-t5-pose-to-text`
+- Checkpoint: `t5-small-motion` (PoseEncoder MLP + T5-small, pose_dim=600, motion=True)
+- Evaluation: real held-out iSign data (video-level 80/10/10 split, seed 42)
+- Samples: requested 1887 | recorded 1887 | fetched_ok 1887 | inferred_ok 1887
+- Results: normalized exact-match **0/1887**; raw exact-match **0/1887**
+- Prediction behavior: 298 unique predictions (ratio 0.1579); dominant prediction
+  "isn't that amazing!" (401/1887, 21.25%); top-5 cumulative share ≈ 34.29%;
+  140 singletons; 0 empty predictions; device cuda
+- Verdict: **NO-GO** (candidate-level `evaluation_verdict` in `metrics.json`)
+- Production status: **NOT PROMOTED, NOT DEPLOYED**
+
+The verdict is candidate-level only. It does NOT change `SIGNSAGE_MODEL_PROMOTED`,
+the production registry, or any deployment gate. This candidate must not be used
+as the current production translation model.
+
+This conclusion is specifically about the evaluated `t5-small-motion` candidate
+under this evaluation/preprocessing setup. It is not a claim about all possible
+ISL models. It is separate from the in-house `signsage-s2t` evaluation
+(`research/evaluation/reports/352868924/`, also NO-GO); the two candidates'
+metrics must not be merged.

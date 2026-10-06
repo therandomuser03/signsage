@@ -1,0 +1,221 @@
+{
+  "model_repo": "manavdhamecha77/iSign-t5-pose-to-text",
+  "checkpoint": "t5-small-motion",
+  "checkpoint_dir": "/root/.cache/huggingface/hub/models--manavdhamecha77--iSign-t5-pose-to-text/snapshots/80e60781f37f5c2720a7bc927398fdd9b0c32298/t5-small-motion",
+  "tokenizer": "t5-small",
+  "dataset": "iSign held-out test set (video-level split, seed 42)",
+  "csv": "/root/.cache/huggingface/hub/datasets--Exploration-Lab--iSign/snapshots/e4ee6c5f0d9dfcbc74205e3f1388ce94da26c298/iSign_v1.1.csv",
+  "pose_source": "remote",
+  "remote_chunk_mb": 4,
+  "n_requested": 1887,
+  "n_recorded": 1887,
+  "n_fetched_ok": 1887,
+  "n_fetch_failed": 0,
+  "n_inferred_ok": 1887,
+  "n_samples": 1887,
+  "exact_match_accuracy": 0.0,
+  "exact_match_accuracy_raw": 0.0,
+  "n_correct": 0,
+  "n_correct_raw": 0,
+  "n_incorrect": 1887,
+  "avg_latency_s": 0.2036483306836248,
+  "median_latency_s": 0.1754,
+  "total_inference_s": 384.2844,
+  "avg_fetch_s": 0.5288599364069952,
+  "total_fetch_s": 997.96,
+  "total_preprocessing_s": 2.063,
+  "total_elapsed_s": 1385.802,
+  "device": "cuda",
+  "preprocessing": "verified external iSign (75 landmarks, conf 1.0, z-score axis=0, motion, pad/truncate 500)",
+  "generation": {
+    "max_length": 128,
+    "num_beams": 4
+  },
+  "eval_rule": "normalized: prediction == ground truth after lowercase/whitespace norm; raw: byte-exact raw equality",
+  "empty_prediction_rate": 0.0,
+  "prediction_distribution": {
+    "n_predictions": 1887,
+    "n_unique_predictions": 298,
+    "unique_prediction_ratio": 0.1579226285108638,
+    "top10_predictions": [
+      {
+        "prediction": "isn't that amazing!",
+        "count": 401,
+        "share": 0.21250662427133016
+      },
+      {
+        "prediction": "he said that he is very happy that he will not be able to make ends meet.",
+        "count": 83,
+        "share": 0.04398516163222046
+      },
+      {
+        "prediction": "he said that if he wants to become a doctor, he will be able to work hard and earn money.",
+        "count": 57,
+        "share": 0.030206677265500796
+      },
+      {
+        "prediction": "he was very happy to see such a huge crowd.",
+        "count": 54,
+        "share": 0.028616852146263912
+      },
+      {
+        "prediction": "he said that if he wants to resign, he will not be able to win the elections.",
+        "count": 52,
+        "share": 0.02755696873343932
+      },
+      {
+        "prediction": "he was very happy. he was very happy.",
+        "count": 51,
+        "share": 0.02702702702702703
+      },
+      {
+        "prediction": "he was very happy. he was very happy to see him.",
+        "count": 49,
+        "share": 0.025967143614202437
+      },
+      {
+        "prediction": "he said that if he wants to become a doctor, he will be able to work hard and earn a living.",
+        "count": 40,
+        "share": 0.021197668256491786
+      },
+      {
+        "prediction": "he said that if he wants to become a doctor, he would not be able to work hard and earn money.",
+        "count": 39,
+        "share": 0.02066772655007949
+      },
+      {
+        "prediction": "a tiger and a lion.",
+        "count": 34,
+        "share": 0.018018018018018018
+      }
+    ],
+    "top1_prediction": "isn't that amazing!",
+    "top1_count": 401,
+    "top1_share": 0.21250662427133016,
+    "top5_cumulative_share": 0.34287228404875464,
+    "singleton_predictions": 140,
+    "singleton_share": 0.07419183889772125,
+    "n_empty_predictions": 0,
+    "empty_prediction_rate": 0.0,
+    "prediction_char_length": {
+      "mean": 46.186539480657125,
+      "median": 40.0,
+      "min": 3,
+      "max": 115
+    },
+    "prediction_word_count": {
+      "mean": 9.969263381028087,
+      "median": 8.0,
+      "min": 1,
+      "max": 28
+    },
+    "n_unique_expected_labels": 1815,
+    "top10_expected_labels": [
+      {
+        "expected": "3",
+        "count": 5
+      },
+      {
+        "expected": "reading is fun.",
+        "count": 4
+      },
+      {
+        "expected": "let's talk.",
+        "count": 4
+      },
+      {
+        "expected": "2",
+        "count": 4
+      },
+      {
+        "expected": "page number",
+        "count": 4
+      },
+      {
+        "expected": "1",
+        "count": 4
+      },
+      {
+        "expected": "4",
+        "count": 4
+      },
+      {
+        "expected": "nest",
+        "count": 3
+      },
+      {
+        "expected": "to the teacher.",
+        "count": 3
+      },
+      {
+        "expected": "reading is fun!",
+        "count": 3
+      }
+    ]
+  },
+  "mode_collapse": {
+    "note": "ANALYSIS diagnostic only -- describes output concentration; it is NOT an official promotion criterion (the repository defines no cutoff for this candidate) and changes no gate.",
+    "dominant_prediction": "isn't that amazing!",
+    "dominant_count": 401,
+    "dominant_share": 0.21250662427133016,
+    "top5_cumulative_share": 0.34287228404875464,
+    "unique_prediction_ratio": 0.1579226285108638,
+    "highly_concentrated": true,
+    "concentration_rule": "descriptive heuristic for this analysis line only: top1_share >= 10% OR unique_ratio <= 5%"
+  },
+  "hallucination_risk": {
+    "note": "Wrong predictions are NOT automatically hallucinations; this section reports repetition/fluency patterns that warrant the controlled negative tests in docs/EXTERNAL_ISIGN_QUALITY_EVALUATION.md.",
+    "random_noise_probe": "not performed in this notebook (execution smoke tests used synthetic input only and make no quality claim); empty-frame / random-movement negative tests belong to the separate webcam protocol",
+    "n_incorrect": 1887,
+    "top_wrong_prediction": "isn't that amazing!",
+    "top_wrong_count": 401,
+    "top_wrong_share_of_incorrect": 0.21250662427133016,
+    "top10_wrong_predictions": [
+      {
+        "prediction": "isn't that amazing!",
+        "count": 401
+      },
+      {
+        "prediction": "he said that he is very happy that he will not be able to make ends meet.",
+        "count": 83
+      },
+      {
+        "prediction": "he said that if he wants to become a doctor, he will be able to work hard and earn money.",
+        "count": 57
+      },
+      {
+        "prediction": "he was very happy to see such a huge crowd.",
+        "count": 54
+      },
+      {
+        "prediction": "he said that if he wants to resign, he will not be able to win the elections.",
+        "count": 52
+      },
+      {
+        "prediction": "he was very happy. he was very happy.",
+        "count": 51
+      },
+      {
+        "prediction": "he was very happy. he was very happy to see him.",
+        "count": 49
+      },
+      {
+        "prediction": "he said that if he wants to become a doctor, he will be able to work hard and earn a living.",
+        "count": 40
+      },
+      {
+        "prediction": "he said that if he wants to become a doctor, he would not be able to work hard and earn money.",
+        "count": 39
+      },
+      {
+        "prediction": "a tiger and a lion.",
+        "count": 34
+      }
+    ],
+    "empty_output_count": 0,
+    "empty_output_rate": 0.0
+  },
+  "evaluation_verdict": "NO_GO",
+  "evaluation_verdict_basis": "exact-match accuracy 0/1887 (normalized) on real held-out data; output distribution severely degenerate (dominant prediction 21.3% of all samples, unique-prediction ratio 0.1579)",
+  "evaluation_verdict_scope": "Candidate-level evaluation verdict for t5-small-motion recorded in this notebook only; does NOT change SIGNSAGE_MODEL_PROMOTED, the production registry, or any deployment gate."
+}

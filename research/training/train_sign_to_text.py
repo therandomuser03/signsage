@@ -547,9 +547,14 @@ def compute_metrics(refs: list[str], hyps: list[str]) -> dict:
     from rouge_score import rouge_scorer
 
     rouge = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
+    bleu = sacrebleu.corpus_bleu(hyps, [refs])
     return {
         "WER": float(jiwer.wer(refs, hyps)),
-        "BLEU": float(sacrebleu.corpus_bleu(hyps, [refs]).score),
+        "BLEU": float(bleu.score),
+        "BLEU-1": float(bleu.precisions[0]),
+        "BLEU-2": float(bleu.precisions[1]),
+        "BLEU-3": float(bleu.precisions[2]),
+        "BLEU-4": float(bleu.precisions[3]),
         "ROUGE-L": float(np.mean([rouge.score(r, h)["rougeL"].fmeasure for r, h in zip(refs, hyps)])),
         "exact_match": float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)])),
         "nonempty_output": float(np.mean([bool(normalize_text(h)) for h in hyps])),
@@ -801,6 +806,7 @@ def main(argv=None) -> int:
             if epoch >= 2 and div["unique_fraction"] < DIVERSITY_FLOOR:
                 (out / "COLLAPSED.txt").write_text(
                     f"epoch {epoch}: unique_fraction={div['unique_fraction']:.4f} < {DIVERSITY_FLOOR}; "
+                    f"val_loss={va_loss:.4f}; "
                     f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%})\n")
                 raise SystemExit("COLLAPSE GATE FIRED -- stopped instead of burning more GPU. See COLLAPSED.txt.")
             payload = {"state_dict": model.state_dict(), "epoch": epoch, "val_loss": va_loss, "best": best,
