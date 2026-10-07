@@ -112,6 +112,49 @@ def test_materialize_roundtrip(tmp: Path) -> None:
     print("PASS materialize round-trip exact (12 samples, 3 shards)")
 
 
+def test_parallel_materialize(tmp: Path) -> None:
+    import threading
+    uids = [f"vid{i:03d}-0" for i in range(20)]
+    blobs = {u: make_pose_blob(300 + i, frames=10 + (i % 5)) for i, u in enumerate(uids)}
+    rawdir = tmp / "raw"
+    rawdir.mkdir(parents=True)
+    for u, b in blobs.items():
+        (rawdir / f"{u}.pose").write_bytes(b)
+    lock = threading.Lock()
+    made, fetched = [], [0]
+
+    def factory():
+        with lock:
+            made.append(1)
+        return FakeRemote(blobs)
+
+    orig_fetch = FakeRemote.read_member_bytes
+
+    def counted(self, uid):
+        with lock:
+            fetched[0] += 1
+        return orig_fetch(self, uid)
+
+    FakeRemote.read_member_bytes = counted
+    try:
+        cache = tmp / "pose_cache"
+        materialize_pose_cache(uids, FakeRemote(blobs), cache, shard_samples=6,
+                               verify_every=7, jobs=4, source_factory=factory)
+    finally:
+        FakeRemote.read_member_bytes = orig_fetch
+    assert fetched[0] == 20, fetched
+    assert len(made) >= 2, made  # actually parallel: one source per thread
+    man = json.loads((cache / "manifest.json").read_text())
+    assert man["complete"] is True and len(man["uid_to_shard"]) == 20
+    cached = ShardPoseSource(str(cache))
+    ref = DirPoseSource(str(rawdir))
+    for u in uids:
+        f1, l1 = load_pose_item(u, cached)
+        f2, l2 = load_pose_item(u, ref)
+        assert l1 == l2 and np.array_equal(f1, f2), f"parallel cache differs for {u}"
+    print("PASS parallel materialize (jobs=4, 20 samples, layout identical)")
+
+
 def test_resume_skips_present(tmp: Path) -> None:
     uids = [f"vid{i:03d}-0" for i in range(10)]
     blobs = {u: make_pose_blob(100 + i) for i, u in enumerate(uids)}
@@ -284,6 +327,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         test_materialize_roundtrip(td / "t1")
+        test_parallel_materialize(td / "t1p")
         test_resume_skips_present(td / "t2")
         test_corrupt_shard_rebuilt(td / "t3")
         test_token_cache_reuse(td / "t4")

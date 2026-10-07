@@ -91,6 +91,17 @@ gracefully if it would exceed budget. First session pays the one-time
 download; later epochs/sessions read from disk. The overfit gate and the
 diversity gate both run against the local cache with unchanged thresholds.
 
+Measured on Kaggle 2026-10-07 (123,779 usable; train=98,485 val=13,014
+test=12,280): ~1,211 KiB/sample -> **~143 GiB full cache at 1.2 samples/s
+sequential (~29h -- does NOT fit one session)**. Mitigations, in order:
+(1) `--jobs 8` parallel fetch (default; expect ~4h, watch the printed ETA);
+(2) let prepare span sessions (it resumes from the manifest); (3) explicit
+`--subset N` pilot run (first N rows of each seeded split, loudly logged --
+representation unchanged, just fewer videos) when the full cache cannot be
+held. A ~143 GiB cache also strains Kaggle output-dataset persistence, so
+confirm the saved output version actually contains `pose_cache/` before
+relying on cross-session reuse.
+
 ## 7. Operator next step (exact)
 
 On Kaggle (GPU T4×2), clone `https://github.com/therandomuser03/signsage.git`

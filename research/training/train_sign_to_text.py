@@ -408,7 +408,8 @@ def _write_manifest(cache_dir: Path, uid_to_shard: dict, complete: bool) -> None
 def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
                            shard_samples: int = DEFAULT_SHARD_SAMPLES,
                            verify_every: int = DEFAULT_VERIFY_EVERY,
-                           max_cache_gb: float = 0.0) -> Path:
+                           max_cache_gb: float = 0.0, jobs: int = 1,
+                           source_factory=None) -> Path:
     """Download each uid's `.pose` bytes ONCE into sharded local ZIPs (resumable).
 
     Skips uids already present in existing shard files (verified from the
@@ -418,6 +419,12 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
     full shape/dtype via the real load_pose_item() path every `verify_every`
     samples. Never retains more than one sample's arrays in RAM. Never logs
     tokens (the `remote` store already holds auth; nothing is printed here).
+
+    jobs>1 fetches concurrently (one private PoseSource per thread via
+    source_factory; required because HTTP sessions are not shared across
+    threads). Shard writing stays single-threaded and deterministic, so the
+    cache layout is identical to a sequential run. Memory stays bounded: at
+    most 4*jobs blobs are in flight.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
@@ -454,8 +461,42 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
             zf = None
             _write_manifest(cache_dir, have, complete=False)
 
+    def _results():
+        """Yield (uid, blob, error) in todo order; bounded parallel fetch."""
+        if jobs is None or jobs <= 1 or source_factory is None:
+            for uid in todo:
+                try:
+                    blob = remote.read_member_bytes(uid)
+                    yield uid, blob, None
+                except Exception as exc:  # noqa: BLE001
+                    yield uid, None, exc
+            return
+        import concurrent.futures
+        import threading
+
+        local = threading.local()
+
+        def _get_source():
+            src = getattr(local, "src", None)
+            if src is None:
+                src = source_factory()
+                local.src = src
+            return src
+
+        def _fetch(uid):
+            try:
+                return uid, _get_source().read_member_bytes(uid), None
+            except Exception as exc:  # noqa: BLE001
+                return uid, None, exc
+
+        width = max(1, 4 * jobs)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            for s in range(0, len(todo), width):
+                # chunked map: deterministic order, bounded in-flight blobs
+                yield from pool.map(_fetch, todo[s:s + width])
+
     try:
-        for i, uid in enumerate(todo):
+        for i, (uid, blob, err) in enumerate(_results()):
             if zf is None:
                 zf_name = f"{POSE_CACHE_SHARD_PREFIX}{current_shard_idx:05d}{POSE_CACHE_SHARD_SUFFIX}"
                 zf = zipfile.ZipFile(cache_dir / zf_name, mode="a", allowZip64=True,
@@ -464,7 +505,8 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
                 # and when resuming into a partial shard from a prior session.
                 zf_count = sum(1 for n in zf.namelist() if n.endswith(".pose"))
             try:
-                blob = remote.read_member_bytes(uid)
+                if err is not None:
+                    raise err
                 if not blob:
                     raise ValueError("empty pose payload")
                 zf.writestr(f"{uid}.pose", blob)
@@ -483,8 +525,10 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
                 per_sample = bytes_written / max(1, len(have))
                 proj_gib = per_sample * len(uids) / (1024 ** 3)
                 el = time.perf_counter() - t0
+                rate = 200 / max(1e-9, el)
+                eta_h = (len(todo) - 200) / max(1e-9, rate) / 3600
                 log(f"cache: projection after 200 samples: ~{per_sample / 1024:.0f} KiB/sample "
-                    f"-> ~{proj_gib:.1f} GiB total, rate {200 / max(1e-9, el):.1f} samples/s")
+                    f"-> ~{proj_gib:.1f} GiB total, rate {rate:.1f} samples/s, ETA ~{eta_h:.1f}h")
                 projected = True
             if (n_done + n_fail) % verify_every == 0 and n_done:
                 _close_shard()  # flush: reader needs the central directory on disk
@@ -1015,6 +1059,12 @@ def parse_args(argv=None):
                     help="full shape/dtype verify every N materialized samples")
     ap.add_argument("--max-cache-gb", type=float, default=0.0,
                     help="graceful stop if the pose cache would exceed this size (0 = no cap)")
+    ap.add_argument("--jobs", type=int, default=8,
+                    help="parallel pose fetch workers for the prepare stage (1 = sequential; "
+                         "measured 1.2 samples/s sequential on Kaggle, ~jobs x with 8)")
+    ap.add_argument("--subset", type=int, default=0,
+                    help="pilot mode: cap train/val/test to the first N rows each (0 = full data). "
+                         "Loudly logged; representation and splits unchanged, just fewer videos.")
     ap.add_argument("--contract", default="research/evaluation/reports/352868924/landmark_contract.json",
                     help="landmark contract to copy into the bundle (representation unchanged)")
     ap.add_argument("--out", required=True, help="output dir for checkpoints/bundle/report")
@@ -1068,8 +1118,17 @@ def main(argv=None) -> int:
             raise SystemExit("duplicate UIDs after cleaning -- refusing.")
         df_tr_all, df_va_all, df_te_all, split = video_split(cleaned, args.seed)
         df_tr, df_va, df_te = df_tr_all, df_va_all, df_te_all
+        if args.subset and args.subset > 0:
+            log(f"SUBSET MODE: capping each split to its first {args.subset} rows "
+                f"(pilot run only -- NOT the full V2 experiment; representation unchanged)")
+            df_tr = df_tr.iloc[:args.subset].reset_index(drop=True)
+            df_va = df_va.iloc[:args.subset].reset_index(drop=True)
+            df_te = df_te.iloc[:args.subset].reset_index(drop=True)
         log(f"data: {cleaning['usable_rows']:,} usable; "
             f"train={len(df_tr):,} val={len(df_va):,} test={len(df_te):,}")
+        if args.subset and args.subset > 0:
+            split = dict(split, subset=args.subset,
+                         note="pilot subset: first N rows of each seeded split")
         if "audit" in stages:
             (out / "dataset_audit.json").write_text(json.dumps(
                 {"cleaning": cleaning, "split": split,
@@ -1104,7 +1163,9 @@ def main(argv=None) -> int:
             materialize_pose_cache(need_uids, store, pose_cache_dir,
                                    shard_samples=args.shard_samples,
                                    verify_every=args.verify_every,
-                                   max_cache_gb=args.max_cache_gb)
+                                   max_cache_gb=args.max_cache_gb,
+                                   jobs=args.jobs,
+                                   source_factory=lambda: _open_pose_store(*store_spec))
             log(f"prepare: materialization took {(time.perf_counter() - t_prep) / 60:.1f} min")
         present, missing = cache_coverage(pose_cache_dir, need_uids)
         log(f"pose cache: {present:,}/{len(need_uids):,} samples cached "
