@@ -77,6 +77,20 @@ dir; snapshots are per-epoch, so a preemption can lose up to ~one epoch).
 Worst case (early collapse): ~2 epochs wasted,
 not 8 hours. Expected full run: 2–3 Kaggle sessions to 6–12 epochs.
 
+Data-pipeline note (2026-10-07 rework): the old workflow streamed poses over
+HTTP range reads every epoch AND pre-tokenized ~99k captions every session,
+which bottlenecked the run in preparation. The script now has a `prepare`
+stage that materializes a resumable local pose cache
+(`<out>/pose_cache`: sharded ZIPs of verbatim `.pose` bytes) once, then
+trains from local disk; captions are tokenized once into
+`<out>/tokenizer/tokens.npz` and reused. Processed fp32 tensors
+(123,779 × 160 × 1629 ≈ 120 GiB, ≈60 GiB in fp16) are deliberately NEVER
+cached -- both exceed practical Kaggle disk. The materializer prints a
+projected total cache size after 200 samples; `--max-cache-gb` stops
+gracefully if it would exceed budget. First session pays the one-time
+download; later epochs/sessions read from disk. The overfit gate and the
+diversity gate both run against the local cache with unchanged thresholds.
+
 ## 7. Operator next step (exact)
 
 On Kaggle (GPU T4×2), clone `https://github.com/therandomuser03/signsage.git`
@@ -102,20 +116,20 @@ if it fails. Copy `$OUT` (bundle + manifest + report) back as the new
 `--resume` by itself does NOT survive a new Kaggle session. The exact workflow:
 
 1. **End of session N:** use Kaggle's **Save Version** (save output) so the
-   entire `$OUT` directory (`checkpoints/`, `tokenizer/`, reports) is kept as
-   a versioned output dataset.
+    entire `$OUT` directory (`pose_cache/`, `checkpoints/`, `tokenizer/`,
+    reports) is kept as a versioned output dataset. The notebook's persist
+    cell lists exactly what will be kept; copying the `.ipynb` alone
+    transfers nothing.
 2. **Start of session N+1:** attach that saved output as an **input dataset**,
-   then restore it before training:
-   ```bash
-   cp -r /kaggle/input/<prior-output-slug>/s2t_v2 /kaggle/working/s2t_v2
-   ```
-   (Replace `<prior-output-slug>` with the actual slug of the saved output;
-   keep the directory name `s2t_v2` so checkpoint/tokenizer paths resolve.)
-3. **Re-run the identical training command with `--resume`**:
-   ```bash
-   python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
-       --out /kaggle/working/s2t_v2 --epochs 12 --max-hours 8 --resume
-   ```
-   The script reloads the recovery snapshot (optimizer/scheduler/epoch) and
-   the best checkpoint, then continues. Without step 2 there is nothing to
-   resume from and training restarts from scratch.
+    then run the notebook's **restore cell** (it auto-detects
+    `/kaggle/input/*/s2t_v2`; set `PRIOR_OUTPUT_SLUG` only if ambiguous).
+    The cell copies the prior output to `/kaggle/working/s2t_v2` and reports
+    exactly what is reused: pose-cache completeness, tokenizer + token cache,
+    recovery epoch/best, best checkpoint.
+3. **Session 1 runs the prepare cell** (`--stages tokenizer,prepare`):
+    one-time resumable pose materialization + tokenizer/token cache.
+    Interrupt any time; re-running skips present samples via the manifest.
+4. **Training/eval cells use `--resume` and read the local cache**
+    (`--stages tokenizer,overfit,train`, then `evaluate,export`).
+    The recovery checkpoint now also stores bad-epoch count, history, and
+    RNG states, so resume continues the schedule instead of restarting it.

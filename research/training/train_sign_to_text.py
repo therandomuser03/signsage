@@ -11,7 +11,7 @@ research/training/READINESS.md): pre-norm, larger capacity, label smoothing,
 longer schedule, per-epoch diversity collapse gate, hard overfit gate.
 
 Stages (select with --stages subset, default all):
-    audit -> tokenizer -> overfit-gate -> train -> evaluate -> export
+    audit -> tokenizer -> prepare -> overfit-gate -> train -> evaluate -> export
 
     python train_sign_to_text.py --csv /path/iSign_v1.1.csv \\
         --pose-source /path/to/poses.zip --out /kaggle/working/s2t_v2
@@ -19,11 +19,18 @@ Stages (select with --stages subset, default all):
 
 Resumable: recovery snapshots every --snapshot-batches + best kept;
 re-run with --resume to continue. Never overwrites run 352868924.
+
+Multi-session (Kaggle): the prepare stage materializes a resumable local
+pose cache (<out>/pose_cache) once; later sessions reuse it plus the token
+cache (<out>/tokenizer/tokens.npz) and --resume continues from the recovery
+checkpoint. /kaggle/working is ephemeral -- persist <out> via Save Version
+and re-attach it as an input dataset next session (see signsage_kaggle.ipynb).
 """
 from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import io
 import json
 import math
@@ -50,6 +57,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from app.ml.models.sign_to_text import SignTransformer, causal_mask, padding_mask  # noqa: E402
+from app.ml.postprocessing.decoding import ban_repeated_ngram  # noqa: E402
 from app.ml.preprocessing.landmarks import (  # noqa: E402
     COMPONENT_ORDER,
     COORDINATES_PER_LANDMARK,
@@ -87,9 +95,60 @@ REPETITION_PENALTY = 1.15
 DIVERSITY_FLOOR = 0.05
 DIVERSITY_SAMPLE = 512
 
+# Pose materialization cache (Phase A). Processed tensors are NOT cached:
+# 123,779 samples x 160 x 1629 float32 ~= 120 GiB (~60 GiB in fp16) -- both
+# exceed practical Kaggle disk. Instead the cache stores the compressed
+# `.pose` member bytes verbatim in sharded ZIPs (ZIP_STORED, no recompress),
+# which is the smallest representation that preserves bit-exact preprocessing
+# (same bytes -> same load_pose_item path as remote). Estimated from the
+# 158 GiB archive: a fraction of it (only needed UIDs), projected at runtime
+# after the first 200 samples; --max-cache-gb stops gracefully if exceeded.
+POSE_CACHE_VERSION = 1
+POSE_CACHE_MANIFEST = "manifest.json"
+POSE_CACHE_SHARD_PREFIX = "shard-"
+POSE_CACHE_SHARD_SUFFIX = ".zip"
+DEFAULT_SHARD_SAMPLES = 2000
+DEFAULT_VERIFY_EVERY = 200
+TOKEN_CACHE_NAME = "tokens.npz"
+TOKEN_CACHE_META = "tokens_meta.json"
+
 
 def log(msg: str) -> None:
     print(f"[s2t-v2 {datetime.now(timezone.utc):%H:%M:%S}] {msg}", flush=True)
+
+
+class PhaseTimer:
+    """Tiny perf probe: split data-wait vs compute vs misc; periodic logs only."""
+
+    def __init__(self, label: str, report_every: int = 100):
+        self.label = label
+        self.report_every = report_every
+        self.t_data = 0.0
+        self.t_compute = 0.0
+        self.t_misc = 0.0
+        self.n = 0
+        self._t0 = time.perf_counter()
+
+    def add_batch(self, d_data: float, d_compute: float) -> None:
+        self.t_data += d_data
+        self.t_compute += d_compute
+        self.n += 1
+        if self.n % self.report_every == 0:
+            total = self.t_data + self.t_compute + self.t_misc
+            log(f"{self.label}: batch {self.n} "
+                f"data={self.t_data:.1f}s compute={self.t_compute:.1f}s misc={self.t_misc:.1f}s "
+                f"(data share {self.t_data / max(1e-9, total):.0%})")
+
+    def summary(self) -> str:
+        total = self.t_data + self.t_compute + self.t_misc
+        return (f"{self.label}: {self.n} batches in {total:.1f}s "
+                f"(data {self.t_data:.1f}s / compute {self.t_compute:.1f}s / misc {self.t_misc:.1f}s)")
+
+
+def estimate_processed_cache_gib(n_samples: int, dtype_bytes: int = 4) -> float:
+    """Upper-bound size if processed (160,1629) tensors were cached.
+    Kept as documentation for why Phase A caches compressed member bytes."""
+    return n_samples * MAX_FRAMES * LANDMARK_DIM * dtype_bytes / (1024 ** 3)
 
 
 # --------------------------------------------------------------------------
@@ -273,12 +332,204 @@ class RemotePoseSource(PoseSource):
         raise FileNotFoundError(f"UID not found in remote pose archive: {uid}")
 
 
+class ShardPoseSource(PoseSource):
+    """Local disk cache of verbatim `.pose` member bytes in sharded ZIPs.
+
+    Created once by materialize_pose_cache() from any other PoseSource
+    (normally remote). Reads are plain local-disk random access -- no HTTP.
+    Each shard is a ZIP_STORED archive of `<uid>.pose` members, so a shard
+    is readable by the existing ZipPoseSource with zero new decode code.
+    Shard files are opened lazily (per process), hence DataLoader-fork-safe.
+    """
+
+    def __init__(self, cache_dir: str, max_open: int = 8):
+        from collections import OrderedDict
+
+        self.cache_dir = Path(cache_dir)
+        self.manifest = json.loads((self.cache_dir / POSE_CACHE_MANIFEST).read_text())
+        if self.manifest.get("version") != POSE_CACHE_VERSION:
+            raise RuntimeError(f"pose cache version {self.manifest.get('version')} != {POSE_CACHE_VERSION}")
+        self.index: dict = self.manifest["uid_to_shard"]
+        self._open: OrderedDict = OrderedDict()
+        self._max_open = max(1, int(max_open))
+
+    def _shard_store(self, shard: str) -> ZipPoseSource:
+        store = self._open.get(shard)
+        if store is None:
+            store = ZipPoseSource(str(self.cache_dir / shard))
+            self._open[shard] = store
+            while len(self._open) > self._max_open:
+                self._open.popitem(last=False)
+        else:
+            self._open.move_to_end(shard)
+        return store
+
+    def read_member_bytes(self, uid: str) -> bytes:
+        shard = self.index.get(uid)
+        if shard is None:
+            raise FileNotFoundError(f"UID not in local pose cache: {uid}")
+        return self._shard_store(shard).read_member_bytes(uid)
+
+
+def cache_coverage(cache_dir: Path, uids: list[str]) -> tuple[int, int]:
+    """(present, missing) counts for uids against an existing cache dir."""
+    if not (cache_dir / POSE_CACHE_MANIFEST).is_file():
+        return 0, len(uids)
+    try:
+        manifest = json.loads((cache_dir / POSE_CACHE_MANIFEST).read_text())
+        index = manifest.get("uid_to_shard", {})
+    except (OSError, ValueError):
+        return 0, len(uids)
+    present = sum(1 for u in uids if u in index)
+    return present, len(uids) - present
+
+
+def _scan_shard_members(cache_dir: Path) -> dict:
+    """Source of truth on resume: actual members present in shard files."""
+    found: dict = {}
+    for shard_path in sorted(cache_dir.glob(f"{POSE_CACHE_SHARD_PREFIX}*{POSE_CACHE_SHARD_SUFFIX}")):
+        try:
+            with zipfile.ZipFile(shard_path, mode="r", allowZip64=True) as zf:
+                for name in zf.namelist():
+                    if name.endswith(".pose"):
+                        found[name[:-len(".pose")]] = shard_path.name
+        except zipfile.BadZipFile:
+            log(f"cache: ignoring corrupt partial shard {shard_path.name} (will be rebuilt)")
+    return found
+
+
+def _write_manifest(cache_dir: Path, uid_to_shard: dict, complete: bool) -> None:
+    tmp = cache_dir / (POSE_CACHE_MANIFEST + ".tmp")
+    tmp.write_text(json.dumps({"version": POSE_CACHE_VERSION, "uid_to_shard": uid_to_shard,
+                               "complete": complete, "n": len(uid_to_shard)}))
+    os.replace(tmp, cache_dir / POSE_CACHE_MANIFEST)
+
+
+def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
+                           shard_samples: int = DEFAULT_SHARD_SAMPLES,
+                           verify_every: int = DEFAULT_VERIFY_EVERY,
+                           max_cache_gb: float = 0.0) -> Path:
+    """Download each uid's `.pose` bytes ONCE into sharded local ZIPs (resumable).
+
+    Skips uids already present in existing shard files (verified from the
+    shard central directories, not just the manifest, so interrupted sessions
+    resume correctly). Writes progress (manifest) after every shard and every
+    200 samples within a shard. Verifies bytes non-empty for every sample and
+    full shape/dtype via the real load_pose_item() path every `verify_every`
+    samples. Never retains more than one sample's arrays in RAM. Never logs
+    tokens (the `remote` store already holds auth; nothing is printed here).
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    t0 = time.perf_counter()
+    have = _scan_shard_members(cache_dir)
+    todo = [u for u in dict.fromkeys(uids) if u not in have]
+    log(f"pose cache: {len(have):,} present on disk, {len(todo):,} to fetch "
+        f"(total {len(uids):,} unique) fp32-tensor equivalent "
+        f"~{estimate_processed_cache_gib(len(uids)):.1f} GiB NOT written)")
+    if not todo:
+        _write_manifest(cache_dir, have, complete=True)
+        log("pose cache: already complete, nothing to fetch.")
+        return cache_dir
+    bytes_written = sum(
+        (cache_dir / s).stat().st_size for s in set(have.values()) if (cache_dir / s).is_file())
+    n_done, n_fail = 0, 0
+    failures: list = []
+    projected = False
+    current_shard_idx = 0
+    existing = sorted(cache_dir.glob(f"{POSE_CACHE_SHARD_PREFIX}*{POSE_CACHE_SHARD_SUFFIX}"))
+    if existing:
+        try:
+            current_shard_idx = max(int(p.name[len(POSE_CACHE_SHARD_PREFIX):-len(POSE_CACHE_SHARD_SUFFIX)])
+                                    for p in existing) + 1
+        except ValueError:
+            current_shard_idx = len(existing)
+    zf = None
+    zf_name = ""
+    zf_count = 0
+
+    def _close_shard() -> None:
+        nonlocal zf
+        if zf is not None:
+            zf.close()
+            zf = None
+            _write_manifest(cache_dir, have, complete=False)
+
+    try:
+        for i, uid in enumerate(todo):
+            if zf is None:
+                zf_name = f"{POSE_CACHE_SHARD_PREFIX}{current_shard_idx:05d}{POSE_CACHE_SHARD_SUFFIX}"
+                zf = zipfile.ZipFile(cache_dir / zf_name, mode="a", allowZip64=True,
+                                     compression=zipfile.ZIP_STORED)
+                # actual members (not a reset counter): correct after flush-reopen
+                # and when resuming into a partial shard from a prior session.
+                zf_count = sum(1 for n in zf.namelist() if n.endswith(".pose"))
+            try:
+                blob = remote.read_member_bytes(uid)
+                if not blob:
+                    raise ValueError("empty pose payload")
+                zf.writestr(f"{uid}.pose", blob)
+                bytes_written += len(blob)
+                have[uid] = zf_name
+                n_done += 1
+                zf_count += 1
+                del blob
+            except Exception as exc:  # noqa: BLE001 -- recorded, run continues
+                n_fail += 1
+                failures.append(uid)
+                log(f"cache: fetch failed for {uid}: {type(exc).__name__}; continuing")
+            if (n_done + n_fail) % 200 == 0:
+                _close_shard()  # flush central directory before recording progress
+            if n_done == 200 and not projected:
+                per_sample = bytes_written / max(1, len(have))
+                proj_gib = per_sample * len(uids) / (1024 ** 3)
+                el = time.perf_counter() - t0
+                log(f"cache: projection after 200 samples: ~{per_sample / 1024:.0f} KiB/sample "
+                    f"-> ~{proj_gib:.1f} GiB total, rate {200 / max(1e-9, el):.1f} samples/s")
+                projected = True
+            if (n_done + n_fail) % verify_every == 0 and n_done:
+                _close_shard()  # flush: reader needs the central directory on disk
+                probe_uid = uid if uid in have else todo[max(0, i - 1)]
+                if probe_uid in have:
+                    frames, true_len = load_pose_item(
+                        probe_uid, ShardPoseSource(str(cache_dir)))
+                    assert frames.shape == (MAX_FRAMES, LANDMARK_DIM) and frames.dtype == np.float32, \
+                        f"cache verify shape {frames.shape} {frames.dtype}"
+                    del frames
+            if max_cache_gb and bytes_written / (1024 ** 3) > max_cache_gb:
+                raise SystemExit(f"pose cache exceeded --max-cache-gb={max_cache_gb} "
+                                 f"({bytes_written / (1024 ** 3):.1f} GiB); partial cache kept, resume later.")
+            if zf_count >= shard_samples:
+                _close_shard()
+                current_shard_idx += 1
+            if (n_done + n_fail) % 1000 == 0:
+                el = time.perf_counter() - t0
+                log(f"cache: {n_done + n_fail:,}/{len(todo):,} fetched "
+                    f"({bytes_written / (1024 ** 3):.2f} GiB on disk, {el / 60:.1f} min, fail={n_fail})")
+        _close_shard()
+    finally:
+        try:
+            if zf is not None:
+                zf.close()
+        except Exception:  # noqa: BLE001
+            pass
+    el = time.perf_counter() - t0
+    log(f"cache: done {n_done:,}/{len(todo):,} in {el / 60:.1f} min "
+        f"({bytes_written / (1024 ** 3):.2f} GiB on disk, fail={n_fail})")
+    if n_fail:
+        (cache_dir / "fetch_failures.json").write_text(json.dumps(failures))
+        raise SystemExit(f"pose cache incomplete: {n_fail} fetches failed (see fetch_failures.json).")
+    _write_manifest(cache_dir, have, complete=True)
+    return cache_dir
+
+
 def _open_pose_store(kind: str, arg: str) -> PoseSource:
     """Open a fresh pose store; each DataLoader worker gets its own (fork-safe)."""
     if kind == "remote":
         return RemotePoseSource(arg)
     if kind == "zip":
         return ZipPoseSource(arg)
+    if kind == "shards":
+        return ShardPoseSource(arg)
     return DirPoseSource(arg)
 
 
@@ -381,20 +632,96 @@ def decode_ids(sp, ids) -> str:
     return normalize_text(sp.decode(clean)) if clean else ""
 
 
+def _sp_fingerprint(sp, model_path: Path) -> str:
+    h = hashlib.sha256()
+    h.update(Path(model_path).read_bytes())
+    h.update(str(sp.get_piece_size()).encode())
+    h.update(f"{sp.pad_id()},{sp.unk_id()},{sp.bos_id()},{sp.eos_id()}".encode())
+    return h.hexdigest()[:16]
+
+
+def _uids_fingerprint(uids: np.ndarray) -> str:
+    return hashlib.sha256("\n".join(str(u) for u in uids).encode()).hexdigest()[:16]
+
+
+def _texts_fingerprint(texts: np.ndarray) -> str:
+    return hashlib.sha256("\n".join(str(t) for t in texts).encode()).hexdigest()[:16]
+
+
+def load_or_build_token_cache(sp, model_path: Path, tok_dir: Path,
+                              splits: dict) -> dict:
+    """Tokenize each split once; reuse tokens.npz on later sessions.
+
+    splits: {name: (uids, texts)}. Returns {name: [np int64 arrays]} with the
+    exact same ids encode_text() would produce (verified by fingerprint of
+    the SP model + vocab + per-split uid order). Atomic write; corrupt cache
+    is discarded and rebuilt, never trusted.
+    """
+    t0 = time.perf_counter()
+    fp = _sp_fingerprint(sp, model_path)
+    meta_path = tok_dir / TOKEN_CACHE_META
+    npz_path = tok_dir / TOKEN_CACHE_NAME
+    want = {name: {"sp": fp, "max_len": MAX_TOKENS, "n": len(uids),
+                   "uids": _uids_fingerprint(uids), "texts": _texts_fingerprint(texts)}
+            for name, (uids, texts) in splits.items()}
+    try:
+        if npz_path.is_file() and meta_path.is_file():
+            meta = json.loads(meta_path.read_text())
+            if meta.get("splits") == want:
+                z = np.load(npz_path, allow_pickle=False)
+                out = {}
+                for name, (uids, _) in splits.items():
+                    mat, lens = z[f"{name}_ids"], z[f"{name}_len"]
+                    assert len(mat) == len(uids) and len(lens) == len(uids)
+                    out[name] = [np.asarray(mat[i, : lens[i]], dtype=np.int64) for i in range(len(uids))]
+                log(f"token cache: reused {sum(len(v) for v in out.values()):,} ids "
+                    f"from {npz_path.name} in {time.perf_counter() - t0:.1f}s (no re-tokenize)")
+                return out
+            log("token cache: fingerprint mismatch (tokenizer or splits changed) -- rebuilding")
+    except Exception as exc:  # noqa: BLE001 -- corrupt cache is never trusted
+        log(f"token cache: unreadable ({type(exc).__name__}) -- rebuilding")
+    out, mats = {}, {}
+    for name, (uids, texts) in splits.items():
+        log(f"tokenizing {len(texts):,} {name} captions (one-time; cached to disk)...")
+        ids = [np.asarray(encode_text(sp, t), dtype=np.int64) for t in texts]
+        out[name] = ids
+        width = max(len(a) for a in ids)
+        mat = np.zeros((len(ids), width), dtype=np.int64)
+        lens = np.zeros(len(ids), dtype=np.int64)
+        for i, a in enumerate(ids):
+            mat[i, : len(a)] = a
+            lens[i] = len(a)
+        mats[f"{name}_ids"], mats[f"{name}_len"] = mat, lens
+    tmp = tok_dir / (TOKEN_CACHE_NAME + ".tmp")
+    with open(tmp, "wb") as fh:  # file object: savez must not append .npz
+        np.savez_compressed(fh, **mats)
+    os.replace(tmp, npz_path)
+    meta_tmp = tok_dir / (TOKEN_CACHE_META + ".tmp")
+    meta_tmp.write_text(json.dumps({"splits": want}))
+    os.replace(meta_tmp, meta_path)
+    log(f"token cache: built {sum(len(v) for v in out.values()):,} ids in "
+        f"{time.perf_counter() - t0:.1f}s -> {npz_path.stat().st_size / 1024:.0f} KiB")
+    return out
+
+
 # --------------------------------------------------------------------------
 # Dataset / collate (same shift semantics as the verified baseline)
 # --------------------------------------------------------------------------
 
 class SignToTextDataset(Dataset):
     def __init__(self, uids: np.ndarray, texts: np.ndarray, sp, store: PoseSource | None,
-                 store_spec: tuple | None = None):
+                 store_spec: tuple | None = None, token_ids=None):
         self.uids = uids
         self.sp = sp
         self.store = store
         self.store_spec = store_spec  # (kind, arg); workers open their own (fork-safe)
         self._worker_store = None
-        log(f"Pre-tokenizing {len(texts):,} captions...")
-        self.token_ids = [np.asarray(encode_text(sp, t), dtype=np.int64) for t in texts]
+        if token_ids is None:
+            log(f"Pre-tokenizing {len(texts):,} captions...")
+            self.token_ids = [np.asarray(encode_text(sp, t), dtype=np.int64) for t in texts]
+        else:
+            assert len(token_ids) == len(uids)
+            self.token_ids = [np.asarray(a, dtype=np.int64) for a in token_ids]
 
     def __len__(self): return len(self.uids)
 
@@ -468,8 +795,16 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
         run_epoch._scaler = scaler  # type: ignore[attr-defined]
     if train:
         opt.zero_grad(set_to_none=True)
+    timer = PhaseTimer("train" if train else "val")
     with ctx:
-        for frames, lengths, tin, tout in loader:
+        batch_iter = iter(loader)
+        while True:
+            t_data0 = time.perf_counter()
+            try:
+                frames, lengths, tin, tout = next(batch_iter)
+            except StopIteration:
+                break
+            t_comp0 = time.perf_counter()
             frames, lengths, tin, tout = (t.to(device, non_blocking=True) for t in (frames, lengths, tin, tout))
             src_pad = padding_mask(lengths, frames.size(1))
             tgt_mask = causal_mask(tin.size(1), frames.device)
@@ -488,36 +823,66 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
                 if scheduler is not None:
                     scheduler.step()
             total += loss.item()
+            timer.add_batch(t_comp0 - t_data0, time.perf_counter() - t_comp0)
+    log(timer.summary())
     return total / max(1, len(loader))
 
 
 @torch.no_grad()
 def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS):
-    """Constrained batched greedy decode (same bans as serving)."""
+    """Constrained batched greedy decode (same bans as serving).
+
+    Parity contract with backend/app/ml/inference/sign_to_text.py
+    greedy_decode_ids(): per generated row, ban PAD/BOS/UNK, ban EOS for the
+    first MIN_OUTPUT_TOKENS steps, apply ban_repeated_ngram with
+    NO_REPEAT_NGRAM_SIZE, then the REPETITION_PENALTY divide-if->=0-else-multiply
+    over set(ids[1:]), then log_softmax + argmax. Serving is single-sample;
+    this is the batched equivalent -- covered by test_decode_parity.py.
+    """
+    t0 = time.perf_counter()
     model.eval()
     refs, hyps, confs = [], [], []
     pad, unk, bos, eos = sp.pad_id(), sp.unk_id(), sp.bos_id(), sp.eos_id()
+    n_batches = 0
     for frames, lengths, tin, tout in loader:
         frames, lengths = frames.to(device, non_blocking=True), lengths.to(device, non_blocking=True)
         src_pad = padding_mask(lengths, frames.size(1))
         memory = model.encode(frames, src_pad)
-        ids = torch.full((frames.size(0), 1), bos, dtype=torch.long, device=device)
-        finished = torch.zeros(frames.size(0), dtype=torch.bool, device=device)
-        sum_logp = torch.zeros(frames.size(0), device=device)
-        steps = torch.zeros(frames.size(0), dtype=torch.long, device=device)
+        batch_size = frames.size(0)
+        ids = torch.full((batch_size, 1), bos, dtype=torch.long, device=device)
+        histories = [[bos] for _ in range(batch_size)]
+        finished = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        sum_logp = torch.zeros(batch_size, device=device)
+        steps = torch.zeros(batch_size, dtype=torch.long, device=device)
         gen = []
         for step in range(max_decode):
             logits = model.decode(ids, memory, causal_mask(ids.size(1), device), src_pad)[:, -1].float()
-            logits[:, [pad, bos, unk]] = -torch.inf
-            if step < MIN_OUTPUT_TOKENS:
-                logits[:, eos] = -torch.inf
-            lp = torch.log_softmax(logits, dim=-1)
-            prob, nxt = torch.max(lp, dim=-1)
+            nxt = torch.empty(batch_size, dtype=torch.long, device=device)
+            prob = torch.empty(batch_size, device=device)
+            for r in range(batch_size):
+                if finished[r]:
+                    nxt[r] = eos
+                    prob[r] = 0.0
+                    continue
+                lg = logits[r].clone()
+                lg[[pad, bos, unk]] = -torch.inf
+                if step < MIN_OUTPUT_TOKENS:
+                    lg[eos] = -torch.inf
+                lg = ban_repeated_ngram(lg, histories[r], NO_REPEAT_NGRAM_SIZE)
+                for tid in set(histories[r][1:]):
+                    lg[tid] = (lg[tid] / REPETITION_PENALTY
+                               if lg[tid] >= 0 else lg[tid] * REPETITION_PENALTY)
+                lp = torch.log_softmax(lg, dim=-1)
+                p, t = torch.max(lp, dim=-1)
+                prob[r], nxt[r] = p, t
             active = ~finished
             sum_logp += torch.where(active, prob, torch.zeros_like(prob))
             steps += active.long()
             nxt = torch.where(finished, torch.full_like(nxt, eos), nxt)
             gen.append(nxt.detach().cpu().numpy())
+            for r in range(batch_size):
+                if not finished[r]:
+                    histories[r].append(int(nxt[r]))
             finished |= nxt.eq(eos)
             ids = torch.cat([ids, nxt[:, None]], dim=1)
             if finished.all():
@@ -528,6 +893,8 @@ def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS)
             refs.append(decode_ids(sp, row))
             hyps.append(decode_ids(sp, gen[r].tolist()))
             confs.append(float(conf[r]))
+        n_batches += 1
+    log(f"decode: {len(hyps):,} hyps in {time.perf_counter() - t0:.1f}s ({n_batches} batches)")
     return refs, hyps, confs
 
 
@@ -639,11 +1006,20 @@ def parse_args(argv=None):
     ap.add_argument("--csv", default=None, help="path to iSign_v1.1.csv")
     ap.add_argument("--pose-source", default=None,
                     help="local .pose dir, local .zip, or 'remote' (HF streaming, needs HF_TOKEN)")
+    ap.add_argument("--pose-cache", default=None,
+                    help="local materialized pose cache dir (default: <out>/pose_cache). "
+                         "Built once from --pose-source, then reused; training reads from it.")
+    ap.add_argument("--shard-samples", type=int, default=DEFAULT_SHARD_SAMPLES,
+                    help="pose samples per cache shard file")
+    ap.add_argument("--verify-every", type=int, default=DEFAULT_VERIFY_EVERY,
+                    help="full shape/dtype verify every N materialized samples")
+    ap.add_argument("--max-cache-gb", type=float, default=0.0,
+                    help="graceful stop if the pose cache would exceed this size (0 = no cap)")
     ap.add_argument("--contract", default="research/evaluation/reports/352868924/landmark_contract.json",
                     help="landmark contract to copy into the bundle (representation unchanged)")
     ap.add_argument("--out", required=True, help="output dir for checkpoints/bundle/report")
     ap.add_argument("--stages", default="all",
-                    help="comma subset of: audit,tokenizer,overfit,train,evaluate,export")
+                    help="comma subset of: audit,tokenizer,prepare,overfit,train,evaluate,export")
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--batch", type=int, default=64)
@@ -661,7 +1037,7 @@ def main(argv=None) -> int:
     import pandas as pd
 
     args = parse_args(argv)
-    stages = set(args.stages.split(",")) if args.stages != "all" else {"audit", "tokenizer", "overfit", "train", "evaluate", "export"}
+    stages = set(args.stages.split(",")) if args.stages != "all" else {"audit", "tokenizer", "prepare", "overfit", "train", "evaluate", "export"}
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -718,22 +1094,60 @@ def main(argv=None) -> int:
         if args.preflight_only:
             log("preflight-only: pose source verified, exiting before expensive stages.")
             return 0
+        # ---- prepare: materialize the local pose cache once, train from it ----
+        pose_cache_dir = Path(args.pose_cache) if args.pose_cache else (out / "pose_cache")
+        need_uids = [str(u) for u in
+                     list(df_tr["uid"]) + list(df_va["uid"]) + list(df_te["uid"])]
+        need_uids = list(dict.fromkeys(need_uids))
+        if "prepare" in stages:
+            t_prep = time.perf_counter()
+            materialize_pose_cache(need_uids, store, pose_cache_dir,
+                                   shard_samples=args.shard_samples,
+                                   verify_every=args.verify_every,
+                                   max_cache_gb=args.max_cache_gb)
+            log(f"prepare: materialization took {(time.perf_counter() - t_prep) / 60:.1f} min")
+        present, missing = cache_coverage(pose_cache_dir, need_uids)
+        log(f"pose cache: {present:,}/{len(need_uids):,} samples cached "
+            f"(tensor equivalent ~{estimate_processed_cache_gib(len(need_uids)):.1f} GiB fp32 NOT written)")
+        if missing == 0 and present:
+            store_spec = ("shards", str(pose_cache_dir))
+            store = _open_pose_store(*store_spec)
+            # Prove the LOCAL cache decodes through the identical path.
+            preflight_pose_source(store, probe_uid)
+            log("training pose source: LOCAL CACHE (no remote HTTP during epochs)")
+        else:
+            log(f"training pose source: {args.pose_source} DIRECT "
+                f"({missing:,} samples not cached -- run the prepare stage; "
+                f"every epoch will re-read remotely)")
 
     # ---- tokenizer ----
     tok_dir = out / "tokenizer"
     if "tokenizer" in stages or args.smoke:
+        t_tok = time.perf_counter()
         train_texts = df_tr["text"].astype(str).tolist()
         vocab_size = 40 if args.smoke else 16000
         sp = train_tokenizer(train_texts, tok_dir, vocab_size)
         sp_train_artifacts["model"] = str(tok_dir / "signsage_en_sp.model")
-        log(f"tokenizer vocab={sp.get_piece_size()}")
+        log(f"tokenizer vocab={sp.get_piece_size()} (trained in {time.perf_counter() - t_tok:.1f}s)")
     else:
         import sentencepiece as spm
         sp = spm.SentencePieceProcessor(model_file=str(tok_dir / "signsage_en_sp.model"))
         sp_train_artifacts["model"] = str(tok_dir / "signsage_en_sp.model")
+        log(f"tokenizer reused: vocab={sp.get_piece_size()} (no retraining)")
 
-    def make_loader(frame, train: bool, batch: int | None = None):
-        ds = SignToTextDataset(frame["uid"].to_numpy(), frame["text"].to_numpy(), sp, store, store_spec)
+    # ---- token cache (Phase B): tokenize each split once, reuse across sessions ----
+    if args.smoke:
+        split_tokens = None
+    else:
+        splits = {"train": (df_tr["uid"].to_numpy(), df_tr["text"].to_numpy()),
+                  "val": (df_va["uid"].to_numpy(), df_va["text"].to_numpy()),
+                  "test": (df_te["uid"].to_numpy(), df_te["text"].to_numpy())}
+        split_tokens = load_or_build_token_cache(
+            sp, tok_dir / "signsage_en_sp.model", tok_dir, splits)
+
+    def make_loader(frame, train: bool, batch: int | None = None, token_ids=None):
+        ds = SignToTextDataset(frame["uid"].to_numpy(), frame["text"].to_numpy(), sp, store, store_spec,
+                               token_ids=token_ids)
         return DataLoader(ds, batch_size=batch or args.batch, shuffle=train,
                           collate_fn=collate_sign_text,
                           num_workers=2 if device.type == "cuda" else 0,
@@ -772,8 +1186,8 @@ def main(argv=None) -> int:
     best_path = out / "checkpoints" / "signsage_transformer_full.pt"
     history: list = []
     if "train" in stages:
-        train_loader = make_loader(df_tr, True)
-        val_loader = make_loader(df_va, False)
+        train_loader = make_loader(df_tr, True, token_ids=None if args.smoke else split_tokens["train"])
+        val_loader = make_loader(df_va, False, token_ids=None if args.smoke else split_tokens["val"])
         model = build_model()
         opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=WEIGHT_DECAY)
         steps_per_epoch = math.ceil(len(train_loader))
@@ -782,14 +1196,34 @@ def main(argv=None) -> int:
         start_epoch, best, bad = 1, float("inf"), 0
         rec_path = out / "checkpoints" / "signsage_transformer_recovery.pt"
         if args.resume and rec_path.exists():
-            rec = torch.load(rec_path, map_location=device)
+            rec = torch.load(rec_path, map_location=device, weights_only=False)
             model.load_state_dict(rec["state_dict"])
             opt.load_state_dict(rec["optimizer_state_dict"])
             if rec.get("scheduler_state_dict"):
                 scheduler.load_state_dict(rec["scheduler_state_dict"])
             start_epoch = int(rec.get("epoch", 0)) + 1
             best = float(rec.get("best", best))
-            log(f"resumed at epoch {start_epoch} (best val {best:.4f})")
+            bad = int(rec.get("bad", bad))
+            history = list(rec.get("history", history))
+            rng = rec.get("rng") or {}
+            try:
+                if rng.get("python") is not None:
+                    random.setstate(rng["python"])
+                if rng.get("numpy") is not None:
+                    np.random.set_state(rng["numpy"])
+                if rng.get("torch") is not None:
+                    torch.set_rng_state(rng["torch"].cpu())
+                if rng.get("cuda") is not None and torch.cuda.is_available():
+                    torch.cuda.set_rng_state_all(rng["cuda"])
+            except Exception as exc:  # noqa: BLE001 -- RNG restore is best-effort
+                log(f"resume: RNG state not restored ({type(exc).__name__}); training continues")
+            log(f"resumed at epoch {start_epoch} (best val {best:.4f}, bad={bad}, "
+                f"history={len(history)} epochs, opt+sched+rng restored)")
+        elif rec_path.exists():
+            log(f"recovery checkpoint present at {rec_path} but --resume not given: "
+                f"starting from epoch 1 (pass --resume to continue)")
+        else:
+            log("no recovery checkpoint: starting from epoch 1")
         div_loader_sample = make_loader(df_va.sample(min(DIVERSITY_SAMPLE, len(df_va)),
                                                       random_state=args.seed).reset_index(drop=True), False)
         for epoch in range(start_epoch, args.epochs + 1):
@@ -810,8 +1244,15 @@ def main(argv=None) -> int:
                     f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%})\n")
                 raise SystemExit("COLLAPSE GATE FIRED -- stopped instead of burning more GPU. See COLLAPSED.txt.")
             payload = {"state_dict": model.state_dict(), "epoch": epoch, "val_loss": va_loss, "best": best,
-                       "optimizer_state_dict": opt.state_dict(), "scheduler_state_dict": scheduler.state_dict()}
+                       "bad": bad, "history": history,
+                       "optimizer_state_dict": opt.state_dict(), "scheduler_state_dict": scheduler.state_dict(),
+                       "rng": {"python": random.getstate(), "numpy": np.random.get_state(),
+                               "torch": torch.get_rng_state().cpu(),
+                               "cuda": (torch.cuda.get_rng_state_all()
+                                        if torch.cuda.is_available() else None)}}
+            t_ckpt = time.perf_counter()
             torch.save(payload, rec_path)
+            log(f"  recovery checkpoint saved ({time.perf_counter() - t_ckpt:.1f}s)")
             if va_loss < best - 1e-4:
                 best, bad = va_loss, 0
                 torch.save(payload, best_path)
@@ -831,14 +1272,17 @@ def main(argv=None) -> int:
             raise SystemExit("no best checkpoint produced.")
     else:
         if not best_path.exists():
-            raise SystemExit("train stage skipped but no checkpoint found; nothing to evaluate/export.")
+            if {"evaluate", "export"} & stages:
+                raise SystemExit("train stage skipped but no checkpoint found; nothing to evaluate/export.")
+            log("train stage skipped and no checkpoint present; requested stages complete.")
+            return 0
 
     # ---- evaluate ----
     eval_report: dict = {"history": history}
     if "evaluate" in stages:
         model = build_model()
-        model.load_state_dict(torch.load(best_path, map_location=device)["state_dict"])
-        test_loader = make_loader(df_te, False)
+        model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
+        test_loader = make_loader(df_te, False, token_ids=None if args.smoke else split_tokens["test"])
         refs, hyps, confs = batch_greedy(model, test_loader, sp, device)
         test_metrics = compute_metrics(refs, hyps)
         div = diversity_metrics(hyps)
@@ -866,7 +1310,7 @@ def main(argv=None) -> int:
     # ---- export ----
     if "export" in stages:
         model = build_model()
-        model.load_state_dict(torch.load(best_path, map_location=device)["state_dict"])
+        model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
         train_cfg = {"architecture": {"d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS,
                                       "ff": FF, "dropout": DROPOUT, "norm_first": NORM_FIRST},
                      "label_smoothing": LABEL_SMOOTHING, "peak_lr": args.lr,
