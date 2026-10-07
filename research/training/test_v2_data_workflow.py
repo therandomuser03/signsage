@@ -319,6 +319,102 @@ def test_overfit_gate() -> None:
     print("PASS overfit gate (local cache, >=95% exact)")
 
 
+def _measure_run(td: Path, n_rows: int = 30, measure_samples: int = 10,
+                 extra: list | None = None):
+    """Tiny CSV + synthetic pose dir, run --stages measure, return (report, out)."""
+    import pandas as pd
+    posed = td / "poses"
+    posed.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for i in range(n_rows):
+        uid = f"mv{i:02d}-0"
+        (posed / f"{uid}.pose").write_bytes(make_pose_blob(700 + i, frames=12 + (i % 20)))
+        rows.append({"uid": uid, "text": f"sample sentence number {i}"})
+    csv = td / "m.csv"
+    pd.DataFrame(rows).to_csv(csv, index=False)
+    out = td / "s2t"
+    cmd = [sys.executable, str(Path(__file__).parent / "train_sign_to_text.py"),
+           "--csv", str(csv), "--pose-source", str(posed), "--out", str(out),
+           "--measure-samples", str(measure_samples),
+           "--stages", "measure"] + (extra or [])
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-3000:]
+    rep = json.loads((out / "measure_report.json").read_text())
+    return rep, out
+
+
+def test_measure_report_structure(tmp: Path) -> None:
+    rep, out = _measure_run(tmp, extra=["--persistence-target-gib", "50"])
+    required = {"n_sampled", "requested", "stride", "per_split_sampled", "true_len",
+                "mean_zero_padding_fraction", "uncompressed_bytes", "compressed_bytes",
+                "compression_ratio", "avg_compressed_bytes_per_sample",
+                "unpadded_bytes", "unpadded_compressed_bytes", "padding_bytes",
+                "dense_data_compression_ratio",
+                "projected_compressed_gib_full_123779", "projected_compressed_gib_by_split",
+                "split_counts", "persistence_target_gib", "safety_margin_gib", "verdict",
+                "zstd_level", "representation"}
+    assert required <= set(rep), required - set(rep)
+    assert rep["n_sampled"] == 10 and rep["requested"] == 10
+    assert sum(rep["per_split_sampled"].values()) == 10
+    tl = rep["true_len"]
+    assert tl["min"] <= tl["median"] <= tl["max"] and tl["p90"] <= tl["p95"] <= tl["max"]
+    assert rep["uncompressed_bytes"] == 10 * 160 * 1629 * 4
+    assert rep["compressed_bytes"] < rep["uncompressed_bytes"]
+    assert rep["compression_ratio"] > 1.0
+    assert rep["padding_bytes"] == rep["uncompressed_bytes"] - rep["unpadded_bytes"] >= 0
+    assert rep["projected_compressed_gib_full_123779"] > 0
+    assert set(rep["projected_compressed_gib_by_split"]) == {"train", "val", "test"}
+    assert rep["verdict"] in ("FIT", "BORDERLINE", "DOES_NOT_FIT")
+    assert rep["safety_margin_gib"] is not None
+    # measurement creates NO cache, NO tokenizer, NO checkpoints
+    assert not (out / "pose_cache").exists()
+    assert not (out / "tokenizer").exists()
+    assert not (out / "checkpoints").exists()
+    print("PASS measure report structure (+FIT verdict, no cache created)")
+
+
+def test_measure_unknown_target(tmp: Path) -> None:
+    rep, _ = _measure_run(tmp)
+    assert rep["verdict"] == "UNKNOWN-no-target" and rep["safety_margin_gib"] is None
+    print("PASS measure without target stays UNKNOWN (no hardcoded limit)")
+
+
+def test_zstd_roundtrip_unit() -> None:
+    import zstandard
+    rng = np.random.default_rng(11)
+    for shape in ((160, 1629), (37, 1629)):
+        a = np.ascontiguousarray(rng.normal(size=shape).astype(np.float32))
+        raw = a.tobytes()
+        comp = zstandard.ZstdCompressor(level=3).compress(raw)
+        assert zstandard.ZstdDecompressor().decompress(comp) == raw
+        assert len(comp) < len(raw)  # smooth data must compress
+    print("PASS zstd byte-exact round-trip unit")
+
+
+def test_measure_deterministic(tmp: Path) -> None:
+    rep1, _ = _measure_run(tmp / "a")
+    rep2, _ = _measure_run(tmp / "b")
+    rep1.pop("elapsed_s")
+    rep2.pop("elapsed_s")
+    assert rep1 == rep2, "measure must be deterministic for identical inputs"
+    print("PASS measure deterministic sample accounting")
+
+
+def test_no_training_config_change() -> None:
+    assert (T.D_MODEL, T.NHEAD, T.NLAYERS, T.FF) == (256, 4, 4, 1024)
+    assert T.DROPOUT == 0.15 and T.LABEL_SMOOTHING == 0.1
+    assert T.PEAK_LR == 3e-4 and T.WARMUP_FRACTION == 0.06
+    assert T.WEIGHT_DECAY == 1e-4 and T.GRAD_CLIP == 1.0
+    assert T.MAX_FRAMES == 160 and T.MAX_TOKENS == 96 and T.SEED == 42
+    assert T.LANDMARK_DIM == 543 * 3 and T.MODEL_INPUT_DIM == 3258
+    assert T.NO_REPEAT_NGRAM_SIZE == 3 and T.REPETITION_PENALTY == 1.15
+    assert T.DIVERSITY_FLOOR == 0.05 and T.DIVERSITY_SAMPLE == 512
+    args = T.parse_args(["--out", "x", "--smoke"])
+    assert (args.epochs, args.patience, args.batch) == (12, 3, 64)
+    assert args.measure_samples == 2000 and args.subset == 0
+    print("PASS no model/training configuration changes")
+
+
 def main() -> int:
     only_gate = "--gate" in sys.argv
     if only_gate:
@@ -331,7 +427,12 @@ def main() -> int:
         test_resume_skips_present(td / "t2")
         test_corrupt_shard_rebuilt(td / "t3")
         test_token_cache_reuse(td / "t4")
+        test_measure_report_structure(td / "t6")
+        test_measure_unknown_target(td / "t7")
+        test_measure_deterministic(td / "t8")
         test_checkpoint_resume_keys(td / "t5")
+    test_zstd_roundtrip_unit()
+    test_no_training_config_change()
     test_decode_parity()
     print("ALL FAST CHECKS PASSED (run with --gate for the overfit-gate check)")
     return 0

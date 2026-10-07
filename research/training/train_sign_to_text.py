@@ -12,6 +12,7 @@ longer schedule, per-epoch diversity collapse gate, hard overfit gate.
 
 Stages (select with --stages subset, default all):
     audit -> tokenizer -> prepare -> overfit-gate -> train -> evaluate -> export
+    measure is a separate opt-in dry-run (zstd projection, creates no cache).
 
     python train_sign_to_text.py --csv /path/iSign_v1.1.csv \\
         --pose-source /path/to/poses.zip --out /kaggle/working/s2t_v2
@@ -566,6 +567,110 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
     return cache_dir
 
 
+# D-cache measurement (dry-run only): is fixed-160x1629-fp32 + lossless zstd
+# small enough to persist? Raw bytes measured ~143 GiB and fixed fp32 is
+# exactly 120.2 GiB -- both presumed too big. This stage measures the actual
+# zstd ratio on ~2000 deterministically sampled items through the EXACT V2
+# preprocessing path, verifies byte-exact round-trips, and projects. It
+# creates NO cache. Full D-cache creation stays blocked until the Kaggle
+# measurement verdict is reviewed.
+ZSTD_LEVEL = 3
+MEASURE_REPORT = "measure_report.json"
+FULL_DATASET_N = 123779  # usable iSign rows the projection targets
+
+
+def _zstd():
+    try:
+        import zstandard
+    except ImportError:
+        raise SystemExit("measure stage needs the 'zstandard' package (pip install zstandard)")
+    return zstandard
+
+
+def measure_compression(split_uids: dict, store: PoseSource, out: Path,
+                        n_samples: int = 2000, target_gib: float = 0.0) -> dict:
+    """Dry-run: sample deterministically, measure zstd(fp32) sizes, report.
+
+    split_uids: {"train": [...], "val": [...], "test": [...]} in authoritative
+    row order. Stride-samples ~n_samples across the concatenated order so all
+    splits are represented proportionally. Per item: exact load_pose_item(),
+    true_len, fixed-fp32 bytes, zstd compress, decompress-and-byte-compare,
+    plus a true_len-only compression to attribute padding vs data savings.
+    Only running totals + the true_len list are retained, never the population.
+    """
+    zstandard = _zstd()
+    t0 = time.perf_counter()
+    ordered = [(split, uid) for split in ("train", "val", "test")
+               for uid in split_uids.get(split, [])]
+    step = max(1, len(ordered) // max(1, n_samples))
+    picked = ordered[::step][:max(1, n_samples)]
+    cctx = zstandard.ZstdCompressor(level=ZSTD_LEVEL)
+    tls: list = []
+    per_split: dict = {}
+    n_bytes = c_bytes = v_bytes = vc_bytes = 0
+    for i, (split, uid) in enumerate(picked):
+        frames, true_len = load_pose_item(uid, store)
+        assert frames.shape == (MAX_FRAMES, LANDMARK_DIM) and frames.dtype == np.float32
+        full = np.ascontiguousarray(frames).tobytes()
+        comp = cctx.compress(full)
+        if zstandard.ZstdDecompressor().decompress(comp) != full:
+            raise RuntimeError(f"zstd round-trip mismatch for {uid} -- refusing")
+        var = np.ascontiguousarray(frames[:true_len]).tobytes()
+        vcomp = cctx.compress(var)
+        tls.append(int(true_len))
+        n_bytes += len(full)
+        c_bytes += len(comp)
+        v_bytes += len(var)
+        vc_bytes += len(vcomp)
+        st = per_split.setdefault(split, {"n": 0, "compressed": 0})
+        st["n"] += 1
+        st["compressed"] += len(comp)
+        del frames, full, comp, var, vcomp
+        if (i + 1) % 500 == 0:
+            log(f"measure: {i + 1:,}/{len(picked):,} "
+                f"(ratio so far {n_bytes / max(1, c_bytes):.2f}x)")
+    n = len(picked)
+    tls_arr = np.asarray(tls, dtype=np.int64)
+    ratio = n_bytes / max(1, c_bytes)
+    avg_c = c_bytes / max(1, n)
+    proj = {split: per_split[split]["compressed"] / max(1, per_split[split]["n"]) * len(split_uids.get(split, []))
+            for split in ("train", "val", "test")}
+    proj_full = avg_c * FULL_DATASET_N
+    verdict, margin_gib = "UNKNOWN-no-target", None
+    if target_gib and target_gib > 0:
+        margin_gib = target_gib - proj_full / (1024 ** 3)
+        frac = proj_full / (1024 ** 3) / target_gib
+        verdict = "FIT" if frac < 0.8 else ("BORDERLINE" if frac < 1.0 else "DOES_NOT_FIT")
+    report = {
+        "n_sampled": n, "requested": n_samples, "stride": step,
+        "per_split_sampled": {s: per_split.get(s, {"n": 0})["n"] for s in ("train", "val", "test")},
+        "true_len": {"min": int(tls_arr.min()), "median": float(np.median(tls_arr)),
+                     "mean": float(tls_arr.mean()), "p90": float(np.quantile(tls_arr, 0.90)),
+                     "p95": float(np.quantile(tls_arr, 0.95)), "max": int(tls_arr.max())},
+        "mean_zero_padding_fraction": float(1.0 - tls_arr.mean() / MAX_FRAMES),
+        "uncompressed_bytes": n_bytes, "compressed_bytes": c_bytes,
+        "compression_ratio": ratio, "avg_compressed_bytes_per_sample": avg_c,
+        # padding vs data attribution (exact byte counts, both lossless):
+        "unpadded_bytes": v_bytes, "unpadded_compressed_bytes": vc_bytes,
+        "padding_bytes": n_bytes - v_bytes,
+        "dense_data_compression_ratio": v_bytes / max(1, vc_bytes),
+        "projected_compressed_gib_full_123779": proj_full / (1024 ** 3),
+        "projected_compressed_gib_by_split": {s: v / (1024 ** 3) for s, v in proj.items()},
+        "split_counts": {s: len(split_uids.get(s, [])) for s in ("train", "val", "test")},
+        "persistence_target_gib": target_gib if target_gib > 0 else None,
+        "safety_margin_gib": margin_gib, "verdict": verdict,
+        "zstd_level": ZSTD_LEVEL, "representation": "fixed-160x1629-fp32+zstd-lossless",
+        "elapsed_s": time.perf_counter() - t0,
+    }
+    tmp = out / (MEASURE_REPORT + ".tmp")
+    tmp.write_text(json.dumps(report, indent=1))
+    os.replace(tmp, out / MEASURE_REPORT)
+    log(f"measure: n={n} true_len median={report['true_len']['median']:.0f} mean={report['true_len']['mean']:.1f} "
+        f"ratio={ratio:.2f}x avg={avg_c / 1024:.0f} KiB/sample "
+        f"-> projected {proj_full / (1024 ** 3):.1f} GiB / 123,779 samples; verdict={verdict}")
+    return report
+
+
 def _open_pose_store(kind: str, arg: str) -> PoseSource:
     """Open a fresh pose store; each DataLoader worker gets its own (fork-safe)."""
     if kind == "remote":
@@ -1065,11 +1170,18 @@ def parse_args(argv=None):
     ap.add_argument("--subset", type=int, default=0,
                     help="pilot mode: cap train/val/test to the first N rows each (0 = full data). "
                          "Loudly logged; representation and splits unchanged, just fewer videos.")
+    ap.add_argument("--measure-samples", type=int, default=2000,
+                    help="items sampled by the measure stage (deterministic stride; default 2000)")
+    ap.add_argument("--persistence-target-gib", type=float, default=0.0,
+                    help="persistence budget the measure verdict is computed against. "
+                         "0 = unknown: verdict stays UNKNOWN-no-target. Never hardcoded: "
+                         "pass a value measured on the Kaggle host (df -h, trial saves).")
     ap.add_argument("--contract", default="research/evaluation/reports/352868924/landmark_contract.json",
                     help="landmark contract to copy into the bundle (representation unchanged)")
     ap.add_argument("--out", required=True, help="output dir for checkpoints/bundle/report")
     ap.add_argument("--stages", default="all",
-                    help="comma subset of: audit,tokenizer,prepare,overfit,train,evaluate,export")
+                    help="comma subset of: audit,tokenizer,prepare,measure,overfit,train,evaluate,export "
+                         "(measure is opt-in only, never in 'all')")
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--batch", type=int, default=64)
@@ -1094,7 +1206,9 @@ def main(argv=None) -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(args.out)
-    (out / "checkpoints").mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
+    if "train" in stages:
+        (out / "checkpoints").mkdir(parents=True, exist_ok=True)
     t_start = time.time()
     log(f"run {run_id} on {device}; stages={sorted(stages)}")
 
@@ -1153,6 +1267,19 @@ def main(argv=None) -> int:
         if args.preflight_only:
             log("preflight-only: pose source verified, exiting before expensive stages.")
             return 0
+        # ---- measure (dry-run): zstd projection through the exact V2 path ----
+        # Creates NO cache. Full D-cache creation stays blocked until the
+        # Kaggle measurement verdict is reviewed.
+        split_uids = {"train": [str(u) for u in list(df_tr["uid"])],
+                      "val": [str(u) for u in list(df_va["uid"])],
+                      "test": [str(u) for u in list(df_te["uid"])]}
+        if "measure" in stages:
+            t_measure = time.perf_counter()
+            measure_compression(split_uids, store, out,
+                                n_samples=args.measure_samples,
+                                target_gib=args.persistence_target_gib)
+            log(f"measure: done in {(time.perf_counter() - t_measure) / 60:.1f} min "
+                f"(no cache created)")
         # ---- prepare: materialize the local pose cache once, train from it ----
         pose_cache_dir = Path(args.pose_cache) if args.pose_cache else (out / "pose_cache")
         need_uids = [str(u) for u in
@@ -1182,8 +1309,13 @@ def main(argv=None) -> int:
                 f"every epoch will re-read remotely)")
 
     # ---- tokenizer ----
+    # Measure-only runs skip all tokenizer work (no model file needed, none built).
+    needs_nlp = args.smoke or bool(stages & {"tokenizer", "overfit", "train", "evaluate", "export"})
     tok_dir = out / "tokenizer"
-    if "tokenizer" in stages or args.smoke:
+    if not needs_nlp:
+        sp, split_tokens = None, None
+        log("tokenizer skipped (measure-only run)")
+    elif "tokenizer" in stages or args.smoke:
         t_tok = time.perf_counter()
         train_texts = df_tr["text"].astype(str).tolist()
         vocab_size = 40 if args.smoke else 16000
@@ -1197,7 +1329,7 @@ def main(argv=None) -> int:
         log(f"tokenizer reused: vocab={sp.get_piece_size()} (no retraining)")
 
     # ---- token cache (Phase B): tokenize each split once, reuse across sessions ----
-    if args.smoke:
+    if args.smoke or not needs_nlp:
         split_tokens = None
     else:
         splits = {"train": (df_tr["uid"].to_numpy(), df_tr["text"].to_numpy()),

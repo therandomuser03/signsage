@@ -102,6 +102,44 @@ held. A ~143 GiB cache also strains Kaggle output-dataset persistence, so
 confirm the saved output version actually contains `pose_cache/` before
 relying on cross-session reuse.
 
+### D-cache sizing: raw 143 GiB vs fp32 120.2 GiB vs fp16/int16 (rejected)
+
+- Raw `.pose` bytes measured ~1,211 KiB/sample -> ~143 GiB for 123,779
+  samples (Kaggle, 2026-10-07). The archive barely compresses, so "raw"
+  means numerically safest, not smallest.
+- Fixed 160x1629 fp32 tensors are exactly 123,779 x 1,042,560 B = 120.2 GiB
+  -- smaller than raw with equal exactness, but still presumed too big.
+- fp16 (60.1 GiB) and int16 are REJECTED without a validation experiment:
+  both introduce train/serve skew (serving computes fp32; the velocity
+  signal the model builds internally is exactly where quantization damage
+  concentrates), and 60 GiB does not clear the persistence bar anyway.
+- D-cache approval (fixed fp32 + lossless zstd) is CONDITIONAL on the
+  empirical measurement below. No D-cache is built until the verdict is
+  reviewed.
+
+### Measurement gate (run this before any full prepare; no training)
+
+```bash
+python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
+    --out /kaggle/working/s2t_v2 --stages measure --measure-samples 2000
+# optional: --persistence-target-gib <your measured budget> for a FIT verdict
+```
+
+The `measure` stage (opt-in only, never in `all`) stride-samples ~2,000 items
+across the authoritative train/val/test row order, runs each through the
+exact V2 preprocessing, zstd-compresses the fixed fp32 tensor (level 3),
+verifies byte-exact decompression per item, and writes
+`measure_report.json`: true_len min/median/mean/p90/p95/max, totals,
+measured ratio, per-sample average, padding-vs-data attribution
+(zero-padding fraction + dense-data ratio), projections for 123,779 and per
+split, safety margin, and a FIT / BORDERLINE / DOES_NOT_FIT verdict
+(UNKNOWN-no-target when no budget is passed -- no Kaggle limit is assumed or
+hardcoded). It creates NO cache and needs NO tokenizer.
+
+**Do not start full training until the measurement verdict is known.**
+FIT -> proceed to design review for full D-cache creation. BORDERLINE or
+DOES_NOT_FIT -> subset pilot or rethink persistence first.
+
 ## 7. Operator next step (exact)
 
 On Kaggle (GPU T4×2), clone `https://github.com/therandomuser03/signsage.git`
