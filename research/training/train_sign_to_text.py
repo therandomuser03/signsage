@@ -704,6 +704,9 @@ def check_cache_budget(projected_gib: float, budget_gib: float, cache_dir: Path)
 # Throughput micro-benchmarks + quota feasibility gate (all bounded, all labeled).
 BENCH_TRAIN_STEPS = 20
 BENCH_DECODE_SAMPLES = 256
+# Overfit-gate step cap. The gate loop breaks early on pass, so this only
+# prices the worst case in compute_feasibility (gate upper bound).
+GATE_STEPS = 1200
 FEASIBILITY_REPORT = "feasibility.json"
 
 
@@ -766,8 +769,8 @@ def compute_feasibility(meas: dict, n_train: int, n_val: int, n_test: int,
                         local_fetch_s: float | None = None) -> dict:
     """Project the full experiment from MEASURED rates. Conservative: data and
     compute are summed (no overlap assumed); gate is an upper bound (assumes
-    never breaks early); val forward-only assumed 3x train-step rate. Pure
-    function -- unit-tested.
+    never breaks early within GATE_STEPS); val forward-only assumed 3x
+    train-step rate. Pure function -- unit-tested.
 
     data_mode="stream": every epoch re-reads remotely at fetch_prep_per_sample_s.
     data_mode="cache": prepare pays remote fetch ONCE; gate/train/val/diversity/
@@ -794,7 +797,7 @@ def compute_feasibility(meas: dict, n_train: int, n_val: int, n_test: int,
     epoch_data_h = (n_train + n_val) * data_s / 3600
     epoch_comp_h = (train_steps + val_steps / 3) / max(1e-9, steps_s) / 3600
     epoch_h = epoch_data_h + epoch_comp_h
-    gate_h = (64 * data_s + 600 * 4 / max(1e-9, steps_s)) / 3600
+    gate_h = (64 * data_s + GATE_STEPS * 4 / max(1e-9, steps_s)) / 3600
     div_h = 512 / max(1e-9, dec_s) / 3600
     eval_h = n_test / max(1e-9, dec_s) / 3600 + 0.2
     total_h = prep_h + tok_h + gate_h + epochs * (epoch_h + div_h) + eval_h + 0.5
@@ -805,7 +808,7 @@ def compute_feasibility(meas: dict, n_train: int, n_val: int, n_test: int,
                 "data_mode": data_mode}
     assumptions = ["no data/compute overlap (conservative sum)",
                    "val forward-only = 3x train-step rate",
-                   "gate upper bound: full 600 checks, no early break; "
+                   "gate upper bound: full GATE_STEPS checks, no early break; "
                    "gate/diversity loaders memoize (64/512 fetches once total)",
                    "decode rate measured on random weights (optimistic for eval)"]
     if data_mode == "cache":
@@ -1727,12 +1730,26 @@ def main(argv=None) -> int:
         gate_opt = torch.optim.AdamW(gate.parameters(), lr=1e-3)
         gate_crit = nn.CrossEntropyLoss(ignore_index=sp.pad_id())
         exact = 0.0
-        for step in range(600):
-            run_epoch(gate, gate_loader, gate_opt, gate_crit, device)
+        # Cosine decay 1e-3 -> 1e-5 over the first 600 steps, then hold the
+        # floor: a fixed 1e-3 oscillates and diverges past ~step 400 (local
+        # 64-sample replica with this exact loop: 87.5% -> 51.6% exact, loss
+        # 0.07 -> 0.45; 0/31 failures constraint-blocked), so the gate can
+        # fail while the implementation is sound. Decay settles into the
+        # sharp memorization minimum instead of bouncing around it (replica:
+        # loss ~0.01 stable, no collapse). The 1200-step tail at 1e-5 gives
+        # the final sharpening room greedy exact needs (95% exact on ~15-token
+        # targets needs teacher-forced loss ~0.003); the >=95% bar itself is
+        # unchanged and the loop still breaks early on pass.
+        for step in range(GATE_STEPS):
+            gloss = run_epoch(gate, gate_loader, gate_opt, gate_crit, device)
+            frac = min(1.0, (step + 1) / 600)
+            lr = 1e-5 + (1e-3 - 1e-5) * 0.5 * (1 + math.cos(math.pi * frac))
+            for pg in gate_opt.param_groups:
+                pg["lr"] = lr
             if (step + 1) % 100 == 0:
                 refs, hyps, _ = batch_greedy(gate, gate_loader, sp, device)
                 exact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)]))
-                log(f"  gate step {step + 1}: exact={exact:.1%}")
+                log(f"  gate step {step + 1}: exact={exact:.1%} loss={gloss:.4f} lr={lr:.1e}")
                 if exact >= 0.95:
                     break
         if exact < 0.95:
