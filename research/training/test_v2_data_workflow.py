@@ -310,6 +310,7 @@ def test_overfit_gate() -> None:
         out = td / "s2t"
         cmd = [sys.executable, str(Path(__file__).parent / "train_sign_to_text.py"),
                "--csv", str(csv), "--pose-source", str(posed), "--out", str(out),
+               "--data-mode", "cache",
                "--stages", "tokenizer,prepare,overfit"]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
         assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-3000:]
@@ -366,17 +367,43 @@ def test_measure_report_structure(tmp: Path) -> None:
     assert set(rep["projected_compressed_gib_by_split"]) == {"train", "val", "test"}
     assert rep["verdict"] in ("FIT", "BORDERLINE", "DOES_NOT_FIT")
     assert rep["safety_margin_gib"] is not None
-    # measurement creates NO cache, NO tokenizer, NO checkpoints
+    # measure also times + persists the tokenizer (reused by later stages) and
+    # writes the throughput benches + quota feasibility gate files
+    assert (out / "tokenizer" / "signsage_en_sp.model").is_file()
+    assert rep["tokenizer_hours"] >= 0.0
+    assert rep["fetch_prep_per_sample_s"] > 0.0
+    assert set(rep["benchmarks"]) >= {"train_steps_per_sec", "decode_hyps_per_sec",
+                                      "ckpt_probe_save_s"}
+    feas = json.loads((out / "feasibility.json").read_text())
+    assert feas["verdict"] in ("PASS", "FAIL"), feas
+    assert "FULL CACHE DISABLED" in T.feasibility_banner(feas, 30, "stream")
+    # measurement creates NO pose cache and NO checkpoints
     assert not (out / "pose_cache").exists()
-    assert not (out / "tokenizer").exists()
     assert not (out / "checkpoints").exists()
-    print("PASS measure report structure (+FIT verdict, no cache created)")
+    print("PASS measure report structure (+FIT verdict, tokenizer persisted, no cache created)")
 
 
 def test_measure_unknown_target(tmp: Path) -> None:
     rep, _ = _measure_run(tmp)
     assert rep["verdict"] == "UNKNOWN-no-target" and rep["safety_margin_gib"] is None
     print("PASS measure without target stays UNKNOWN (no hardcoded limit)")
+
+
+def test_measure_empty_split_projection(tmp: Path) -> None:
+    """A stride sample that misses a tiny split must project 0 bytes, not KeyError."""
+    import train_sign_to_text as TT
+    uids = [f"e{i:02d}-0" for i in range(8)]
+    blobs = {u: make_pose_blob(1100 + i, frames=10 + i) for i, u in enumerate(uids)}
+    out = tmp / "s2t"
+    out.mkdir(parents=True)
+    split_uids = {"train": uids[:6], "val": uids[6:7], "test": uids[7:]}
+    rep = TT.measure_compression(split_uids, FakeRemote(blobs), out,
+                                 n_samples=1, target_gib=50.0)
+    assert rep["n_sampled"] == 1
+    assert set(rep["projected_compressed_gib_by_split"]) == {"train", "val", "test"}
+    assert rep["projected_compressed_gib_by_split"]["val"] == 0.0
+    assert rep["projected_compressed_gib_by_split"]["test"] == 0.0
+    print("PASS measure with unsampled split projects 0 bytes (no KeyError)")
 
 
 def test_zstd_roundtrip_unit() -> None:
@@ -394,8 +421,12 @@ def test_zstd_roundtrip_unit() -> None:
 def test_measure_deterministic(tmp: Path) -> None:
     rep1, _ = _measure_run(tmp / "a")
     rep2, _ = _measure_run(tmp / "b")
-    rep1.pop("elapsed_s")
-    rep2.pop("elapsed_s")
+    # wall-clock fields (throughput benches, timings) vary run to run by nature;
+    # everything derived from the deterministic stride sample must be identical.
+    for rep in (rep1, rep2):
+        for key in ("elapsed_s", "tokenizer_hours", "fetch_prep_per_sample_s",
+                    "benchmarks"):
+            rep.pop(key, None)
     assert rep1 == rep2, "measure must be deterministic for identical inputs"
     print("PASS measure deterministic sample accounting")
 
@@ -415,6 +446,192 @@ def test_no_training_config_change() -> None:
     print("PASS no model/training configuration changes")
 
 
+def test_stream_shard_parity(tmp: Path) -> None:
+    """Same uids via direct source vs sharded cache: identical model inputs."""
+    from torch.utils.data import DataLoader
+    uids = [f"vid{i:03d}-0" for i in range(8)]
+    blobs = {u: make_pose_blob(800 + i, frames=14 + i) for i, u in enumerate(uids)}
+    rawdir = tmp / "raw"
+    rawdir.mkdir(parents=True)
+    for u, b in blobs.items():
+        (rawdir / f"{u}.pose").write_bytes(b)
+    texts = np.array([f"parity check sentence {i}" for i in range(8)])
+    uarr = np.array(uids)
+    fake_sp = type("SP", (), {"pad_id": lambda s: 0, "eos_id": lambda s: 3,
+                              "bos_id": lambda s: 2})()
+    import train_sign_to_text as TT
+    orig_enc = TT.encode_text
+    TT.encode_text = lambda sp, t, max_len=96: [2] + [4 + (len(t) % 20)] * 5 + [3]
+    try:
+        ds_stream = TT.SignToTextDataset(uarr, texts, fake_sp, TT.DirPoseSource(str(rawdir)),
+                                         (("dir", str(rawdir))), memoize=False)
+        TT.materialize_pose_cache(uids, TT.DirPoseSource(str(rawdir)),
+                                  tmp / "pc", shard_samples=8, verify_every=1000)
+        ds_cached = TT.SignToTextDataset(uarr, texts, fake_sp, None, ("shards", str(tmp / "pc")),
+                                         memoize=False)
+    finally:
+        TT.encode_text = orig_enc
+    for i in range(len(uids)):
+        fs, ls, ts = ds_stream[i]
+        fc, lc, tc = ds_cached[i]
+        assert ls == lc and torch.equal(ts, tc) and torch.equal(fs, fc), f"row {i} differs"
+    # memoized small loader returns the same values while fetching once
+    TT.encode_text = lambda sp, t, max_len=96: [2, 5, 6, 3]
+    try:
+        ds_m = TT.SignToTextDataset(uarr[:4], texts[:4], fake_sp, TT.DirPoseSource(str(rawdir)),
+                                    (("dir", str(rawdir))), memoize=True)
+        a = [ds_m[j] for j in range(4)]
+        b = [ds_m[j] for j in range(4)]
+        assert all(torch.equal(x[0], y[0]) for x, y in zip(a, b))
+        big = np.array([f"u{i}" for i in range(2000)])
+        try:
+            TT.SignToTextDataset(big, np.array(["t"] * 2000), fake_sp, None, None, memoize=True)
+            raise AssertionError("memoize should refuse 2000 samples")
+        except ValueError:
+            pass
+    finally:
+        TT.encode_text = orig_enc
+    print("PASS stream-vs-shard parity (+memoize values, +RAM-bound refuse)")
+
+
+def test_cache_budget_refuse(tmp: Path) -> None:
+    import shutil as _sh
+    import train_sign_to_text as TT
+    tmp.mkdir(parents=True, exist_ok=True)
+    free_gib = _sh.disk_usage(tmp).free / (1024 ** 3)
+    fits = max(0.01, 0.1 * free_gib)  # comfortably under 90% of free, whatever the host has
+    TT.check_cache_budget(fits, fits + 1.0, tmp)  # small cache succeeds
+    try:
+        TT.check_cache_budget(143.0, 10.0, tmp)  # observed Kaggle projection vs default budget
+        raise AssertionError("143 GiB vs 10 GiB budget should refuse")
+    except SystemExit:
+        pass
+    try:
+        TT.check_cache_budget(fits + 1.0, fits, tmp)  # over budget refuses
+        raise AssertionError("budget should refuse")
+    except SystemExit:
+        pass
+    # nearly-full disk refuses even a small projection
+    orig = _sh.disk_usage
+    _sh.disk_usage = lambda p: orig(p)._replace(free=1 * 1024 ** 2)  # 1 MiB free
+    try:
+        TT.check_cache_budget(fits, fits + 100.0, tmp)
+        raise AssertionError("nearly-full disk should refuse")
+    except SystemExit:
+        pass
+    finally:
+        _sh.disk_usage = orig
+    # tiny max_cache_gb stops materialization fast without full fetch
+    blobs = {f"v{i}-0": make_pose_blob(900 + i) for i in range(6)}
+    try:
+        TT.materialize_pose_cache(list(blobs), FakeRemote(blobs), tmp / "pc",
+                                   shard_samples=6, verify_every=1000, max_cache_gb=0.0001)
+        raise AssertionError("max_cache_gb should stop")
+    except SystemExit:
+        pass
+    print("PASS disk budget refuse (over-budget, nearly-full, max-cache-gb)")
+
+
+def test_subset_deterministic() -> None:
+    """Pilot subset: deterministic, exact counts, strictly within each split."""
+    import pandas as pd
+    import train_sign_to_text as TT
+
+    def mk(prefix: str, nvid: int, per: int):
+        rows = []
+        for v in range(nvid):
+            for s in range(per):
+                rows.append({"uid": f"{prefix}v{v}-{s}", "video_id": f"{prefix}v{v}",
+                             "text": f"text {v} {s}"})
+        return pd.DataFrame(rows)
+
+    tr, va, te = mk("t", 20, 5), mk("v", 10, 5), mk("e", 10, 5)  # 100/50/50 rows
+    a = TT.apply_subset(tr, va, te, 30, 42)
+    b = TT.apply_subset(tr, va, te, 30, 42)
+    assert [len(x) for x in a] == [30, 30, 30]
+    assert all(x.equals(y) for x, y in zip(a, b))  # deterministic
+    for frame, full in zip(a, (tr, va, te)):  # strictly within the source split
+        assert set(frame["uid"]) <= set(full["uid"])
+    assert set(a[0]["video_id"]).isdisjoint(a[1]["video_id"])
+    assert set(a[0]["video_id"]).isdisjoint(a[2]["video_id"])
+    assert set(a[1]["video_id"]).isdisjoint(a[2]["video_id"])
+    c = TT.apply_subset(tr, va, te, 30, 43)
+    assert not a[0].equals(c[0])  # seed matters
+    d = TT.apply_subset(tr, va, te, 1000, 42)  # subset >= split keeps everything
+    assert [len(x) for x in d] == [100, 50, 50]
+    print("PASS subset deterministic random sampling (counts, disjoint, seed-sensitive)")
+
+
+def test_subset_audit_metadata(tmp: Path) -> None:
+    """--stages audit with --subset records size/seed/method/counts in dataset_audit.json."""
+    import pandas as pd
+    posed = tmp / "poses"
+    posed.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for v in range(40):
+        for s in range(2):
+            uid = f"s{v:02d}-{s}"
+            (posed / f"{uid}.pose").write_bytes(make_pose_blob(1200 + v * 2 + s, frames=10 + ((v + s) % 4)))
+            rows.append({"uid": uid, "text": f"audit sentence video {v} number {s}"})
+    csv = tmp / "s.csv"
+    pd.DataFrame(rows).to_csv(csv, index=False)
+    out = tmp / "s2t"
+    cmd = [sys.executable, str(Path(__file__).parent / "train_sign_to_text.py"),
+           "--csv", str(csv), "--pose-source", str(posed), "--out", str(out),
+           "--subset", "5", "--stages", "audit"]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    split = json.loads((out / "dataset_audit.json").read_text())["split"]
+    assert split["subset"] == 5 and split["subset_seed"] == 42
+    assert split["subset_sampling"] == "deterministic_random_without_replacement"
+    assert (split["train_rows"], split["val_rows"], split["test_rows"]) == (5, 5, 5)
+    print("PASS subset audit metadata (size/seed/method/counts recorded)")
+
+
+def test_feasibility_gate(tmp: Path) -> None:
+    import train_sign_to_text as TT
+    meas = {"fetch_prep_per_sample_s": 0.3,  # user-measured Kaggle rate
+            "benchmarks": {"train_steps_per_sec": 2.0, "decode_hyps_per_sec": 5.0}}
+    full = TT.compute_feasibility(meas, 98485, 13014, 12280, 64, 12, 0.0, 0.1, 13.567, 11.5)
+    assert full["verdict"] == "FAIL", full
+    assert full["projected_total_hours"] > 13.567
+    pilot = TT.compute_feasibility(meas, 16000, 2000, 2000, 64, 4, 0.0, 0.1, 13.567, 11.5)
+    assert pilot["breakdown_hours"]["per_epoch"] < full["breakdown_hours"]["per_epoch"]
+    fast = dict(meas, fetch_prep_per_sample_s=0.01,
+                benchmarks={"train_steps_per_sec": 20.0, "decode_hyps_per_sec": 50.0})
+    ok = TT.compute_feasibility(fast, 1000, 100, 100, 64, 1, 0.0, 0.0, 13.567, 11.5)
+    assert ok["verdict"] == "PASS", ok
+    banner = TT.feasibility_banner(ok, 1200, "stream")
+    assert "FULL CACHE DISABLED" in banner and "FEASIBILITY: PASS" in banner
+    print(f"PASS feasibility gate (full-12ep FAIL at {full['projected_total_hours']:.1f}h; "
+          f"fast-path PASS; banner ok)")
+
+
+def test_refresh_feasibility_after_cache(tmp: Path) -> None:
+    """Cache-mode measure leaves projected_total_hours=NaN (prepare unpriced);
+    once the cache is complete the recompute must yield a finite verdict."""
+    import math
+    import train_sign_to_text as TT
+    out = tmp / "s2t"
+    out.mkdir(parents=True)
+    rep = {"fetch_prep_per_sample_s": 0.05, "tokenizer_hours": 0.1,
+           "benchmarks": {"train_steps_per_sec": 8.0, "decode_hyps_per_sec": 20.0}}
+    (out / "measure_report.json").write_text(json.dumps(rep))
+    nan_feas = TT.compute_feasibility(rep, 2000, 200, 200, 64, 2, float("nan"), 0.1,
+                                      13.567, 11.5)
+    assert nan_feas["verdict"] == "FAIL" and math.isnan(nan_feas["projected_total_hours"])
+    (out / "feasibility.json").write_text(json.dumps(nan_feas))
+    new = TT.refresh_feasibility_after_cache(out, 2000, 200, 200, 64, 2, 13.567, 11.5)
+    assert new is not None and math.isfinite(new["projected_total_hours"]), new
+    assert new["breakdown_hours"]["prepare"] == 0.0 and "sunk" in new["note"]
+    assert "FEASIBILITY: PASS" in TT.feasibility_banner(new, 2400, "cache")
+    assert math.isfinite(json.loads((out / "feasibility.json").read_text())
+                         ["projected_total_hours"])
+    assert TT.refresh_feasibility_after_cache(tmp / "nope", 1, 1, 1, 64, 1,
+                                              13.567, 11.5) is None
+    print("PASS feasibility recompute after complete cache (NaN -> finite verdict)")
+
+
 def main() -> int:
     only_gate = "--gate" in sys.argv
     if only_gate:
@@ -429,7 +646,14 @@ def main() -> int:
         test_token_cache_reuse(td / "t4")
         test_measure_report_structure(td / "t6")
         test_measure_unknown_target(td / "t7")
+        test_measure_empty_split_projection(td / "t7b")
         test_measure_deterministic(td / "t8")
+        test_stream_shard_parity(td / "t9")
+        test_subset_deterministic()
+        test_subset_audit_metadata(td / "t9b")
+        test_cache_budget_refuse(td / "t10")
+        test_feasibility_gate(td / "t11")
+        test_refresh_feasibility_after_cache(td / "t12")
         test_checkpoint_resume_keys(td / "t5")
     test_zstd_roundtrip_unit()
     test_no_training_config_change()

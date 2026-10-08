@@ -18,8 +18,10 @@ Stages (select with --stages subset, default all):
         --pose-source /path/to/poses.zip --out /kaggle/working/s2t_v2
     python train_sign_to_text.py --smoke --out /tmp/s2t_smoke   # CPU plumbing check
 
-Resumable: recovery snapshots every --snapshot-batches + best kept;
-re-run with --resume to continue. Never overwrites run 352868924.
+Resumable: a per-epoch recovery snapshot (<out>/checkpoints/
+signsage_transformer_recovery.pt holds model + optimizer + scheduler +
+epoch/best/bad/history + RNG states) plus the best checkpoint are written
+every epoch; re-run with --resume to continue. Never overwrites run 352868924.
 
 Multi-session (Kaggle): the prepare stage materializes a resumable local
 pose cache (<out>/pose_cache) once; later sessions reuse it plus the token
@@ -410,7 +412,7 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
                            shard_samples: int = DEFAULT_SHARD_SAMPLES,
                            verify_every: int = DEFAULT_VERIFY_EVERY,
                            max_cache_gb: float = 0.0, jobs: int = 1,
-                           source_factory=None) -> Path:
+                           source_factory=None, budget_gib: float = 0.0) -> Path:
     """Download each uid's `.pose` bytes ONCE into sharded local ZIPs (resumable).
 
     Skips uids already present in existing shard files (verified from the
@@ -530,6 +532,7 @@ def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
                 eta_h = (len(todo) - 200) / max(1e-9, rate) / 3600
                 log(f"cache: projection after 200 samples: ~{per_sample / 1024:.0f} KiB/sample "
                     f"-> ~{proj_gib:.1f} GiB total, rate {rate:.1f} samples/s, ETA ~{eta_h:.1f}h")
+                check_cache_budget(proj_gib, budget_gib, cache_dir)  # refuse BEFORE burning hours
                 projected = True
             if (n_done + n_fail) % verify_every == 0 and n_done:
                 _close_shard()  # flush: reader needs the central directory on disk
@@ -608,8 +611,11 @@ def measure_compression(split_uids: dict, store: PoseSource, out: Path,
     tls: list = []
     per_split: dict = {}
     n_bytes = c_bytes = v_bytes = vc_bytes = 0
+    fetch_t = 0.0
     for i, (split, uid) in enumerate(picked):
+        t_f = time.perf_counter()
         frames, true_len = load_pose_item(uid, store)
+        fetch_t += time.perf_counter() - t_f
         assert frames.shape == (MAX_FRAMES, LANDMARK_DIM) and frames.dtype == np.float32
         full = np.ascontiguousarray(frames).tobytes()
         comp = cctx.compress(full)
@@ -633,8 +639,13 @@ def measure_compression(split_uids: dict, store: PoseSource, out: Path,
     tls_arr = np.asarray(tls, dtype=np.int64)
     ratio = n_bytes / max(1, c_bytes)
     avg_c = c_bytes / max(1, n)
-    proj = {split: per_split[split]["compressed"] / max(1, per_split[split]["n"]) * len(split_uids.get(split, []))
-            for split in ("train", "val", "test")}
+    proj = {}
+    for split in ("train", "val", "test"):
+        # a tiny split may contribute zero stride samples (e.g. subset pilots);
+        # project 0 bytes for it rather than KeyError.
+        st = per_split.get(split, {"n": 0, "compressed": 0})
+        proj[split] = (st["compressed"] / max(1, st["n"])
+                       * len(split_uids.get(split, [])))
     proj_full = avg_c * FULL_DATASET_N
     verdict, margin_gib = "UNKNOWN-no-target", None
     if target_gib and target_gib > 0:
@@ -659,6 +670,7 @@ def measure_compression(split_uids: dict, store: PoseSource, out: Path,
         "split_counts": {s: len(split_uids.get(s, [])) for s in ("train", "val", "test")},
         "persistence_target_gib": target_gib if target_gib > 0 else None,
         "safety_margin_gib": margin_gib, "verdict": verdict,
+        "fetch_prep_per_sample_s": fetch_t / max(1, n),
         "zstd_level": ZSTD_LEVEL, "representation": "fixed-160x1629-fp32+zstd-lossless",
         "elapsed_s": time.perf_counter() - t0,
     }
@@ -669,6 +681,161 @@ def measure_compression(split_uids: dict, store: PoseSource, out: Path,
         f"ratio={ratio:.2f}x avg={avg_c / 1024:.0f} KiB/sample "
         f"-> projected {proj_full / (1024 ** 3):.1f} GiB / 123,779 samples; verdict={verdict}")
     return report
+
+
+def check_cache_budget(projected_gib: float, budget_gib: float, cache_dir: Path) -> None:
+    """Refuse unsafe materialization BEFORE hours burn. Raises SystemExit when
+    the projection exceeds the configured budget or 90% of free disk.
+    Pure function of (projection, budget, free-bytes) -- unit-tested, and the
+    nearly-full-disk case is exercised by monkeypatching shutil.disk_usage."""
+    free_gib = shutil.disk_usage(cache_dir if cache_dir.exists()
+                                 else cache_dir.parent).free / (1024 ** 3)
+    if budget_gib and projected_gib > budget_gib:
+        raise SystemExit(f"cache REFUSED: projected {projected_gib:.1f} GiB > "
+                         f"--cache-budget-gib={budget_gib:.1f} (partial cache kept; "
+                         f"use --data-mode stream or a smaller --subset)")
+    if projected_gib > 0.9 * free_gib:
+        raise SystemExit(f"cache REFUSED: projected {projected_gib:.1f} GiB > 90% of "
+                         f"free disk ({free_gib:.1f} GiB free)")
+    log(f"cache budget: projected {projected_gib:.1f} GiB within budget "
+        f"{budget_gib:.1f} GiB and free disk {free_gib:.1f} GiB")
+
+
+# Throughput micro-benchmarks + quota feasibility gate (all bounded, all labeled).
+BENCH_TRAIN_STEPS = 20
+BENCH_DECODE_SAMPLES = 256
+FEASIBILITY_REPORT = "feasibility.json"
+
+
+def benchmark_training_throughput(device, vocab_size: int, batch: int) -> dict:
+    """Real-config model, synthetic same-shape batch: pure compute rate."""
+    t0 = time.perf_counter()
+    model = SignTransformer(MODEL_INPUT_DIM, vocab_size, MAX_FRAMES, MAX_TOKENS,
+                            pad_idx=0, d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
+                            ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST).to(device)
+    opt = torch.optim.AdamW(model.parameters(), lr=PEAK_LR, weight_decay=WEIGHT_DECAY)
+    crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=LABEL_SMOOTHING)
+    frames = torch.randn(batch, MAX_FRAMES, LANDMARK_DIM, device=device)
+    lengths = torch.full((batch,), MAX_FRAMES, device=device, dtype=torch.long)
+    tin = torch.randint(4, vocab_size, (batch, 32), device=device)
+    tout = torch.randint(4, vocab_size, (batch, 32), device=device)
+    amp = torch.autocast(device_type="cuda", dtype=torch.float16) if device.type == "cuda" else nullcontext()
+    model.train()
+    for _ in range(BENCH_TRAIN_STEPS):
+        opt.zero_grad(set_to_none=True)
+        with amp:
+            loss = crit(model(frames, padding_mask(lengths, frames.size(1)), tin,
+                              causal_mask(tin.size(1), device)).reshape(-1, vocab_size),
+                        tout.reshape(-1))
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+        opt.step()
+    dt = time.perf_counter() - t0
+    return {"train_steps_per_sec": BENCH_TRAIN_STEPS / dt, "device": str(device),
+            "note": "synthetic batch, real config+shapes; excludes data loading"}
+
+
+def compute_feasibility(meas: dict, n_train: int, n_val: int, n_test: int,
+                        batch: int, epochs: int, prep_h: float, tok_h: float,
+                        quota_h: float, target_h: float) -> dict:
+    """Project the full experiment from MEASURED rates. Conservative: data and
+    compute are summed (no overlap assumed); gate is an upper bound (assumes
+    never breaks early); val forward-only assumed 3x train-step rate. Pure
+    function -- unit-tested."""
+    fetch_s = meas["fetch_prep_per_sample_s"]
+    steps_s = meas["benchmarks"]["train_steps_per_sec"]
+    dec_s = meas["benchmarks"]["decode_hyps_per_sec"]
+    train_steps = math.ceil(n_train / batch)
+    val_steps = math.ceil(n_val / batch)
+    epoch_data_h = (n_train + n_val) * fetch_s / 3600
+    epoch_comp_h = (train_steps + val_steps / 3) / max(1e-9, steps_s) / 3600
+    epoch_h = epoch_data_h + epoch_comp_h
+    gate_h = (600 * 64 * fetch_s + 600 * 4 / max(1e-9, steps_s)) / 3600
+    div_h = 512 / max(1e-9, dec_s) / 3600
+    eval_h = n_test / max(1e-9, dec_s) / 3600 + 0.2
+    total_h = prep_h + tok_h + gate_h + epochs * (epoch_h + div_h) + eval_h + 0.5
+    verdict = "PASS" if total_h <= target_h else "FAIL"
+    return {
+        "quota_hours": quota_h, "target_hours": target_h, "verdict": verdict,
+        "projected_total_hours": total_h,
+        "breakdown_hours": {"prepare": prep_h, "tokenizer": tok_h, "overfit_gate_ub": gate_h,
+                            "per_epoch": epoch_h, "per_epoch_diversity": div_h,
+                            "epochs": epochs, "eval": eval_h, "slack": 0.5},
+        "measured_inputs": {"fetch_prep_per_sample_s": fetch_s,
+                            "train_steps_per_sec": steps_s,
+                            "decode_hyps_per_sec": dec_s},
+        "assumptions": ["no data/compute overlap (conservative sum)",
+                        "val forward-only = 3x train-step rate",
+                        "gate upper bound: full 600 checks, no early break",
+                        "decode rate measured on random weights (optimistic for eval)"],
+    }
+
+
+def feasibility_banner(feas: dict, n_usable: int, data_mode: str) -> str:
+    b = feas["breakdown_hours"]
+    return ("================================\n"
+            "V2 RESOURCE FEASIBILITY\n"
+            "================================\n"
+            f"Remaining Kaggle budget: {feas['quota_hours']:.2f}h\n"
+            f"Target maximum runtime: {feas['target_hours']:.2f}h\n"
+            f"Dataset: {n_usable:,} usable samples\n"
+            f"Cache mode: {'FULL' if data_mode == 'cache' else 'STREAMING (FULL CACHE DISABLED)'}\n"
+            f"Preprocessing: {1 / max(1e-9, feas['measured_inputs']['fetch_prep_per_sample_s']):.1f} samples/sec\n"
+            f"Fetch+prep: {feas['measured_inputs']['fetch_prep_per_sample_s']:.3f} sec/sample\n"
+            f"Training: {feas['measured_inputs']['train_steps_per_sec']:.2f} steps/sec\n"
+            f"Estimated epoch: {b['per_epoch']:.2f} hours\n"
+            f"Estimated total ({b['epochs']} epochs): {feas['projected_total_hours']:.2f} hours\n"
+            f"FEASIBILITY: {feas['verdict']}\n"
+            "================================")
+
+
+def refresh_feasibility_after_cache(out: Path, n_train: int, n_val: int, n_test: int,
+                                      batch: int, epochs: int,
+                                      quota_h: float, target_h: float) -> dict | None:
+    """Cache-mode measure writes projected_total_hours=NaN (prepare cost unknowable
+    before the 200-sample projection). Once the cache is COMPLETE the prepare cost
+    is sunk, and local-disk reads are no slower than the remote-measured fetch rate,
+    so recompute with prep_h=0 from measure_report.json and overwrite
+    feasibility.json. Returns the new feas, or None when no usable measurement exists."""
+    try:
+        rep = json.loads((out / MEASURE_REPORT).read_text())
+        bench = rep["benchmarks"]
+        fetch_s = float(rep["fetch_prep_per_sample_s"])
+        float(bench["train_steps_per_sec"])
+        float(bench["decode_hyps_per_sec"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    tok_h = float(rep.get("tokenizer_hours", 0.0) or 0.0)
+    feas = compute_feasibility(rep, n_train, n_val, n_test, batch, epochs,
+                               0.0, tok_h, quota_h, target_h)
+    feas["note"] = ("recomputed after complete local cache: prepare cost sunk (0h); "
+                    "fetch rate still the remote-measured value "
+                    "(conservative: disk reads are faster)")
+    tmp = out / (FEASIBILITY_REPORT + ".tmp")
+    tmp.write_text(json.dumps(feas, indent=1))
+    os.replace(tmp, out / FEASIBILITY_REPORT)
+    return feas
+
+
+def apply_subset(df_tr, df_va, df_te, subset: int, seed: int):
+    """Deterministic pilot subset: uniform random rows within each split.
+
+    The splits themselves are untouched (same video sets from the seed-42
+    video_split; no video crosses splits); only row counts shrink to at most
+    `subset` per split. Draws are without replacement from a seeded RNG, so
+    identical inputs always yield identical subsets. Pure function --
+    unit-tested for determinism, exact counts, and split containment."""
+    out = []
+    rng = np.random.default_rng(seed)
+    for name, frame in (("train", df_tr), ("val", df_va), ("test", df_te)):
+        n = min(subset, len(frame))
+        if n < len(frame):
+            idx = np.sort(rng.choice(len(frame), size=n, replace=False))
+            frame = frame.iloc[idx].reset_index(drop=True)
+        log(f"SUBSET MODE: {name} capped to {n} rows via deterministic random sampling "
+            f"(pilot run only -- NOT the full V2 experiment; representation unchanged)")
+        out.append(frame)
+    return out[0], out[1], out[2]
 
 
 def _open_pose_store(kind: str, arg: str) -> PoseSource:
@@ -859,12 +1026,20 @@ def load_or_build_token_cache(sp, model_path: Path, tok_dir: Path,
 
 class SignToTextDataset(Dataset):
     def __init__(self, uids: np.ndarray, texts: np.ndarray, sp, store: PoseSource | None,
-                 store_spec: tuple | None = None, token_ids=None):
+                 store_spec: tuple | None = None, token_ids=None, memoize: bool = False):
         self.uids = uids
         self.sp = sp
         self.store = store
         self.store_spec = store_spec  # (kind, arg); workers open their own (fork-safe)
         self._worker_store = None
+        # memoize=True pins per-uid frames in RAM: ONLY for small fixed loaders
+        # (overfit gate: 64 samples; diversity sample: 512). Values are a pure
+        # function of uid (no augmentation anywhere), so repeats return
+        # bit-identical tensors while skipping remote re-fetch. NEVER enable
+        # for full train/val/test loaders (would pin tens of GiB).
+        self._memo: dict | None = {} if memoize else None
+        if memoize and len(uids) > 1024:
+            raise ValueError(f"memoize refused for {len(uids)} samples (RAM bound)")
         if token_ids is None:
             log(f"Pre-tokenizing {len(texts):,} captions...")
             self.token_ids = [np.asarray(encode_text(sp, t), dtype=np.int64) for t in texts]
@@ -892,12 +1067,18 @@ class SignToTextDataset(Dataset):
 
     def __getitem__(self, idx):
         uid = str(self.uids[idx])
+        if self._memo is not None and uid in self._memo:
+            frames, length = self._memo[uid]
+            return (torch.from_numpy(np.ascontiguousarray(frames)), torch.tensor(length),
+                    torch.from_numpy(self.token_ids[idx].copy()).long())
         if self.store is None and self.store_spec is None:  # smoke mode: deterministic synthetic poses
             rng = np.random.default_rng(abs(hash(uid)) % (2 ** 31))
             frames = rng.normal(size=(MAX_FRAMES, LANDMARK_DIM)).astype(np.float32)
             length = MAX_FRAMES
         else:
             frames, length = load_pose_item(uid, self._active_store())
+        if self._memo is not None:
+            self._memo[uid] = (np.ascontiguousarray(frames), int(length))
         return (torch.from_numpy(np.ascontiguousarray(frames)), torch.tensor(length),
                 torch.from_numpy(self.token_ids[idx].copy()).long())
 
@@ -1086,6 +1267,7 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
     bundle = out_dir / "signsage_deployment_bundle"
     (bundle / "checkpoint").mkdir(parents=True, exist_ok=True)
     (bundle / "tokenizer").mkdir(parents=True, exist_ok=True)
+    is_pilot = bool(train_cfg.get("is_pilot", False))
     mc = {
         "input_dim": MODEL_INPUT_DIM, "raw_feature_dim": LANDMARK_DIM,
         "vocab_size": sp.get_piece_size(),
@@ -1093,6 +1275,11 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
         "dropout": DROPOUT, "norm_first": NORM_FIRST,
         "max_frames": MAX_FRAMES, "max_tokens": MAX_TOKENS,
     }
+    if is_pilot:
+        mc["is_pilot"] = True
+        mc["subset"] = train_cfg.get("subset")
+        mc["subset_seed"] = train_cfg.get("subset_seed")
+        mc["note"] = "PILOT / PIPELINE VALIDATION ONLY -- NOT FOR PRODUCTION"
     torch.save({"state_dict": model.state_dict(), "model_config": mc,
                 "vocab": {sp.id_to_piece(i): i for i in range(sp.get_piece_size())}},
                bundle / "checkpoint" / "signsage_transformer_full.pt")
@@ -1109,11 +1296,13 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
             "normalization_version": "pose_normalize_v1", "max_frames": MAX_FRAMES,
             "final_model_input_dim": MODEL_INPUT_DIM, "full_feature_mask": FULL_FEATURE_MASK,
         }, indent=1))
+    tokenizer_desc = ("SentencePiece unigram trained on FULL training corpus (subset mode: tokenizer on full, "
+                      "pose data on subset)" if is_pilot else "SentencePiece unigram trained on training targets only")
     bundle.joinpath("sign_to_text_deployment.json").write_text(json.dumps({
         "project": "SignSage", "task": "ISL_to_English", "dataset": "iSign v1.1",
         "feature_dim": LANDMARK_DIM, "model_input_dim": MODEL_INPUT_DIM,
         "max_frames": MAX_FRAMES, "max_tokens": MAX_TOKENS, "vocab_size": sp.get_piece_size(),
-        "tokenizer": "SentencePiece unigram trained on training targets only",
+        "tokenizer": tokenizer_desc,
         "tokenizer_model": "tokenizer/signsage_en_sp.model",
         "special_token_ids": {"pad": 0, "unk": 1, "bos": 2, "eos": 3},
         "normalization_version": "pose_normalize_v1",
@@ -1135,8 +1324,14 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
         "metrics": eval_report.get("test_metrics", {}),
         "diversity": eval_report.get("diversity", {}),
         "gate": eval_report.get("gate", {}),
-        "status": "unpromoted — set SIGNSAGE_MODEL_PROMOTED=true only after the quality gate passes",
+        "status": ("PILOT / PIPELINE VALIDATION ONLY -- NOT FOR PRODUCTION"
+                   if train_cfg.get("is_pilot") else
+                   "unpromoted — set SIGNSAGE_MODEL_PROMOTED=true only after the quality gate passes"),
     }
+    if train_cfg.get("is_pilot"):
+        manifest["subset"] = train_cfg.get("subset")
+        manifest["subset_seed"] = train_cfg.get("subset_seed")
+        manifest["note"] = train_cfg.get("note")
     out_dir.joinpath(f"signsage-s2t_v{run_id}.yaml").write_text(
         "# SignSage run manifest (generated by train_sign_to_text.py)\n"
         + json.dumps(manifest, indent=1) + "\n")
@@ -1168,14 +1363,29 @@ def parse_args(argv=None):
                     help="parallel pose fetch workers for the prepare stage (1 = sequential; "
                          "measured 1.2 samples/s sequential on Kaggle, ~jobs x with 8)")
     ap.add_argument("--subset", type=int, default=0,
-                    help="pilot mode: cap train/val/test to the first N rows each (0 = full data). "
-                         "Loudly logged; representation and splits unchanged, just fewer videos.")
+                    help="pilot mode: deterministic random sample of at most N rows within each "
+                         "of train/val/test (0 = full data). "
+                         "Loudly logged and recorded in dataset_audit.json; splits, videos, "
+                         "representation unchanged, just fewer rows.")
     ap.add_argument("--measure-samples", type=int, default=2000,
                     help="items sampled by the measure stage (deterministic stride; default 2000)")
     ap.add_argument("--persistence-target-gib", type=float, default=0.0,
                     help="persistence budget the measure verdict is computed against. "
                          "0 = unknown: verdict stays UNKNOWN-no-target. Never hardcoded: "
                          "pass a value measured on the Kaggle host (df -h, trial saves).")
+    ap.add_argument("--data-mode", choices=("stream", "cache"), default="stream",
+                    help="stream: train directly from --pose-source, no materialization "
+                         "(FULL CACHE DISABLED; default). cache: materialize pose_cache/ "
+                         "once under a disk budget, then train from disk.")
+    ap.add_argument("--cache-budget-gib", type=float, default=10.0,
+                    help="max pose-cache size in cache mode; projected overruns refuse "
+                         "before fetching (subset pilots fit, full 143 GiB does not).")
+    ap.add_argument("--quota-hours", type=float, default=13.0 + 34.0 / 60.0,
+                    help="remaining Kaggle quota the feasibility gate budgets against.")
+    ap.add_argument("--target-hours", type=float, default=11.5,
+                    help="max projected runtime for a PASS verdict (quota minus safety margin).")
+    ap.add_argument("--force", action="store_true",
+                    help="override a FAIL feasibility verdict (loudly logged; quota WILL burn).")
     ap.add_argument("--contract", default="research/evaluation/reports/352868924/landmark_contract.json",
                     help="landmark contract to copy into the bundle (representation unchanged)")
     ap.add_argument("--out", required=True, help="output dir for checkpoints/bundle/report")
@@ -1233,16 +1443,15 @@ def main(argv=None) -> int:
         df_tr_all, df_va_all, df_te_all, split = video_split(cleaned, args.seed)
         df_tr, df_va, df_te = df_tr_all, df_va_all, df_te_all
         if args.subset and args.subset > 0:
-            log(f"SUBSET MODE: capping each split to its first {args.subset} rows "
-                f"(pilot run only -- NOT the full V2 experiment; representation unchanged)")
-            df_tr = df_tr.iloc[:args.subset].reset_index(drop=True)
-            df_va = df_va.iloc[:args.subset].reset_index(drop=True)
-            df_te = df_te.iloc[:args.subset].reset_index(drop=True)
+            df_tr, df_va, df_te = apply_subset(df_tr, df_va, df_te, args.subset, args.seed)
         log(f"data: {cleaning['usable_rows']:,} usable; "
             f"train={len(df_tr):,} val={len(df_va):,} test={len(df_te):,}")
         if args.subset and args.subset > 0:
             split = dict(split, subset=args.subset,
-                         note="pilot subset: first N rows of each seeded split")
+                         subset_sampling="deterministic_random_without_replacement",
+                         subset_seed=args.seed,
+                         train_rows=len(df_tr), val_rows=len(df_va), test_rows=len(df_te),
+                         note="pilot subset: deterministic random sampling within each seeded split")
         if "audit" in stages:
             (out / "dataset_audit.json").write_text(json.dumps(
                 {"cleaning": cleaning, "split": split,
@@ -1273,27 +1482,92 @@ def main(argv=None) -> int:
         split_uids = {"train": [str(u) for u in list(df_tr["uid"])],
                       "val": [str(u) for u in list(df_va["uid"])],
                       "test": [str(u) for u in list(df_te["uid"])]}
+        split_uids_order = split_uids  # authoritative row order; gate/div loaders map back into it
         if "measure" in stages:
             t_measure = time.perf_counter()
-            measure_compression(split_uids, store, out,
-                                n_samples=args.measure_samples,
-                                target_gib=args.persistence_target_gib)
+            rep = measure_compression(split_uids, store, out,
+                                      n_samples=args.measure_samples,
+                                      target_gib=args.persistence_target_gib)
+            # Tokenizer, timed and persistent: later stages reuse the artifacts.
+            # Always trained on the FULL training corpus (subset mode subsets pose
+            # data only); otherwise a pilot measure would persist a subset vocab.
+            t_tok = time.perf_counter()
+            train_texts = df_tr_all["text"].astype(str).tolist() if not args.smoke else df_tr["text"].astype(str).tolist()
+            sp_m = train_tokenizer(train_texts, out / "tokenizer", 16000)
+            tok_h = (time.perf_counter() - t_tok) / 3600
+            log(f"measure: tokenizer ready in {tok_h * 3600:.0f}s (reused by later stages)")
+            # Compute benches on the real config/shapes (random weights noted).
+            bench = benchmark_training_throughput(device, sp_m.get_piece_size(), args.batch)
+            t_ckpt = time.perf_counter()
+            tmp_ckpt = out / "bench_ckpt.pt"
+            torch.save({"probe": torch.randn(16)}, tmp_ckpt)
+            ckpt_s = time.perf_counter() - t_ckpt
+            tmp_ckpt.unlink(missing_ok=True)
+            bench["ckpt_probe_save_s"] = ckpt_s
+            # Decode rate on REAL val/test samples through the real path.
+            # CPU bench uses a smaller pool (same code path, fewer hyps): the
+            # autoregressive loop has no KV cache, so 256 full decodes on CPU
+            # would take longer than the measurement is worth. GPU measures all.
+            bench_n = BENCH_DECODE_SAMPLES if device.type == "cuda" else 32
+            text_of = dict(zip(list(df_va["uid"]) + list(df_te["uid"]),
+                               list(df_va["text"]) + list(df_te["text"])))
+            bench_pool = [str(u) for u in list(text_of)[:bench_n]]
+            bench_texts = [str(text_of[u]) for u in bench_pool]
+            bmodel = SignTransformer(MODEL_INPUT_DIM, sp_m.get_piece_size(), MAX_FRAMES, MAX_TOKENS,
+                                     pad_idx=sp_m.pad_id(), d_model=D_MODEL, nhead=NHEAD,
+                                     layers=NLAYERS, ff=FF, dropout=DROPOUT,
+                                     norm_first=NORM_FIRST).to(device)
+            btids = [np.asarray(encode_text(sp_m, t), dtype=np.int64) for t in bench_texts]
+            bloader = DataLoader(
+                SignToTextDataset(np.array(bench_pool), np.array(bench_texts), sp_m,
+                                  store, store_spec, token_ids=btids),
+                batch_size=min(args.batch, len(bench_pool)), shuffle=False,
+                collate_fn=collate_sign_text, num_workers=0)
+            t_dec = time.perf_counter()
+            _, dhyps, _ = batch_greedy(bmodel, bloader, sp_m, device)
+            bench["decode_hyps_per_sec"] = len(dhyps) / max(1e-9, time.perf_counter() - t_dec)
+            bench["decode_note"] = ("random weights, real config/sp/samples; "
+                                    "optimistic for eval (fewer early-EOS breaks)")
+            del bmodel
+            rep["benchmarks"] = bench
+            rep["tokenizer_hours"] = tok_h
+            (out / MEASURE_REPORT).write_text(json.dumps(rep, indent=1))
+            prep_h = 0.0 if args.data_mode == "stream" else float("nan")
+            feas = compute_feasibility(rep, len(df_tr), len(df_va), len(df_te),
+                                       args.batch, args.epochs, prep_h, tok_h,
+                                       args.quota_hours, args.target_hours)
+            if args.data_mode == "cache":
+                feas["note"] = ("prepare excluded: cache-mode prepare cost unknown "
+                                "until the 200-sample projection; re-run feasibility after prepare")
+            (out / FEASIBILITY_REPORT).write_text(json.dumps(feas, indent=1))
+            print(feasibility_banner(feas, len(df_tr) + len(df_va) + len(df_te),
+                                     args.data_mode), flush=True)
             log(f"measure: done in {(time.perf_counter() - t_measure) / 60:.1f} min "
                 f"(no cache created)")
         # ---- prepare: materialize the local pose cache once, train from it ----
+        # data-mode=stream (default): FULL CACHE DISABLED, no materialization.
         pose_cache_dir = Path(args.pose_cache) if args.pose_cache else (out / "pose_cache")
         need_uids = [str(u) for u in
                      list(df_tr["uid"]) + list(df_va["uid"]) + list(df_te["uid"])]
         need_uids = list(dict.fromkeys(need_uids))
-        if "prepare" in stages:
+        log(f"data mode: {args.data_mode}" +
+            (f" (cache budget {args.cache_budget_gib:.1f} GiB)" if args.data_mode == "cache" else
+             " -- FULL CACHE DISABLED, on-demand remote reads"))
+        if "prepare" in stages and args.data_mode == "cache":
+            free_gib = shutil.disk_usage(pose_cache_dir if pose_cache_dir.exists()
+                                         else pose_cache_dir.parent).free / (1024 ** 3)
+            log(f"prepare: disk free {free_gib:.1f} GiB; budget {args.cache_budget_gib:.1f} GiB")
             t_prep = time.perf_counter()
             materialize_pose_cache(need_uids, store, pose_cache_dir,
                                    shard_samples=args.shard_samples,
                                    verify_every=args.verify_every,
                                    max_cache_gb=args.max_cache_gb,
+                                   budget_gib=args.cache_budget_gib,
                                    jobs=args.jobs,
                                    source_factory=lambda: _open_pose_store(*store_spec))
             log(f"prepare: materialization took {(time.perf_counter() - t_prep) / 60:.1f} min")
+        elif "prepare" in stages:
+            log("prepare: skipped (data-mode=stream; nothing to materialize)")
         present, missing = cache_coverage(pose_cache_dir, need_uids)
         log(f"pose cache: {present:,}/{len(need_uids):,} samples cached "
             f"(tensor equivalent ~{estimate_processed_cache_gib(len(need_uids)):.1f} GiB fp32 NOT written)")
@@ -1317,11 +1591,16 @@ def main(argv=None) -> int:
         log("tokenizer skipped (measure-only run)")
     elif "tokenizer" in stages or args.smoke:
         t_tok = time.perf_counter()
-        train_texts = df_tr["text"].astype(str).tolist()
+        # In subset mode, train tokenizer on FULL training corpus for vocab consistency
+        # with full runs; only pose data is subset. The token cache fingerprints
+        # will differ (subset uids/texts) but the SP model is identical.
+        tokenizer_train_texts = df_tr_all["text"].astype(str).tolist() if (not args.smoke and args.subset and args.subset > 0) else df_tr["text"].astype(str).tolist()
         vocab_size = 40 if args.smoke else 16000
-        sp = train_tokenizer(train_texts, tok_dir, vocab_size)
+        sp = train_tokenizer(tokenizer_train_texts, tok_dir, vocab_size)
         sp_train_artifacts["model"] = str(tok_dir / "signsage_en_sp.model")
-        log(f"tokenizer vocab={sp.get_piece_size()} (trained in {time.perf_counter() - t_tok:.1f}s)")
+        log(f"tokenizer vocab={sp.get_piece_size()} (trained on {len(tokenizer_train_texts):,} texts "
+            f"{'[FULL CORPUS for subset mode]' if (not args.smoke and args.subset and args.subset > 0) else ''}) "
+            f"in {time.perf_counter() - t_tok:.1f}s)")
     else:
         import sentencepiece as spm
         sp = spm.SentencePieceProcessor(model_file=str(tok_dir / "signsage_en_sp.model"))
@@ -1338,13 +1617,24 @@ def main(argv=None) -> int:
         split_tokens = load_or_build_token_cache(
             sp, tok_dir / "signsage_en_sp.model", tok_dir, splits)
 
-    def make_loader(frame, train: bool, batch: int | None = None, token_ids=None):
+    def make_loader(frame, train: bool, batch: int | None = None, token_ids=None,
+                      memoize: bool = False):
         ds = SignToTextDataset(frame["uid"].to_numpy(), frame["text"].to_numpy(), sp, store, store_spec,
-                               token_ids=token_ids)
+                               token_ids=token_ids, memoize=memoize)
         return DataLoader(ds, batch_size=batch or args.batch, shuffle=train,
                           collate_fn=collate_sign_text,
                           num_workers=2 if device.type == "cuda" else 0,
                           pin_memory=device.type == "cuda")
+
+    def cached_ids_for(frame, split_name: str):
+        """Token ids already built by load_or_build_token_cache, in frame order.
+
+        The gate/diversity loaders sample rows of df_tr/df_va, so map uids back
+        to split_tokens instead of re-running SentencePiece on the same text."""
+        if args.smoke or split_tokens is None:
+            return None
+        pos = {str(u): i for i, u in enumerate(split_uids_order[split_name])}
+        return [split_tokens[split_name][pos[str(u)]] for u in frame["uid"]]
 
     # ---- model ----
     def build_model():
@@ -1358,7 +1648,8 @@ def main(argv=None) -> int:
         import pandas as pd  # noqa: F811
 
         sub = df_tr.sample(min(64, len(df_tr)), random_state=args.seed).reset_index(drop=True)
-        gate_loader = make_loader(sub, True, batch=16)
+        gate_loader = make_loader(sub, True, batch=16, memoize=True,
+                                  token_ids=cached_ids_for(sub, "train"))
         gate = build_model()
         gate_opt = torch.optim.AdamW(gate.parameters(), lr=1e-3)
         gate_crit = nn.CrossEntropyLoss(ignore_index=sp.pad_id())
@@ -1379,6 +1670,44 @@ def main(argv=None) -> int:
     best_path = out / "checkpoints" / "signsage_transformer_full.pt"
     history: list = []
     if "train" in stages:
+        if not args.smoke:
+            feas_path = out / FEASIBILITY_REPORT
+            if feas_path.is_file():
+                try:
+                    feas = json.loads(feas_path.read_text())
+                except ValueError:
+                    feas = {"verdict": "UNKNOWN-corrupt"}
+                try:
+                    proj = float(feas.get("projected_total_hours", float("nan")))
+                except (TypeError, ValueError):
+                    proj = float("nan")
+                if (feas.get("verdict") == "FAIL" and not math.isfinite(proj)
+                        and args.data_mode == "cache" and missing == 0 and present):
+                    # Cache-mode measure could not price prepare; now that the cache
+                    # is complete the cost is sunk -- recompute instead of refusing.
+                    log("feasibility was FAIL-unknown-prepare but the pose cache is "
+                        "COMPLETE; recomputing with sunk prepare cost...")
+                    new = refresh_feasibility_after_cache(
+                        out, len(df_tr), len(df_va), len(df_te),
+                        args.batch, args.epochs, args.quota_hours, args.target_hours)
+                    if new is not None:
+                        feas = new
+                        print(feasibility_banner(
+                            feas, len(df_tr) + len(df_va) + len(df_te),
+                            args.data_mode), flush=True)
+                log(f"feasibility verdict: {feas.get('verdict')} "
+                    f"(projected {feas.get('projected_total_hours', float('nan')):.2f}h "
+                    f"vs target {feas.get('target_hours', float('nan')):.2f}h)")
+                if feas.get("verdict") == "FAIL" and not args.force:
+                    raise SystemExit(
+                        "FEASIBILITY FAIL: refusing to burn quota. Re-run the measure cell, "
+                        "reduce scope (subset/epochs via explicit flags), or pass --force "
+                        "to override (quota WILL burn).")
+                if feas.get("verdict") == "FAIL":
+                    log("WARNING: --force override of FAIL feasibility; quota WILL burn")
+            else:
+                log("WARNING: no feasibility.json -- run the measure cell first; "
+                    "proceeding WITHOUT a measured quota gate")
         train_loader = make_loader(df_tr, True, token_ids=None if args.smoke else split_tokens["train"])
         val_loader = make_loader(df_va, False, token_ids=None if args.smoke else split_tokens["val"])
         model = build_model()
@@ -1417,8 +1746,11 @@ def main(argv=None) -> int:
                 f"starting from epoch 1 (pass --resume to continue)")
         else:
             log("no recovery checkpoint: starting from epoch 1")
-        div_loader_sample = make_loader(df_va.sample(min(DIVERSITY_SAMPLE, len(df_va)),
-                                                      random_state=args.seed).reset_index(drop=True), False)
+        div_frame = df_va.sample(min(DIVERSITY_SAMPLE, len(df_va)),
+                                   random_state=args.seed).reset_index(drop=True)
+        div_loader_sample = make_loader(div_frame, False,
+                                        token_ids=cached_ids_for(div_frame, "val"),
+                                        memoize=True)
         for epoch in range(start_epoch, args.epochs + 1):
             tr_loss = run_epoch(model, train_loader, opt, crit, device, scheduler, train=True)
             va_loss = run_epoch(model, val_loader, opt, crit, device, train=False)
@@ -1504,10 +1836,16 @@ def main(argv=None) -> int:
     if "export" in stages:
         model = build_model()
         model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
+        is_pilot = args.subset and args.subset > 0
         train_cfg = {"architecture": {"d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS,
                                       "ff": FF, "dropout": DROPOUT, "norm_first": NORM_FIRST},
                      "label_smoothing": LABEL_SMOOTHING, "peak_lr": args.lr,
-                     "batch": args.batch, "seed": args.seed, "history": history}
+                     "batch": args.batch, "seed": args.seed, "history": history,
+                     "is_pilot": is_pilot}
+        if is_pilot:
+            train_cfg["subset"] = args.subset
+            train_cfg["subset_seed"] = args.seed
+            train_cfg["note"] = "PILOT / PIPELINE VALIDATION ONLY -- NOT FOR PRODUCTION"
         bundle = export_bundle(model, sp, out, run_id, train_cfg, eval_report,
                                Path(args.contract) if args.contract else None)
         log(f"bundle exported: {bundle}")

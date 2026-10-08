@@ -79,26 +79,29 @@ not 8 hours. Expected full run: 2–3 Kaggle sessions to 6–12 epochs.
 
 Data-pipeline note (2026-10-07 rework): the old workflow streamed poses over
 HTTP range reads every epoch AND pre-tokenized ~99k captions every session,
-which bottlenecked the run in preparation. The script now has a `prepare`
-stage that materializes a resumable local pose cache
-(`<out>/pose_cache`: sharded ZIPs of verbatim `.pose` bytes) once, then
-trains from local disk; captions are tokenized once into
-`<out>/tokenizer/tokens.npz` and reused. Processed fp32 tensors
-(123,779 × 160 × 1629 ≈ 120 GiB, ≈60 GiB in fp16) are deliberately NEVER
-cached -- both exceed practical Kaggle disk. The materializer prints a
-projected total cache size after 200 samples; `--max-cache-gb` stops
-gracefully if it would exceed budget. First session pays the one-time
-download; later epochs/sessions read from disk. The overfit gate and the
-diversity gate both run against the local cache with unchanged thresholds.
+which bottlenecked the run in preparation. The script now defaults to
+`--data-mode stream` (FULL CACHE DISABLED: no materialization; every epoch
+re-reads remotely, priced honestly by the feasibility gate) and supports
+`--data-mode cache` (one-time resumable `pose_cache/` of verbatim `.pose`
+bytes in sharded ZIPs + `tokenizer/tokens.npz`, both fingerprinted and reused
+across sessions). Processed fp32 tensors (123,779 × 160 × 1629 ≈ 120 GiB,
+≈60 GiB in fp16) are deliberately NEVER cached -- both exceed practical
+Kaggle disk. Cache mode prints a projected total size after 200 samples and
+REFUSES (keeps the partial cache) when it exceeds `--cache-budget-gib`
+(default 10 GiB) or 90% of free disk. The overfit gate and the diversity gate
+both reuse the token cache (no re-encoding) and run memoized against the local
+cache when present.
 
 Measured on Kaggle 2026-10-07 (123,779 usable; train=98,485 val=13,014
 test=12,280): ~1,211 KiB/sample -> **~143 GiB full cache at 1.2 samples/s
 sequential (~29h -- does NOT fit one session)**. Mitigations, in order:
 (1) `--jobs 8` parallel fetch (default; expect ~4h, watch the printed ETA);
 (2) let prepare span sessions (it resumes from the manifest); (3) explicit
-`--subset N` pilot run (first N rows of each seeded split, loudly logged --
-representation unchanged, just fewer videos) when the full cache cannot be
-held. A ~143 GiB cache also strains Kaggle output-dataset persistence, so
+`--subset N` pilot run (deterministic random N rows within each seeded split,
+seed 42, loudly logged + recorded in dataset_audit.json -- representation
+unchanged, just fewer videos) when the full cache cannot be held. The notebook
+measure cell auto-selects the largest N fitting the measured quota with a
+1.5h margin (certify cell re-scopes feasibility to the pilot before training). A ~143 GiB cache also strains Kaggle output-dataset persistence, so
 confirm the saved output version actually contains `pose_cache/` before
 relying on cross-session reuse.
 
@@ -117,7 +120,7 @@ relying on cross-session reuse.
   empirical measurement below. No D-cache is built until the verdict is
   reviewed.
 
-### Measurement gate (run this before any full prepare; no training)
+### Measurement + quota gate (run this before any prepare; minutes, no training)
 
 ```bash
 python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
@@ -127,18 +130,28 @@ python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
 
 The `measure` stage (opt-in only, never in `all`) stride-samples ~2,000 items
 across the authoritative train/val/test row order, runs each through the
-exact V2 preprocessing, zstd-compresses the fixed fp32 tensor (level 3),
-verifies byte-exact decompression per item, and writes
-`measure_report.json`: true_len min/median/mean/p90/p95/max, totals,
-measured ratio, per-sample average, padding-vs-data attribution
-(zero-padding fraction + dense-data ratio), projections for 123,779 and per
-split, safety margin, and a FIT / BORDERLINE / DOES_NOT_FIT verdict
-(UNKNOWN-no-target when no budget is passed -- no Kaggle limit is assumed or
-hardcoded). It creates NO cache and needs NO tokenizer.
+exact V2 preprocessing (timed: `fetch_prep_per_sample_s`), zstd-compresses the
+fixed fp32 tensor (level 3) with byte-exact round-trip verify, trains + times
+the real 16k tokenizer (persisted, reused by later stages -- no retraining),
+benchmarks real-config training steps/sec and decode hyps/sec, and writes TWO
+reports: `measure_report.json` (true_len stats, ratios, padding-vs-data
+attribution, 123,779 + per-split projections, FIT / BORDERLINE / DOES_NOT_FIT
+or UNKNOWN-no-target verdict) and `feasibility.json` (projected epoch + total
+hours vs the 13h34m quota / 11.5h target, PASS / FAIL banner). It creates NO
+pose cache and NO checkpoints. The `train` stage REFUSES to start on a FAIL
+verdict unless `--force` is passed (loudly logged; quota WILL burn). Cache-mode
+measure leaves the total NaN (prepare unpriced) -- once the cache is COMPLETE
+the verdict is recomputed with sunk prepare cost and overwrites
+`feasibility.json`, so a FAIL-unknown-prepare can still turn PASS.
 
-**Do not start full training until the measurement verdict is known.**
-FIT -> proceed to design review for full D-cache creation. BORDERLINE or
-DOES_NOT_FIT -> subset pilot or rethink persistence first.
+**Do not start training until the feasibility verdict is known.**
+FIT / PASS -> proceed. BORDERLINE / DOES_NOT_FIT / FAIL -> subset pilot or
+rethink persistence first. Notebook order is measure -> prepare -> train;
+prepare needs `--data-mode cache` explicitly (stream is the default and
+materializes nothing). The long run is `Save Version -> Save & Run All`
+(batch execution is independent of the editor UI, so the ~40-minute
+"Are you still there?" interactive warning is irrelevant -- never fake
+activity to keep the editor awake).
 
 ## 7. Operator next step (exact)
 
@@ -152,7 +165,15 @@ pip install pose-format jiwer sacrebleu rouge-score sentencepiece huggingface_hu
 # Hugging Face download (needs the HF_TOKEN secret). Training never starts
 # without the CSV: the cell fails early otherwise.
 python research/training/audit_dataset.py --csv $CSV --out $OUT/dataset_audit.json
-python research/training/train_sign_to_text.py --csv $CSV --out $OUT --epochs 12 --max-hours 8
+# 1. MEASURE (minutes, fail-closed): writes measure_report.json + feasibility.json
+python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
+    --out $OUT --stages measure --measure-samples 2000
+# 2. only on PASS/pilot decision: cache under a disk budget (refuses overruns)
+python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
+    --out $OUT --stages tokenizer,prepare --data-mode cache --cache-budget-gib 10 --jobs 8
+# 3. train (refuses on FAIL unless --force); local cache auto-used when complete
+python research/training/train_sign_to_text.py --csv $CSV --pose-source remote \
+    --out $OUT --stages tokenizer,overfit,train --epochs 12 --max-hours 8 --resume
 ```
 
 `--smoke` runs the CPU plumbing check (synthetic data, no dataset) — must pass
@@ -175,8 +196,10 @@ if it fails. Copy `$OUT` (bundle + manifest + report) back as the new
     The cell copies the prior output to `/kaggle/working/s2t_v2` and reports
     exactly what is reused: pose-cache completeness, tokenizer + token cache,
     recovery epoch/best, best checkpoint.
-3. **Session 1 runs the prepare cell** (`--stages tokenizer,prepare`):
-    one-time resumable pose materialization + tokenizer/token cache.
+3. **Session 1 runs measure first, then the prepare cell**
+   (`--stages tokenizer,prepare --data-mode cache`):
+    one-time resumable pose materialization under `--cache-budget-gib` +
+    tokenizer/token cache (measure already built the tokenizer; it is reused).
     Interrupt any time; re-running skips present samples via the manifest.
 4. **Training/eval cells use `--resume` and read the local cache**
     (`--stages tokenizer,overfit,train`, then `evaluate,export`).
