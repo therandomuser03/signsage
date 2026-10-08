@@ -1234,7 +1234,8 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
 
 
 @torch.no_grad()
-def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS):
+def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS,
+                 constrained: bool = True):
     """Constrained batched greedy decode (same bans as serving).
 
     Parity contract with backend/app/ml/inference/sign_to_text.py
@@ -1243,6 +1244,11 @@ def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS)
     NO_REPEAT_NGRAM_SIZE, then the REPETITION_PENALTY divide-if->=0-else-multiply
     over set(ids[1:]), then log_softmax + argmax. Serving is single-sample;
     this is the batched equivalent -- covered by test_decode_parity.py.
+
+    constrained=False skips the EOS-minimum, no-repeat-ngram and repetition
+    penalties (PAD/BOS/UNK bans stay: structural vocab hygiene). Used ONLY as
+    a gate diagnostic alongside the authoritative constrained score, to tell
+    constraint-blocked failures apart from optimization failures.
     """
     t0 = time.perf_counter()
     model.eval()
@@ -1271,12 +1277,13 @@ def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS)
                     continue
                 lg = logits[r].clone()
                 lg[[pad, bos, unk]] = -torch.inf
-                if step < MIN_OUTPUT_TOKENS:
-                    lg[eos] = -torch.inf
-                lg = ban_repeated_ngram(lg, histories[r], NO_REPEAT_NGRAM_SIZE)
-                for tid in set(histories[r][1:]):
-                    lg[tid] = (lg[tid] / REPETITION_PENALTY
-                               if lg[tid] >= 0 else lg[tid] * REPETITION_PENALTY)
+                if constrained:
+                    if step < MIN_OUTPUT_TOKENS:
+                        lg[eos] = -torch.inf
+                    lg = ban_repeated_ngram(lg, histories[r], NO_REPEAT_NGRAM_SIZE)
+                    for tid in set(histories[r][1:]):
+                        lg[tid] = (lg[tid] / REPETITION_PENALTY
+                                   if lg[tid] >= 0 else lg[tid] * REPETITION_PENALTY)
                 lp = torch.log_softmax(lg, dim=-1)
                 p, t = torch.max(lp, dim=-1)
                 prob[r], nxt[r] = p, t
@@ -1740,6 +1747,7 @@ def main(argv=None) -> int:
         # the final sharpening room greedy exact needs (95% exact on ~15-token
         # targets needs teacher-forced loss ~0.003); the >=95% bar itself is
         # unchanged and the loop still breaks early on pass.
+        _gate_checks: list = []
         for step in range(GATE_STEPS):
             gloss = run_epoch(gate, gate_loader, gate_opt, gate_crit, device)
             frac = min(1.0, (step + 1) / 600)
@@ -1749,9 +1757,26 @@ def main(argv=None) -> int:
             if (step + 1) % 100 == 0:
                 refs, hyps, _ = batch_greedy(gate, gate_loader, sp, device)
                 exact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)]))
-                log(f"  gate step {step + 1}: exact={exact:.1%} loss={gloss:.4f} lr={lr:.1e}")
+                # Diagnostic second opinion (never authoritative): the same
+                # greedy pass WITHOUT serving constraints. unconstrained >>
+                # constrained with equal loss means the bans are blocking
+                # memorized targets; both failing means optimization/data.
+                _, uhyps, _ = batch_greedy(gate, gate_loader, sp, device,
+                                           constrained=False)
+                uexact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, uhyps)]))
+                log(f"  gate step {step + 1}: exact={exact:.1%} (unconstrained={uexact:.1%}) loss={gloss:.4f} lr={lr:.1e}")
+                _gate_checks.append({"step": step + 1, "loss": gloss, "lr": lr,
+                                     "exact_constrained": exact,
+                                     "exact_unconstrained": uexact})
                 if exact >= 0.95:
                     break
+        _gate_report = {"threshold": 0.95, "passed": exact >= 0.95,
+                        "final": _gate_checks[-1] if _gate_checks else None,
+                        "checks": _gate_checks,
+                        "failures": [{"ref": r, "hyp_constrained": h, "hyp_unconstrained": u}
+                                     for r, h, u in zip(refs, hyps, uhyps)
+                                     if normalize_text(r) != normalize_text(h)] if exact < 0.95 else []}
+        (out / "gate_report.json").write_text(json.dumps(_gate_report, indent=1))
         if exact < 0.95:
             raise SystemExit(f"OVERFIT GATE FAILED (exact={exact:.1%}) -- fix implementation, do not train.")
         log("overfit gate PASSED.")
