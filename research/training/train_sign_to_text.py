@@ -735,55 +735,114 @@ def benchmark_training_throughput(device, vocab_size: int, batch: int) -> dict:
             "note": "synthetic batch, real config+shapes; excludes data loading"}
 
 
+# Local-cache read rate for cache-mode feasibility. Measured 2026-10-08 on
+# 160-frame worst-case blobs through the full V2 path (shard ZIP read +
+# pose parse + normalize + resize): ~158 samples/sec cold (6.3 ms/sample).
+# The default below is ~3x slower (conservative upper bound); refresh_*
+# replaces it with a real probe of the complete pilot cache whenever one
+# exists. Never use the remote 1.18 sec/sample rate for local cached reads.
+DEFAULT_LOCAL_FETCH_S = 0.02
+
+
+def measure_local_fetch_s(store: PoseSource, uids: list, n: int = 32) -> float:
+    """Tiny local benchmark: mean load_pose_item() sec/sample over a stride
+    sample of at most n uids from an already-materialized cache. No network;
+    sub-second for n=32. Returns DEFAULT_LOCAL_FETCH_S when empty/timed-out."""
+    if not uids:
+        return DEFAULT_LOCAL_FETCH_S
+    step = max(1, len(uids) // max(1, n))
+    picked = list(uids[::step])[:max(1, n)]
+    t0 = time.perf_counter()
+    for u in picked:
+        load_pose_item(str(u), store)
+    dt = time.perf_counter() - t0
+    return dt / max(1, len(picked)) if dt > 0 else DEFAULT_LOCAL_FETCH_S
+
+
 def compute_feasibility(meas: dict, n_train: int, n_val: int, n_test: int,
                         batch: int, epochs: int, prep_h: float, tok_h: float,
-                        quota_h: float, target_h: float) -> dict:
+                        quota_h: float, target_h: float,
+                        data_mode: str = "stream",
+                        local_fetch_s: float | None = None) -> dict:
     """Project the full experiment from MEASURED rates. Conservative: data and
     compute are summed (no overlap assumed); gate is an upper bound (assumes
     never breaks early); val forward-only assumed 3x train-step rate. Pure
-    function -- unit-tested."""
+    function -- unit-tested.
+
+    data_mode="stream": every epoch re-reads remotely at fetch_prep_per_sample_s.
+    data_mode="cache": prepare pays remote fetch ONCE; gate/train/val/diversity/
+    eval read from the local shard cache at local_fetch_s (probe-measured, else
+    DEFAULT_LOCAL_FETCH_S). The overfit gate loads its 64 samples ONCE
+    (SignToTextDataset memoize=True) in both modes -- never 600x64 fetches."""
     fetch_s = meas["fetch_prep_per_sample_s"]
     steps_s = meas["benchmarks"]["train_steps_per_sec"]
     dec_s = meas["benchmarks"]["decode_hyps_per_sec"]
+    if data_mode == "cache":
+        try:
+            local_s = float(local_fetch_s) if local_fetch_s is not None else DEFAULT_LOCAL_FETCH_S
+            if not (math.isfinite(local_s) and local_s > 0):
+                raise ValueError
+        except (TypeError, ValueError):
+            local_s = DEFAULT_LOCAL_FETCH_S
+        data_s = local_s
+    else:
+        data_mode = "stream"
+        local_s = None
+        data_s = fetch_s
     train_steps = math.ceil(n_train / batch)
     val_steps = math.ceil(n_val / batch)
-    epoch_data_h = (n_train + n_val) * fetch_s / 3600
+    epoch_data_h = (n_train + n_val) * data_s / 3600
     epoch_comp_h = (train_steps + val_steps / 3) / max(1e-9, steps_s) / 3600
     epoch_h = epoch_data_h + epoch_comp_h
-    gate_h = (600 * 64 * fetch_s + 600 * 4 / max(1e-9, steps_s)) / 3600
+    gate_h = (64 * data_s + 600 * 4 / max(1e-9, steps_s)) / 3600
     div_h = 512 / max(1e-9, dec_s) / 3600
     eval_h = n_test / max(1e-9, dec_s) / 3600 + 0.2
     total_h = prep_h + tok_h + gate_h + epochs * (epoch_h + div_h) + eval_h + 0.5
     verdict = "PASS" if total_h <= target_h else "FAIL"
+    measured = {"fetch_prep_per_sample_s": fetch_s,
+                "train_steps_per_sec": steps_s,
+                "decode_hyps_per_sec": dec_s,
+                "data_mode": data_mode}
+    assumptions = ["no data/compute overlap (conservative sum)",
+                   "val forward-only = 3x train-step rate",
+                   "gate upper bound: full 600 checks, no early break; "
+                   "gate/diversity loaders memoize (64/512 fetches once total)",
+                   "decode rate measured on random weights (optimistic for eval)"]
+    if data_mode == "cache":
+        measured["local_fetch_per_sample_s"] = local_s
+        assumptions.append(
+            "cache mode: remote fetch paid ONCE in prepare; post-prepare "
+            "gate/train/val/diversity/eval read local shards at "
+            "local_fetch_per_sample_s (probed, else conservative default)")
     return {
         "quota_hours": quota_h, "target_hours": target_h, "verdict": verdict,
         "projected_total_hours": total_h,
         "breakdown_hours": {"prepare": prep_h, "tokenizer": tok_h, "overfit_gate_ub": gate_h,
                             "per_epoch": epoch_h, "per_epoch_diversity": div_h,
                             "epochs": epochs, "eval": eval_h, "slack": 0.5},
-        "measured_inputs": {"fetch_prep_per_sample_s": fetch_s,
-                            "train_steps_per_sec": steps_s,
-                            "decode_hyps_per_sec": dec_s},
-        "assumptions": ["no data/compute overlap (conservative sum)",
-                        "val forward-only = 3x train-step rate",
-                        "gate upper bound: full 600 checks, no early break",
-                        "decode rate measured on random weights (optimistic for eval)"],
+        "measured_inputs": measured,
+        "assumptions": assumptions,
     }
 
 
 def feasibility_banner(feas: dict, n_usable: int, data_mode: str) -> str:
     b = feas["breakdown_hours"]
-    return ("================================\n"
-            "V2 RESOURCE FEASIBILITY\n"
-            "================================\n"
-            f"Remaining Kaggle budget: {feas['quota_hours']:.2f}h\n"
-            f"Target maximum runtime: {feas['target_hours']:.2f}h\n"
-            f"Dataset: {n_usable:,} usable samples\n"
-            f"Cache mode: {'FULL' if data_mode == 'cache' else 'STREAMING (FULL CACHE DISABLED)'}\n"
-            f"Preprocessing: {1 / max(1e-9, feas['measured_inputs']['fetch_prep_per_sample_s']):.1f} samples/sec\n"
-            f"Fetch+prep: {feas['measured_inputs']['fetch_prep_per_sample_s']:.3f} sec/sample\n"
-            f"Training: {feas['measured_inputs']['train_steps_per_sec']:.2f} steps/sec\n"
-            f"Estimated epoch: {b['per_epoch']:.2f} hours\n"
+    mi = feas["measured_inputs"]
+    lines = ("================================",
+             "V2 RESOURCE FEASIBILITY",
+             "================================",
+             f"Remaining Kaggle budget: {feas['quota_hours']:.2f}h",
+             f"Target maximum runtime: {feas['target_hours']:.2f}h",
+             f"Dataset: {n_usable:,} usable samples",
+             f"Cache mode: {'FULL' if data_mode == 'cache' else 'STREAMING (FULL CACHE DISABLED)'}",
+             f"Preprocessing: {1 / max(1e-9, mi['fetch_prep_per_sample_s']):.1f} samples/sec",
+             f"Fetch+prep: {mi['fetch_prep_per_sample_s']:.3f} sec/sample",
+             f"Training: {mi['train_steps_per_sec']:.2f} steps/sec")
+    if data_mode == "cache" and mi.get("local_fetch_per_sample_s") is not None:
+        lines += (f"Local cache read: {mi['local_fetch_per_sample_s'] * 1000:.1f} ms/sample "
+                  f"(gate/train/val read local shards, no HTTP)",)
+    return ("\n".join(lines) +
+            f"\nEstimated epoch: {b['per_epoch']:.2f} hours\n"
             f"Estimated total ({b['epochs']} epochs): {feas['projected_total_hours']:.2f} hours\n"
             f"FEASIBILITY: {feas['verdict']}\n"
             "================================")
@@ -791,26 +850,39 @@ def feasibility_banner(feas: dict, n_usable: int, data_mode: str) -> str:
 
 def refresh_feasibility_after_cache(out: Path, n_train: int, n_val: int, n_test: int,
                                       batch: int, epochs: int,
-                                      quota_h: float, target_h: float) -> dict | None:
+                                      quota_h: float, target_h: float,
+                                      pose_cache: Path | None = None) -> dict | None:
     """Cache-mode measure writes projected_total_hours=NaN (prepare cost unknowable
     before the 200-sample projection). Once the cache is COMPLETE the prepare cost
-    is sunk, and local-disk reads are no slower than the remote-measured fetch rate,
-    so recompute with prep_h=0 from measure_report.json and overwrite
+    is sunk, and gate/train/val/diversity/eval read LOCAL shards (no HTTP), so
+    recompute with prep_h=0 and a probed local-cache read rate, then overwrite
     feasibility.json. Returns the new feas, or None when no usable measurement exists."""
     try:
         rep = json.loads((out / MEASURE_REPORT).read_text())
         bench = rep["benchmarks"]
-        fetch_s = float(rep["fetch_prep_per_sample_s"])
+        float(rep["fetch_prep_per_sample_s"])
         float(bench["train_steps_per_sec"])
         float(bench["decode_hyps_per_sec"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
     tok_h = float(rep.get("tokenizer_hours", 0.0) or 0.0)
+    cache_dir = Path(pose_cache) if pose_cache else (out / "pose_cache")
+    local_s = DEFAULT_LOCAL_FETCH_S
+    local_note = f"local-cache default {DEFAULT_LOCAL_FETCH_S:.3f}s/sample"
+    try:
+        probe_store = ShardPoseSource(str(cache_dir))
+        probe_uids = list(probe_store.index)[:64]
+        if probe_uids:
+            local_s = measure_local_fetch_s(probe_store, probe_uids, n=32)
+            local_note = (f"probed local cache {local_s * 1000:.1f} ms/sample "
+                          f"({len(probe_uids)} uids, {cache_dir.name})")
+    except (OSError, ValueError, RuntimeError):
+        pass
     feas = compute_feasibility(rep, n_train, n_val, n_test, batch, epochs,
-                               0.0, tok_h, quota_h, target_h)
+                               0.0, tok_h, quota_h, target_h,
+                               data_mode="cache", local_fetch_s=local_s)
     feas["note"] = ("recomputed after complete local cache: prepare cost sunk (0h); "
-                    "fetch rate still the remote-measured value "
-                    "(conservative: disk reads are faster)")
+                    + local_note)
     tmp = out / (FEASIBILITY_REPORT + ".tmp")
     tmp.write_text(json.dumps(feas, indent=1))
     os.replace(tmp, out / FEASIBILITY_REPORT)
@@ -1535,7 +1607,8 @@ def main(argv=None) -> int:
             prep_h = 0.0 if args.data_mode == "stream" else float("nan")
             feas = compute_feasibility(rep, len(df_tr), len(df_va), len(df_te),
                                        args.batch, args.epochs, prep_h, tok_h,
-                                       args.quota_hours, args.target_hours)
+                                       args.quota_hours, args.target_hours,
+                                       data_mode=args.data_mode)
             if args.data_mode == "cache":
                 feas["note"] = ("prepare excluded: cache-mode prepare cost unknown "
                                 "until the 200-sample projection; re-run feasibility after prepare")
@@ -1689,7 +1762,8 @@ def main(argv=None) -> int:
                         "COMPLETE; recomputing with sunk prepare cost...")
                     new = refresh_feasibility_after_cache(
                         out, len(df_tr), len(df_va), len(df_te),
-                        args.batch, args.epochs, args.quota_hours, args.target_hours)
+                        args.batch, args.epochs, args.quota_hours, args.target_hours,
+                        pose_cache=pose_cache_dir)
                     if new is not None:
                         feas = new
                         print(feasibility_banner(
