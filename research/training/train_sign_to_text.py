@@ -1235,7 +1235,7 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
 
 @torch.no_grad()
 def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS,
-                 constrained: bool = True):
+                 constrained: bool = True, return_ids: bool = False):
     """Constrained batched greedy decode (same bans as serving).
 
     Parity contract with backend/app/ml/inference/sign_to_text.py
@@ -1243,16 +1243,23 @@ def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS,
     first MIN_OUTPUT_TOKENS steps, apply ban_repeated_ngram with
     NO_REPEAT_NGRAM_SIZE, then the REPETITION_PENALTY divide-if->=0-else-multiply
     over set(ids[1:]), then log_softmax + argmax. Serving is single-sample;
-    this is the batched equivalent -- covered by test_decode_parity.py.
+    this is the batched equivalent -- covered by test_decode_parity in
+    test_v2_data_workflow.py.
 
     constrained=False skips the EOS-minimum, no-repeat-ngram and repetition
     penalties (PAD/BOS/UNK bans stay: structural vocab hygiene). Used ONLY as
     a gate diagnostic alongside the authoritative constrained score, to tell
     constraint-blocked failures apart from optimization failures.
+
+    return_ids=True additionally returns per-sample (ref_ids, gen_ids):
+    ref_ids are the unpadded tout rows (no BOS, with EOS); gen_ids are the
+    raw greedy rows (with EOS when emitted). Default False: existing
+    3-tuple callers are untouched.
     """
     t0 = time.perf_counter()
     model.eval()
     refs, hyps, confs = [], [], []
+    ref_ids_all, gen_ids_all = [], []
     pad, unk, bos, eos = sp.pad_id(), sp.unk_id(), sp.bos_id(), sp.eos_id()
     n_batches = 0
     for frames, lengths, tin, tout in loader:
@@ -1305,8 +1312,13 @@ def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS,
             refs.append(decode_ids(sp, row))
             hyps.append(decode_ids(sp, gen[r].tolist()))
             confs.append(float(conf[r]))
+            if return_ids:
+                ref_ids_all.append([int(x) for x in row if int(x) != pad])
+                gen_ids_all.append([int(x) for x in gen[r].tolist()])
         n_batches += 1
     log(f"decode: {len(hyps):,} hyps in {time.perf_counter() - t0:.1f}s ({n_batches} batches)")
+    if return_ids:
+        return refs, hyps, confs, ref_ids_all, gen_ids_all
     return refs, hyps, confs
 
 
@@ -1731,6 +1743,7 @@ def main(argv=None) -> int:
         import pandas as pd  # noqa: F811
 
         sub = df_tr.sample(min(64, len(df_tr)), random_state=args.seed).reset_index(drop=True)
+        gate_uids = [str(u) for u in sub["uid"]]
         gate_loader = make_loader(sub, True, batch=16, memoize=True,
                                   token_ids=cached_ids_for(sub, "train"))
         gate = build_model()
@@ -1748,37 +1761,88 @@ def main(argv=None) -> int:
         # targets needs teacher-forced loss ~0.003); the >=95% bar itself is
         # unchanged and the loop still breaks early on pass.
         _gate_checks: list = []
-        for step in range(GATE_STEPS):
-            gloss = run_epoch(gate, gate_loader, gate_opt, gate_crit, device)
-            frac = min(1.0, (step + 1) / 600)
-            lr = 1e-5 + (1e-3 - 1e-5) * 0.5 * (1 + math.cos(math.pi * frac))
-            for pg in gate_opt.param_groups:
-                pg["lr"] = lr
-            if (step + 1) % 100 == 0:
-                refs, hyps, _ = batch_greedy(gate, gate_loader, sp, device)
-                exact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)]))
-                # Diagnostic second opinion (never authoritative): the same
-                # greedy pass WITHOUT serving constraints. unconstrained >>
-                # constrained with equal loss means the bans are blocking
-                # memorized targets; both failing means optimization/data.
-                _, uhyps, _ = batch_greedy(gate, gate_loader, sp, device,
-                                           constrained=False)
-                uexact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, uhyps)]))
-                log(f"  gate step {step + 1}: exact={exact:.1%} (unconstrained={uexact:.1%}) loss={gloss:.4f} lr={lr:.1e}")
-                _gate_checks.append({"step": step + 1, "loss": gloss, "lr": lr,
-                                     "exact_constrained": exact,
-                                     "exact_unconstrained": uexact})
-                if exact >= 0.95:
-                    break
-        _gate_report = {"threshold": 0.95, "passed": exact >= 0.95,
-                        "final": _gate_checks[-1] if _gate_checks else None,
-                        "checks": _gate_checks,
-                        "failures": [{"ref": r, "hyp_constrained": h, "hyp_unconstrained": u}
-                                     for r, h, u in zip(refs, hyps, uhyps)
-                                     if normalize_text(r) != normalize_text(h)] if exact < 0.95 else []}
-        (out / "gate_report.json").write_text(json.dumps(_gate_report, indent=1))
+        refs, hyps, uhyps = [], [], []
+        _ref_ids, _gen_c, _gen_u = [], [], []
+        _gate_error: str | None = None
+        try:
+            for step in range(GATE_STEPS):
+                gloss = run_epoch(gate, gate_loader, gate_opt, gate_crit, device)
+                frac = min(1.0, (step + 1) / 600)
+                lr = 1e-5 + (1e-3 - 1e-5) * 0.5 * (1 + math.cos(math.pi * frac))
+                for pg in gate_opt.param_groups:
+                    pg["lr"] = lr
+                if (step + 1) % 100 == 0:
+                    refs, hyps, _, _ref_ids, _gen_c = batch_greedy(
+                        gate, gate_loader, sp, device, return_ids=True)
+                    exact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)]))
+                    # Diagnostic second opinion (never authoritative): the same
+                    # greedy pass WITHOUT serving constraints. unconstrained >>
+                    # constrained with equal loss means the bans are blocking
+                    # memorized targets; both failing means optimization/data.
+                    _, uhyps, _, _, _gen_u = batch_greedy(
+                        gate, gate_loader, sp, device,
+                        constrained=False, return_ids=True)
+                    uexact = float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, uhyps)]))
+                    log(f"  gate step {step + 1}: exact={exact:.1%} (unconstrained={uexact:.1%}) loss={gloss:.4f} lr={lr:.1e}")
+                    _gate_checks.append({"step": step + 1, "loss": gloss, "lr": lr,
+                                         "exact_constrained": exact,
+                                         "exact_unconstrained": uexact})
+                    if exact >= 0.95:
+                        break
+        except Exception as exc:  # persist partial diagnostics before surfacing
+            _gate_error = f"{type(exc).__name__}: {exc}"
+            log(f"overfit gate interrupted: {_gate_error}")
+            raise
+        finally:
+            def _eos_pos(ids: list, eos_id: int):
+                try:
+                    return ids.index(eos_id)
+                except ValueError:
+                    return None
+            _failures = []
+            if refs and hyps:
+                _uh = uhyps if len(uhyps) == len(refs) else [""] * len(refs)
+                _gu = _gen_u if len(_gen_u) == len(refs) else [[] for _ in refs]
+                for i, (r, h) in enumerate(zip(refs, hyps)):
+                    if normalize_text(r) == normalize_text(h):
+                        continue
+                    rid = list(_ref_ids[i]) if i < len(_ref_ids) else []
+                    cid = list(_gen_c[i]) if i < len(_gen_c) else []
+                    uid_ = list(_gu[i]) if i < len(_gu) else []
+                    _failures.append({
+                        "uid": gate_uids[i] if i < len(gate_uids) else None,
+                        "ref": r, "hyp_constrained": h, "hyp_unconstrained": _uh[i],
+                        "ref_ids": rid, "hyp_constrained_ids": cid,
+                        "hyp_unconstrained_ids": uid_,
+                        "ref_len_ids": len(rid),
+                        "hyp_constrained_len_ids": len(cid),
+                        "hyp_unconstrained_len_ids": len(uid_),
+                        "ref_eos_pos": _eos_pos(rid, sp.eos_id()),
+                        "hyp_constrained_eos_pos": _eos_pos(cid, sp.eos_id()),
+                        "hyp_unconstrained_eos_pos": _eos_pos(uid_, sp.eos_id()),
+                        "ref_has_unk": sp.unk_id() in rid,
+                    })
+            _gate_report = {"threshold": 0.95, "passed": exact >= 0.95,
+                            "seed": args.seed, "gate_uids": gate_uids,
+                            "n_gate": len(gate_uids),
+                            "final": _gate_checks[-1] if _gate_checks else None,
+                            "checks": _gate_checks,
+                            "error": _gate_error,
+                            "failures": _failures if exact < 0.95 else []}
+            _tmp = out / "gate_report.json.tmp"
+            _tmp.write_text(json.dumps(_gate_report, indent=1))
+            os.replace(_tmp, out / "gate_report.json")
+            log(f"gate diagnostics: {len(_failures)} failures "
+                f"(ref/hyp/ids/lengths/EOS) -> {out / 'gate_report.json'}")
+            for _f in _failures[:5]:
+                log(f"  miss uid={_f['uid']} ref={_f['ref']!r} "
+                    f"hyp={_f['hyp_constrained']!r} "
+                    f"(unconstr={_f['hyp_unconstrained']!r}) "
+                    f"ref_len={_f['ref_len_ids']} hyp_len={_f['hyp_constrained_len_ids']} "
+                    f"eos_c={_f['hyp_constrained_eos_pos']} eos_u={_f['hyp_unconstrained_eos_pos']}")
         if exact < 0.95:
-            raise SystemExit(f"OVERFIT GATE FAILED (exact={exact:.1%}) -- fix implementation, do not train.")
+            raise SystemExit(f"OVERFIT GATE FAILED (exact={exact:.1%}) -- fix implementation, do not train. "
+                             f"See {out / 'gate_report.json'}.")
         log("overfit gate PASSED.")
 
     # ---- train ----

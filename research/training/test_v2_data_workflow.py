@@ -317,6 +317,11 @@ def test_overfit_gate() -> None:
         assert "overfit gate PASSED" in r.stdout, r.stdout[-3000:]
         # gate must have run against the LOCAL cache, not direct dir reads
         assert "LOCAL CACHE" in r.stdout, r.stdout[-3000:]
+        rep = json.loads((out / "gate_report.json").read_text())
+        assert rep["passed"] is True and rep["threshold"] == 0.95
+        assert 0 < rep["n_gate"] <= 64 and len(rep["gate_uids"]) == rep["n_gate"]
+        assert isinstance(rep["checks"], list) and rep["checks"]
+        assert rep["failures"] == []
     print("PASS overfit gate (local cache, >=95% exact)")
 
 
