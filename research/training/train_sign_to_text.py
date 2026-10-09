@@ -1744,7 +1744,10 @@ def main(argv=None) -> int:
 
         sub = df_tr.sample(min(64, len(df_tr)), random_state=args.seed).reset_index(drop=True)
         gate_uids = [str(u) for u in sub["uid"]]
-        gate_loader = make_loader(sub, True, batch=16, memoize=True,
+        # shuffle=False: batch_greedy yields refs in loader order, which must
+        # match gate_uids for the failure diagnostics below. (Batch order is
+        # immaterial to 64-sample memorization.)
+        gate_loader = make_loader(sub, False, batch=16, memoize=True,
                                   token_ids=cached_ids_for(sub, "train"))
         gate = build_model()
         gate_opt = torch.optim.AdamW(gate.parameters(), lr=1e-3)
