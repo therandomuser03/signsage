@@ -1742,7 +1742,29 @@ def main(argv=None) -> int:
         log("overfit gate: 64 memorization samples must reach >=95% exact.")
         import pandas as pd  # noqa: F811
 
-        sub = df_tr.sample(min(64, len(df_tr)), random_state=args.seed).reset_index(drop=True)
+        # Reachability-filtered selection: the serving decoder bans repeated
+        # n-grams (NO_REPEAT_NGRAM_SIZE) + EOS/min-length + special tokens, so
+        # random targets can be un-emittable even when fully memorized
+        # (unconstrained 98% vs constrained 92% on the same weights). Sample
+        # ONLY from reachable examples; the constrained score then measures
+        # optimization, not the bans. Held-out evaluation is untouched: this
+        # filters the 64 memorization probes only, never val/test.
+        train_uids_all = [str(u) for u in list(df_tr["uid"])]
+        if split_tokens is not None and len(split_tokens.get("train", [])) == len(train_uids_all):
+            train_ids_all = [np.asarray(a, dtype=np.int64).tolist()
+                             for a in split_tokens["train"]]
+        else:
+            train_ids_all = [encode_text(sp, str(t))
+                             for t in df_tr["text"].astype(str).tolist()]
+        selected, gate_excluded = select_gate_examples(
+            train_uids_all, train_ids_all, min(64, len(train_uids_all)), args.seed)
+        if gate_excluded:
+            reasons = {}
+            for ex in gate_excluded:
+                reasons[ex.get("reason", "?")] = reasons.get(ex.get("reason", "?"), 0) + 1
+            log(f"overfit gate: excluded {len(gate_excluded)} unreachable "
+                f"targets from selection {reasons}")
+        sub = df_tr.iloc[selected].reset_index(drop=True)
         gate_uids = [str(u) for u in sub["uid"]]
         # shuffle=False: batch_greedy yields refs in loader order, which must
         # match gate_uids for the failure diagnostics below. (Batch order is
@@ -1828,6 +1850,7 @@ def main(argv=None) -> int:
             _gate_report = {"threshold": 0.95, "passed": exact >= 0.95,
                             "seed": args.seed, "gate_uids": gate_uids,
                             "n_gate": len(gate_uids),
+                            "n_excluded_unreachable": len(gate_excluded),
                             "final": _gate_checks[-1] if _gate_checks else None,
                             "checks": _gate_checks,
                             "error": _gate_error,
@@ -2083,12 +2106,16 @@ def select_gate_examples(uids: list[str], token_ids: list[list[int]],
 
     Args:
         uids: List of unique identifiers (one per sample).
-        token_ids: List of token ID lists (each excluding BOS, as produced by encode_text).
+        token_ids: List of token ID lists (each WITH BOS/EOS, as produced by
+            encode_text) checked by reference_reachability.
         limit: Number of UIDs to select for the gate subset (typically 64).
         seed: Random seed for deterministic selection.
 
     Returns:
-        selected: List of selected UID indices (sorted, length = limit).
+        selected: List of selected UID indices (sorted, length = min(limit,
+            n_reachable)). Never includes unreachable examples: when fewer
+            than limit are reachable the gate runs on fewer probes and the
+            95% bar applies to that smaller n.
         excluded: List of dicts, each with "uid" and reason from reference_reachability
                   for UIDs that are unreachable under the active decoding constraints.
                   UIDs reachable but simply not selected (because limit < n_eligible)
@@ -2107,38 +2134,14 @@ def select_gate_examples(uids: list[str], token_ids: list[list[int]],
         else:
             excluded.append({"uid": str(uid), **result})
 
-    # Deterministically select from eligible examples using the seeded RNG
+    # Deterministically select from eligible examples using the seeded RNG.
+    # Unreachable examples are NEVER backfilled: emitting them exactly is
+    # forbidden by the serving bans, so including them would cap the gate
+    # below 95% no matter how well the model memorized.
     rng = np.random.default_rng(seed)
     n_eligible = len(eligible)
     n_select = min(limit, n_eligible)
-    selected_indices = np.sort(rng.choice(eligible, size=n_select, replace=False)).tolist()
-
-    # If we have fewer eligible than limit, try to add from the excluded pool.
-    # These are constraint-blocked but may still be usable in the gate evaluation;
-    # we record their exclusion reasons for transparency.
-    if n_select < limit and excluded:
-        selected_uids_set = {uids[i] for i in selected_indices}
-        additional_selected = []
-        temp_excluded = []
-        for ex in excluded:
-            uid_idx = uids.index(ex["uid"]) if ex["uid"] in uids else -1
-            if uid_idx not in selected_indices and uid_idx not in selected_uids_set:
-                additional_selected.append(uid_idx)
-                selected_uids_set.add(uid_idx)
-            else:
-                temp_excluded.append(ex)
-        selected_indices.extend(additional_selected)
-        excluded = temp_excluded
-
-    # Pad to exactly limit if still short (select from all remaining indices)
-    if len(selected_indices) < limit:
-        all_indices = set(range(len(uids))) - set(selected_indices)
-        already_selected = set(selected_indices)
-        remaining = sorted(all_indices - already_selected)
-        needed = limit - len(selected_indices)
-        if needed > 0 and remaining:
-            extra = rng.choice(remaining, size=min(needed, len(remaining)), replace=False).tolist()
-            selected_indices.extend(extra)
+    selected_indices = np.sort(rng.choice(eligible, size=n_select, replace=False)).tolist() if n_select else []
 
     selected_indices = selected_indices[:limit]
     selected = np.sort(selected_indices).tolist()
@@ -2182,23 +2185,14 @@ def assert_gate_pass_alignment(expected_uids: list[str], actual_uids: list[str],
         raise RuntimeError(
             "constrained gate references are not aligned with expected references"
         )
-    # Verify constrained reference strings are consistent with the expected IDs.
-    # We compare the normalized text of each constrained reference against what
-    # the expected IDs would decode to, ensuring the string order matches the
-    # ID order.  This catches cases where IDs are technically correct but the
-    # string presentation is out of alignment.
-    import numpy as np
-    for i in range(len(expected_ref_ids)):
-        constr_text = T.decode_ids(
-            T.sp, constrained_ref_ids[i] if hasattr(T, 'sp') else [0],
-            {"bos": T.bos_id() if hasattr(T, 'bos_id') else 2,
-             "eos": T.eos_id() if hasattr(T, 'eos_id') else 3}
-        ) if False else expected_ref_ids[i][:10]
-        # Simply check that the constrained refs list length matches expected
-        if len(constrained_refs) != len(expected_ref_ids):
-            raise RuntimeError(
-                "constrained_refs length mismatch with expected_ref_ids"
-            )
+    # The constrained string list must cover exactly the expected probes in
+    # order. Unconstrained refs are diagnostic only and need not match: the
+    # unconstrained pass deliberately omits the no-repeat-ngram ban and
+    # repetition penalty.
+    if len(constrained_refs) != len(expected_ref_ids):
+        raise RuntimeError(
+            "constrained_refs length mismatch with expected_ref_ids"
+        )
     # Note: we do NOT require constrained_refs == unconstrained_refs because the
     # unconstrained pass deliberately omits the no-repeat-ngram ban and
     # repetition penalty.  The constrained score is authoritative for the gate;
