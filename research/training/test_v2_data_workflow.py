@@ -402,6 +402,134 @@ def test_notebook_stage_order_and_failure_persistence() -> None:
     print("PASS notebook stage order and failure-to-persist path")
 
 
+def test_notebook_collapse_vs_gate_failure_classification() -> None:
+    import json as _json
+
+    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
+    titles = [next((line for line in source.splitlines()
+                    if line.startswith("# ") and not line.startswith("# Requires")), "")
+              for source in sources]
+    train_source = sources[next(i for i, title in enumerate(titles)
+                                if title.startswith("# V2 TRAINING"))]
+    # Collapse guard and overfit gate are independent signals: a passing
+    # overfit gate must never be reported as proof that training succeeded.
+    assert "COLLAPSED" in train_source
+    assert "COLLAPSE GUARD FIRED" in train_source
+    assert "Training/gate failed" not in train_source
+    assert "_training_succeeded" in train_source
+    print("PASS notebook distinguishes collapse guard from overfit-gate failure")
+
+
+def test_notebook_restore_ambiguous_candidates_guard() -> None:
+    import json as _json
+
+    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
+    titles = [next((line for line in source.splitlines()
+                    if line.startswith("# ") and not line.startswith("# Requires")), "")
+              for source in sources]
+    restore_source = sources[next(i for i, title in enumerate(titles)
+                                  if title.startswith("# SESSION RESTORE"))]
+    assert "PRIOR_OUTPUT_SLUG" in restore_source
+    assert ("ambiguous" in restore_source.lower()
+            or "multiple" in restore_source.lower())
+    assert ("raise" in restore_source
+            or "RuntimeError" in restore_source
+            or "SystemExit" in restore_source)
+    assert "rev-parse" in restore_source
+    assert "complete" in restore_source
+    assert ("INCOMPLETE" in restore_source
+            or "not complete" in restore_source.lower())
+    print("PASS notebook restore guards ambiguous candidates and logs commit")
+
+
+def test_notebook_restore_slug_strictness_live() -> None:
+    """Live-exec the real restore cell against temp dirs (no Kaggle, no torch).
+
+    A set PRIOR_OUTPUT_SLUG must select exactly that output: a typo slug
+    raises instead of silently restoring a different output, and a correct
+    slug wins over auto-detect without raising.
+    """
+    import json as _json
+    import os as _os
+
+    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
+    titles = [next((line for line in source.splitlines()
+                    if line.startswith("# ") and not line.startswith("# Requires")), "")
+              for source in sources]
+    restore_source = sources[next(i for i, title in enumerate(titles)
+                                  if title.startswith("# SESSION RESTORE"))]
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        fake_in, fake_out = td / "input", td / "working" / "s2t_v2"
+        for slug in ("slugA", "slugB"):
+            d = fake_in / slug / "s2t_v2" / "tokenizer"
+            d.mkdir(parents=True)
+            (d / "x").write_text("x")
+        code = restore_source.replace("/kaggle/input", str(fake_in)).replace(
+            "/kaggle/working/s2t_v2", str(fake_out)).replace(
+            "/kaggle/working/signsage", str(td / "nosuchrepo"))
+        old = _os.environ.get("PRIOR_OUTPUT_SLUG")
+        try:
+            _os.environ["PRIOR_OUTPUT_SLUG"] = "typo-slug"
+            try:
+                exec(compile(code, "<restore-typo>", "exec"), {"__name__": "__t1__"})
+                raise AssertionError("typo slug should raise, not restore")
+            except RuntimeError as exc:
+                assert "PRIOR_OUTPUT_SLUG" in str(exc), str(exc)
+            assert not fake_out.exists()
+            _os.environ["PRIOR_OUTPUT_SLUG"] = "slugA"
+            g = {"__name__": "__t2__"}
+            exec(compile(code, "<restore-exact>", "exec"), g)
+            assert g["restored"] == str(fake_in / "slugA" / "s2t_v2"), g["restored"]
+            assert (fake_out / "tokenizer").is_dir()
+        finally:
+            if old is None:
+                _os.environ.pop("PRIOR_OUTPUT_SLUG", None)
+            else:
+                _os.environ["PRIOR_OUTPUT_SLUG"] = old
+    print("PASS notebook restore honors explicit slug strictly")
+
+
+def test_diversity_history_persisted_smoke() -> None:
+    """CPU: --smoke train must persist per-epoch diversity into history.
+
+    The epoch-2 collapse investigation was blocked by history carrying only
+    train/val loss; every saved epoch must also carry unique_fraction and
+    the related diversity metrics. The 4-sample smoke diversity may or may
+    not trip the collapse guard at epoch 2 -- either way the epoch-1
+    recovery history must already contain the diversity keys.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "s2t"
+        cmd = [sys.executable, str(Path(__file__).parent / "train_sign_to_text.py"),
+               "--smoke", "--out", str(out),
+               "--stages", "tokenizer,train", "--epochs", "2"]
+        subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        rec = torch.load(out / "checkpoints" / "signsage_transformer_recovery.pt",
+                         map_location="cpu", weights_only=False)
+        assert len(rec["history"]) >= 1
+        for h in rec["history"]:
+            assert {"unique", "unique_fraction",
+                    "top_prediction", "top_prediction_freq"} <= set(h), h
+            assert 0.0 <= h["unique_fraction"] <= 1.0
+            assert 1 <= h["unique"] <= 512
+            assert {"grad_norm_mean", "grad_norm_max",
+                    "grad_clip_frac", "param_norm"} <= set(h), h
+            assert h["grad_norm_mean"] > 0.0 and h["param_norm"] > 0.0
+            assert 0.0 <= h["grad_clip_frac"] <= 1.0
+        # per-epoch history file: written every epoch, so it also covers the
+        # epoch that trips the collapse guard (whose checkpoint is skipped)
+        import json as _json
+        fh = _json.loads((out / "training_history.json").read_text())
+        assert len(fh) >= len(rec["history"])
+        for h in fh:
+            assert {"unique_fraction", "grad_norm_mean"} <= set(h), h
+    print("PASS smoke per-epoch history persists diversity metrics")
+
+
 def test_overfit_gate() -> None:
     """Slow: real gate (d256, 600 checks max) on synthetic pose files + tiny CSV."""
     with tempfile.TemporaryDirectory() as td:
@@ -550,7 +678,7 @@ def test_measure_deterministic(tmp: Path) -> None:
 def test_no_training_config_change() -> None:
     assert (T.D_MODEL, T.NHEAD, T.NLAYERS, T.FF) == (256, 4, 4, 1024)
     assert T.DROPOUT == 0.15 and T.LABEL_SMOOTHING == 0.1
-    assert T.PEAK_LR == 3e-4 and T.WARMUP_FRACTION == 0.06
+    assert T.PEAK_LR == 1e-4 and T.WARMUP_FRACTION == 0.15
     assert T.WEIGHT_DECAY == 1e-4 and T.GRAD_CLIP == 1.0
     assert T.MAX_FRAMES == 160 and T.MAX_TOKENS == 96 and T.SEED == 42
     assert T.LANDMARK_DIM == 543 * 3 and T.MODEL_INPUT_DIM == 3258
@@ -559,7 +687,44 @@ def test_no_training_config_change() -> None:
     args = T.parse_args(["--out", "x", "--smoke"])
     assert (args.epochs, args.patience, args.batch) == (12, 3, 64)
     assert args.measure_samples == 2000 and args.subset == 0
+    assert args.lr == 1e-4
     print("PASS no model/training configuration changes")
+
+
+def test_schedule_warmup_math() -> None:
+    """build_schedule: 15% linear warmup to peak, then cosine decay to 10%."""
+    opt = torch.optim.SGD([torch.nn.Parameter(torch.zeros(1))], lr=1.0)
+    total = 200
+    sched = T.build_schedule(opt, total)
+    lrs = []
+    for _ in range(total):
+        sched.step()
+        lrs.append(opt.param_groups[0]["lr"])
+    # warmup = int(0.15 * 200) = 30: lr after k-th step is (k+1)/30
+    assert abs(lrs[0] - 2 / 30) < 1e-9, lrs[0]
+    assert abs(max(lrs) - 1.0) < 1e-9
+    assert abs(lrs[-1] - 0.1) < 1e-9, lrs[-1]
+    assert all(0.0 < v <= 1.0 for v in lrs)
+    print("PASS schedule 15% warmup then cosine decay to 10%")
+
+
+def test_notebook_diagnostic_run_flags() -> None:
+    """DIAGNOSTIC (Option-1 LR test, revert after): 2 epochs, explicit LR,
+    fresh start without --resume so stale optimizer state cannot leak in."""
+    import json as _json
+
+    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
+    titles = [next((line for line in source.splitlines()
+                    if line.startswith("# ") and not line.startswith("# Requires")), "")
+              for source in sources]
+    train_source = sources[next(i for i, title in enumerate(titles)
+                                if title.startswith("# V2 TRAINING"))]
+    assert "DIAGNOSTIC" in train_source
+    assert '"--lr"' in train_source and '"1e-4"' in train_source
+    assert '"--epochs", "2"' in train_source
+    assert '"--resume"' not in train_source
+    print("PASS notebook diagnostic run flags (2 epochs, LR 1e-4, fresh start)")
 
 
 def test_stream_shard_parity(tmp: Path) -> None:

@@ -21,6 +21,7 @@ graphify-out/
 
 # kaggle results staging (11.6GB original + 14.7GB extracted; never commit)
 results.zip
+results(1).zip
 staging_kaggle_results/
 
 # os

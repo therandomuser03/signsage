@@ -82,8 +82,8 @@ D_MODEL, NHEAD, NLAYERS, FF = 256, 4, 4, 1024
 DROPOUT = 0.15
 NORM_FIRST = True  # pre-norm: stable from step 0 on short budgets
 LABEL_SMOOTHING = 0.1
-PEAK_LR = 3e-4
-WARMUP_FRACTION = 0.06
+PEAK_LR = 1e-4
+WARMUP_FRACTION = 0.15
 MIN_LR_RATIO = 0.1
 WEIGHT_DECAY = 1e-4
 GRAD_CLIP = 1.0
@@ -1201,6 +1201,7 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
     if train:
         opt.zero_grad(set_to_none=True)
     timer = PhaseTimer("train" if train else "val")
+    gnorms: list = []
     with ctx:
         batch_iter = iter(loader)
         while True:
@@ -1221,7 +1222,8 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
                     raise RuntimeError("Non-finite training loss.")
                 scaler.scale(loss).backward()
                 scaler.unscale_(opt)
-                nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+                _gnorm = float(nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP))
+                gnorms.append(_gnorm)
                 scaler.step(opt)
                 scaler.update()
                 opt.zero_grad(set_to_none=True)
@@ -1230,6 +1232,15 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
             total += loss.item()
             timer.add_batch(t_comp0 - t_data0, time.perf_counter() - t_comp0)
     log(timer.summary())
+    if train and gnorms:
+        with torch.no_grad():
+            _pnorm = float(torch.sqrt(sum(p.detach().pow(2).sum()
+                                          for p in model.parameters())))
+        run_epoch.last_train_stats = {  # type: ignore[attr-defined]
+            "grad_norm_mean": float(sum(gnorms) / len(gnorms)),
+            "grad_norm_max": float(max(gnorms)),
+            "grad_clip_frac": float(sum(g > GRAD_CLIP for g in gnorms) / len(gnorms)),
+            "param_norm": _pnorm}
     return total / max(1, len(loader))
 
 
@@ -1959,15 +1970,31 @@ def main(argv=None) -> int:
                                         memoize=True)
         for epoch in range(start_epoch, args.epochs + 1):
             tr_loss = run_epoch(model, train_loader, opt, crit, device, scheduler, train=True)
+            _gstats = getattr(run_epoch, "last_train_stats", None) or {}
             va_loss = run_epoch(model, val_loader, opt, crit, device, train=False)
             history.append({"epoch": epoch, "train_loss": tr_loss, "val_loss": va_loss})
             log(f"epoch {epoch:02d}/{args.epochs}: train={tr_loss:.4f} val={va_loss:.4f} "
                 f"lr={scheduler.get_last_lr()[0]:.2e}")
+            if _gstats:
+                log(f"  grads: norm mean={_gstats['grad_norm_mean']:.4f} "
+                    f"max={_gstats['grad_norm_max']:.4f} "
+                    f"clipped={_gstats['grad_clip_frac']:.1%} "
+                    f"param_norm={_gstats['param_norm']:.2f}")
             # Diversity collapse gate on real decodes (not teacher-forced loss).
             _, dhyps, _ = batch_greedy(model, div_loader_sample, sp, device)
             div = diversity_metrics(dhyps)
             log(f"  diversity: unique={div['unique']}/{len(dhyps)} ({div['unique_fraction']:.2%}) "
                 f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%})")
+            history[-1].update({"unique": div["unique"], "unique_fraction": div["unique_fraction"],
+                                "top_prediction": div["top_prediction"],
+                                "top_prediction_freq": div["top_prediction_freq"],
+                                "grad_norm_mean": _gstats.get("grad_norm_mean"),
+                                "grad_norm_max": _gstats.get("grad_norm_max"),
+                                "grad_clip_frac": _gstats.get("grad_clip_frac"),
+                                "param_norm": _gstats.get("param_norm")})
+            _htmp = out / "training_history.json.tmp"
+            _htmp.write_text(json.dumps(history, indent=1))
+            os.replace(_htmp, out / "training_history.json")
             if epoch >= 2 and div["unique_fraction"] < DIVERSITY_FLOOR:
                 (out / "COLLAPSED.txt").write_text(
                     f"epoch {epoch}: unique_fraction={div['unique_fraction']:.4f} < {DIVERSITY_FLOOR}; "
