@@ -106,3 +106,12 @@ def test_load_rejects_a_missing_checkpoint_file(fake_bundle):
     (fake_bundle / "checkpoint" / "signsage_transformer_full.pt").unlink()
     with pytest.raises(ModelLoadError):
         SignToTextAdapter.load(fake_bundle, device="cpu")
+
+
+def test_load_rejects_checkpoint_with_mismatched_tokenizer_fingerprint(fake_bundle):
+    checkpoint = fake_bundle / "checkpoint" / "signsage_transformer_full.pt"
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["tokenizer_fingerprint"] = "mismatched"
+    torch.save(payload, checkpoint)
+    with pytest.raises(ModelLoadError, match="fingerprint"):
+        SignToTextAdapter.load(fake_bundle, device="cpu")

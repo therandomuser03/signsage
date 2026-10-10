@@ -50,6 +50,9 @@ from train_sign_to_text import (  # noqa: E402
     load_or_build_token_cache,
     materialize_pose_cache,
     cache_coverage,
+    assert_gate_pass_alignment,
+    reference_reachability,
+    select_gate_examples,
 )
 
 
@@ -102,6 +105,7 @@ def test_materialize_roundtrip(tmp: Path) -> None:
     assert len(list(cache.glob("shard-*.zip"))) == 3
     man = json.loads((cache / "manifest.json").read_text())
     assert man["complete"] is True and len(man["uid_to_shard"]) == 12
+    assert cache_coverage(cache, uids) == (12, 0)
     cached = ShardPoseSource(str(cache))
     ref = DirPoseSource(str(rawdir))
     for u in uids:
@@ -110,6 +114,32 @@ def test_materialize_roundtrip(tmp: Path) -> None:
         assert f1.shape == (MAX_FRAMES, LANDMARK_DIM) and f1.dtype == np.float32
         assert l1 == l2 and np.array_equal(f1, f2), f"cache decode differs for {u}"
     print("PASS materialize round-trip exact (12 samples, 3 shards)")
+
+
+def test_cache_manifest_compatibility(tmp: Path) -> None:
+    uid = "restore-0"
+    cache = tmp / "pose_cache"
+    materialize_pose_cache([uid], FakeRemote({uid: make_pose_blob(81)}), cache)
+    manifest_path = cache / "manifest.json"
+    valid = manifest_path.read_text()
+    manifest = json.loads(valid)
+    manifest["version"] += 1
+    manifest_path.write_text(json.dumps(manifest))
+    try:
+        cache_coverage(cache, [uid])
+        raise AssertionError("unsupported cache version should fail")
+    except RuntimeError as exc:
+        assert "incompatible" in str(exc)
+    manifest_path.write_text(valid)
+    manifest = json.loads(valid)
+    manifest["uid_to_shard"].clear()
+    manifest_path.write_text(json.dumps(manifest))
+    try:
+        cache_coverage(cache, [uid])
+        raise AssertionError("stale manifest should fail")
+    except RuntimeError as exc:
+        assert "does not match" in str(exc)
+    print("PASS restored cache version and manifest validation")
 
 
 def test_parallel_materialize(tmp: Path) -> None:
@@ -233,6 +263,11 @@ def test_checkpoint_resume_keys(tmp: Path) -> None:
                 "epoch", "best", "bad", "history", "rng"):
         assert key in payload, f"recovery missing {key}"
     assert payload["epoch"] == 1 and len(payload["history"]) == 1
+    assert payload["best"] == payload["val_loss"]
+    assert payload["model_config"]["vocab_size"] > 0
+    assert payload["tokenizer_fingerprint"]
+    best = out / "checkpoints" / "signsage_transformer_full.pt"
+    assert torch.load(best, map_location="cpu", weights_only=False)["val_loss"] == payload["val_loss"]
     assert set(payload["rng"]) == {"python", "numpy", "torch", "cuda"}
     cmd2 = [sys.executable, str(Path(__file__).parent / "train_sign_to_text.py"),
             "--smoke", "--out", str(out), "--epochs", "2", "--stages", "train", "--resume"]
@@ -241,6 +276,9 @@ def test_checkpoint_resume_keys(tmp: Path) -> None:
     assert "resumed at epoch 2" in r2.stdout, r2.stdout[-2000:]
     payload2 = torch.load(rec, map_location="cpu", weights_only=False)
     assert payload2["epoch"] == 2 and len(payload2["history"]) == 2, payload2["history"]
+    assert payload2["best"] == min(row["val_loss"] for row in payload2["history"])
+    best_payload = torch.load(best, map_location="cpu", weights_only=False)
+    assert best_payload["val_loss"] == payload2["best"]
     print("PASS checkpoint resume (epoch/bad/history/opt/sched/rng round-trip)")
 
 
@@ -289,6 +327,79 @@ def test_decode_parity() -> None:
         assert hyps[i] == expect, f"row {i}: batch={hyps[i]!r} serving={expect!r}"
     assert len(confs) == 3 and all(np.isfinite(confs))
     print("PASS decoder parity (batch_greedy == serving on 3 rows incl. constraints)")
+
+
+def test_gate_reachability_selection_and_alignment() -> None:
+    reachable = [2, 20, 21, 22, 20, 21, 23, 3]
+    blocked = [2, 20, 21, 22, 20, 21, 22, 3]
+    assert reference_reachability(reachable)["reachable"]
+    result = reference_reachability(blocked)
+    assert result["reason"] == "no_repeat_ngram" and result["token_id"] == 22
+    assert reference_reachability([2, 3])["reason"] == "minimum_output_tokens"
+    too_long = [2] + list(range(10, 10 + MAX_DECODE_TOKENS)) + [3]
+    assert reference_reachability(too_long)["reason"] == "max_decode_tokens"
+
+    uids = [f"u{i}" for i in range(70)]
+    targets = [reachable] * 65 + [blocked] * 5
+    selected, excluded = select_gate_examples(uids, targets, 64, 42)
+    again, excluded_again = select_gate_examples(uids, targets, 64, 42)
+    assert selected == again and excluded == excluded_again
+    assert len(selected) == 64 and len(excluded) == 5
+    selected_uids = [uids[i] for i in selected]
+    refs = [[int(token) for token in targets[i][1:]] for i in selected]
+    assert_gate_pass_alignment(selected_uids, selected_uids, refs, refs, refs,
+                               ["same"] * 64, ["same"] * 64)
+    try:
+        assert_gate_pass_alignment(selected_uids, selected_uids[::-1], refs, refs, refs,
+                                   ["same"] * 64, ["same"] * 64)
+        raise AssertionError("misaligned UIDs should fail")
+    except RuntimeError:
+        pass
+    try:
+        assert_gate_pass_alignment(selected_uids, selected_uids, refs, refs[::-1], refs,
+                                   ["same"] * 64, ["same"] * 64)
+        raise AssertionError("misaligned references should fail")
+    except RuntimeError:
+        pass
+    print("PASS gate reachability, deterministic 64-item selection, and pass alignment")
+
+
+def test_training_serving_preprocessing_parity(tmp: Path) -> None:
+    from pose_format import Pose
+    from app.ml.preprocessing.sequence import prepare_live_landmarks
+
+    uid = "parity-0"
+    pose_dir = tmp / "poses"
+    pose_dir.mkdir()
+    blob = make_pose_blob(991, frames=25)
+    (pose_dir / f"{uid}.pose").write_bytes(blob)
+    pose = Pose.read(blob)
+    raw = np.asarray(np.ma.filled(pose.body.data, 0.0), dtype=np.float32)
+    raw = raw[:, 0, :543, :].reshape(raw.shape[0], -1)
+    serving_frames, serving_length = prepare_live_landmarks(raw.reshape(-1, 543, 3), MAX_FRAMES)
+    training_frames, training_length = load_pose_item(uid, DirPoseSource(str(pose_dir)))
+    assert serving_length == training_length
+    assert np.array_equal(serving_frames, training_frames)
+    print("PASS training/serving pose normalization and resize parity")
+
+
+def test_notebook_stage_order_and_failure_persistence() -> None:
+    import json as _json
+
+    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
+    titles = [next((line for line in source.splitlines()
+                    if line.startswith("# ") and not line.startswith("# Requires")), "")
+              for source in sources]
+    positions = [next(i for i, title in enumerate(titles) if title.startswith(prefix))
+                 for prefix in ("# SESSION RESTORE", "# PREPARE", "# V2 TRAINING",
+                                "# Final test evaluation", "# PERSIST")]
+    assert positions == sorted(positions)
+    train_source = sources[positions[2]]
+    eval_source = sources[positions[3]]
+    assert "_training_succeeded" in train_source
+    assert "_training_succeeded" in eval_source and "raise RuntimeError" not in train_source
+    print("PASS notebook stage order and failure-to-persist path")
 
 
 def test_overfit_gate() -> None:
@@ -506,6 +617,12 @@ def test_cache_budget_refuse(tmp: Path) -> None:
     free_gib = _sh.disk_usage(tmp).free / (1024 ** 3)
     fits = max(0.01, 0.1 * free_gib)  # comfortably under 90% of free, whatever the host has
     TT.check_cache_budget(fits, fits + 1.0, tmp)  # small cache succeeds
+    orig = _sh.disk_usage
+    _sh.disk_usage = lambda p: orig(p)._replace(free=1 * 1024 ** 3)
+    try:
+        TT.check_cache_budget(10.0, 10.0, tmp, existing_bytes=int(9.5 * 1024 ** 3))
+    finally:
+        _sh.disk_usage = orig
     try:
         TT.check_cache_budget(143.0, 10.0, tmp)  # observed Kaggle projection vs default budget
         raise AssertionError("143 GiB vs 10 GiB budget should refuse")
@@ -645,6 +762,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         test_materialize_roundtrip(td / "t1")
+        test_cache_manifest_compatibility(td / "t1b")
         test_parallel_materialize(td / "t1p")
         test_resume_skips_present(td / "t2")
         test_corrupt_shard_rebuilt(td / "t3")
@@ -662,7 +780,11 @@ def main() -> int:
         test_checkpoint_resume_keys(td / "t5")
     test_zstd_roundtrip_unit()
     test_no_training_config_change()
+    test_gate_reachability_selection_and_alignment()
     test_decode_parity()
+    with tempfile.TemporaryDirectory() as td:
+        test_training_serving_preprocessing_parity(Path(td))
+    test_notebook_stage_order_and_failure_persistence()
     print("ALL FAST CHECKS PASSED (run with --gate for the overfit-gate check)")
     return 0
 

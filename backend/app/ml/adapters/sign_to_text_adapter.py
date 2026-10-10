@@ -9,6 +9,7 @@ package.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -151,5 +152,12 @@ class SignToTextAdapter:
             raise ModelLoadError(
                 f"Tokenizer special-token IDs {actual} do not match manifest {expected}."
             )
+        expected_fingerprint = payload.get("tokenizer_fingerprint")
+        if expected_fingerprint:
+            fingerprint = hashlib.sha256(tokenizer_path.read_bytes())
+            fingerprint.update(str(sp.get_piece_size()).encode())
+            fingerprint.update(f"{sp.pad_id()},{sp.unk_id()},{sp.bos_id()},{sp.eos_id()}".encode())
+            if fingerprint.hexdigest()[:16] != expected_fingerprint:
+                raise ModelLoadError("Checkpoint tokenizer fingerprint does not match tokenizer artifact.")
 
         return cls(model=model, tokenizer=sp, contract=contract, device=torch_device)
