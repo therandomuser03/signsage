@@ -28,6 +28,13 @@ pose cache (<out>/pose_cache) once; later sessions reuse it plus the token
 cache (<out>/tokenizer/tokens.npz) and --resume continues from the recovery
 checkpoint. /kaggle/working is ephemeral -- persist <out> via Save Version
 and re-attach it as an input dataset next session (see signsage_kaggle.ipynb).
+
+EXPOSURE-BIAS MITIGATION (added after the 2-epoch diagnostic collapsed):
+    --decoder-input-dropout P replaces each non-BOS decoder input token with a
+    random vocab id (in [4, vocab_size)) with probability P during training.
+    This forces the decoder to recover from perturbed prefixes and suppresses
+    the repeated-token collapse observed at inference. Default 0.0 preserves
+    the original behavior. Gate and validation paths are unaffected.
 """
 from __future__ import annotations
 
@@ -1186,7 +1193,16 @@ def build_schedule(opt, total_steps: int):
     return torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
 
 
-def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = True) -> float:
+def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = True,
+              decoder_input_dropout: float = 0.0, vocab_size: int = 0) -> float:
+    """One pass over `loader`.
+
+    decoder_input_dropout: probability of replacing a non-BOS decoder input
+    token with a random vocab id in [4, vocab_size) during TRAINING only.
+    This is a token-level exposure-bias mitigation (a simple form of
+    scheduled sampling). Position 0 (BOS) is never perturbed. Validation
+    and gate calls leave it at 0.0 so metric semantics are unchanged.
+    """
     model.train(train)
     total = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
@@ -1212,6 +1228,17 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
                 break
             t_comp0 = time.perf_counter()
             frames, lengths, tin, tout = (t.to(device, non_blocking=True) for t in (frames, lengths, tin, tout))
+            if (train and decoder_input_dropout > 0.0 and vocab_size > 4
+                    and tin.size(1) > 1):
+                # Exposure-bias mitigation. Replace each non-BOS decoder input
+                # token with a uniform random vocab id in [4, vocab_size) with
+                # probability `decoder_input_dropout`. Position 0 (BOS) is
+                # pinned. Special ids 0..3 (PAD/UNK/BOS/EOS) are never sampled.
+                _dm = torch.rand(tin.size(), device=tin.device) < decoder_input_dropout
+                _dm[:, 0] = False
+                _rand = torch.randint(4, vocab_size, tin.size(),
+                                       device=tin.device, dtype=tin.dtype)
+                tin = torch.where(_dm, _rand, tin)
             src_pad = padding_mask(lengths, frames.size(1))
             tgt_mask = causal_mask(tin.size(1), frames.device)
             with amp:
@@ -1501,6 +1528,13 @@ def parse_args(argv=None):
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--lr", type=float, default=PEAK_LR)
+    ap.add_argument("--decoder-input-dropout", type=float, default=0.0,
+                    help="Token-level dropout on decoder inputs during training: with this "
+                         "probability, each non-BOS decoder input token is replaced by a "
+                         "uniform random vocab id in [4, vocab_size). Reduces exposure bias "
+                         "in autoregressive decoding; suppressed the repeated-token collapse "
+                         "observed in the 2-epoch diagnostic. 0.0 disables (original behavior). "
+                         "Validation and gate paths are unaffected.")
     ap.add_argument("--max-hours", type=float, default=8.0, help="graceful stop budget")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--preflight-only", action="store_true",
@@ -1526,6 +1560,9 @@ def main(argv=None) -> int:
         (out / "checkpoints").mkdir(parents=True, exist_ok=True)
     t_start = time.time()
     log(f"run {run_id} on {device}; stages={sorted(stages)}")
+    if args.decoder_input_dropout > 0:
+        log(f"decoder input dropout: {args.decoder_input_dropout:.3f} "
+            f"(exposure-bias mitigation; training only)")
 
     # ---- data ----
     if args.smoke:
@@ -1969,7 +2006,9 @@ def main(argv=None) -> int:
                                         token_ids=cached_ids_for(div_frame, "val"),
                                         memoize=True)
         for epoch in range(start_epoch, args.epochs + 1):
-            tr_loss = run_epoch(model, train_loader, opt, crit, device, scheduler, train=True)
+            tr_loss = run_epoch(model, train_loader, opt, crit, device, scheduler, train=True,
+                                 decoder_input_dropout=args.decoder_input_dropout,
+                                 vocab_size=sp.get_piece_size())
             _gstats = getattr(run_epoch, "last_train_stats", None) or {}
             va_loss = run_epoch(model, val_loader, opt, crit, device, train=False)
             history.append({"epoch": epoch, "train_loss": tr_loss, "val_loss": va_loss})
@@ -2074,6 +2113,7 @@ def main(argv=None) -> int:
                                       "ff": FF, "dropout": DROPOUT, "norm_first": NORM_FIRST},
                      "label_smoothing": LABEL_SMOOTHING, "peak_lr": args.lr,
                      "batch": args.batch, "seed": args.seed, "history": history,
+                     "decoder_input_dropout": args.decoder_input_dropout,
                      "is_pilot": is_pilot}
         if is_pilot:
             train_cfg["subset"] = args.subset
