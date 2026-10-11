@@ -7,7 +7,7 @@
 +checkpoint (normal runs: `--resume` continues training; the 2-epoch DIAGNOSTIC in the training cell deliberately does NOT resume). `/kaggle/working` is ephemeral: nothing
  persists unless you **Save Version** (persist cell) and re-attach it next session.
  
-@@ -35,2 +35,23 @@
+@@ -35,2 +35,24 @@
  prepare (resumes cache), training (needs cache/tokenizer), evaluate/export/adapter
  (need successful training). Only a saved output version persists `/kaggle/working`.
 +
@@ -24,10 +24,11 @@
 +**Settings (Kaggle sidebar):** Internet **ON**, accelerator **GPU T4 x2**, Secrets `GITHUB_TOKEN` + `HF_TOKEN`,
 +attach exactly ONE prior output containing `s2t_v2/`.
 +
-+**Values you must edit in code (Save & Run All cannot set env vars):**
-+- Cell 3: `PRIOR_OUTPUT_SLUG_OVERRIDE` (needed if auto-detect is ambiguous); `REQUIRE_RESTORE` stays `True` for this run.
-+- Cell 11: warmup fraction 0.15 is NOT in the command. Read the pinned script's argparse, then set either
-+  `WARMUP_ARGS = ["--<exact-flag>", "0.15"]` or `WARMUP_DEFAULT_CONFIRMED = True`. The cell refuses to run until you do.
++**Optional edits in code (Save & Run All cannot set env vars):**
++- Cell 3: `PRIOR_OUTPUT_SLUG_OVERRIDE`, only if auto-detect finds more than one prior output; `REQUIRE_RESTORE` stays `True`.
++- Cell 11: nothing to do normally. The warmup fraction (0.15) is **auto-detected** from the pinned script's
++  argparse and passed explicitly (`<flag> 0.15`); the log prints the flag and the script's own default. The cell only
++  stops if the script has no usable fraction-type warmup flag (then it explains why; do not force it).
 +
 +Still unverifiable from the notebook: the 0.05 collapse threshold, the collapse exit code / `COLLAPSED.txt` path,
 +and which diagnostics the script persists before exiting. Verify in the script at the pinned SHA.
@@ -801,7 +802,7 @@
 
 --- updated/cell-11
 +++ patched/cell-11
-@@ -1,31 +1,38 @@
+@@ -1,31 +1,79 @@
 -# V2 TRAINING (refuses on feasibility FAIL unless --force; reads LOCAL CACHE when
 -# prepare is complete, else streams remotely every epoch in stream mode).
 -# QUOTA GATE: this cell exits WITHOUT burning GPU when feasibility.json says FAIL.
@@ -826,8 +827,10 @@
 +# PATCHED vs the updated notebook:
 +#  * EPOCHS / PEAK_LR / MAX_HOURS are single constants used by BOTH the command and the printed banner.
 +#  * The pinned script's --help is checked: every flag in the command must exist (fail closed).
-+#  * Warmup fraction 0.15 is not a script flag we can assume: the cell RAISES until you set WARMUP_ARGS
-+#    (exact flag from argparse) or confirm WARMUP_DEFAULT_CONFIRMED=True after reading the pinned script.
++#  * Warmup fraction 0.15 (approved) is enforced explicitly: the cell reads the pinned script's argparse
++#    definitions (AST, no execution), finds the single fraction-type warmup flag, prints it with the script's
++#    own default, and passes "<flag> 0.15". It RAISES (instead of guessing) when there is no flag, several flags,
++#    or the flag is not fraction-like (e.g. an int step count). Manual overrides remain available below.
 +#  * A CUDA GPU is required before anything is archived or started.
 +#  * Old checkpoints / COLLAPSED.txt / gate_report.json are MOVED to s2t_v2/prior_run_archive/<UTC>/ (never
 +#    deleted), and only when training will actually run. The archive is copied into the next saved output.
@@ -848,11 +851,50 @@
 +EPOCHS = 2
 +PEAK_LR = "1e-4"
 +MAX_HOURS = 7
-+# Approved warmup fraction is 0.15. Fill ONE after reading research/training/train_sign_to_text.py at the pinned SHA:
-+#   WARMUP_ARGS = ["--<exact-flag-name>", "0.15"]     (preferred: explicit in the command)
-+#   WARMUP_DEFAULT_CONFIRMED = True                   (ONLY if the script's default at the pinned SHA is verified == 0.15)
-+WARMUP_ARGS = []
-+WARMUP_DEFAULT_CONFIRMED = False
++WARMUP_FRACTION = "0.15"          # approved value
++# Manual overrides (leave as-is for auto-detection):
++WARMUP_ARGS = []                  # e.g. ["--<exact-flag-name>", "0.15"]
++WARMUP_DEFAULT_CONFIRMED = False  # True ONLY if you verified the script default == 0.15 and no flag can be passed
++
++
++def _warmup_candidates(script_path):
++    # Read the pinned script's argparse definitions WITHOUT executing it.
++    import ast
++    try:
++        tree = ast.parse(open(script_path, encoding="utf-8").read())
++    except (OSError, SyntaxError, ValueError):
++        return None
++    found = []
++    for node in ast.walk(tree):
++        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "add_argument":
++            flags = [a.value for a in node.args if isinstance(a, ast.Constant) and isinstance(a.value, str) and a.value.startswith("--")]
++            kw = {k.arg: k.value for k in node.keywords if k.arg}
++            typ = kw["type"].id if isinstance(kw.get("type"), ast.Name) else None
++            try:
++                dflt = ast.literal_eval(kw["default"]) if "default" in kw else "unspecified"
++            except (ValueError, SyntaxError):
++                dflt = "non-literal"
++            for fl in flags:
++                if "warm" in fl.lower():
++                    found.append({"flag": fl, "type": typ, "default": dflt})
++    return found
++
++
++if not WARMUP_ARGS and not WARMUP_DEFAULT_CONFIRMED:
++    _cands = _warmup_candidates("/kaggle/working/signsage/research/training/train_sign_to_text.py")
++    _frac = [c for c in (_cands or [])
++             if ("frac" in c["flag"].lower() or "ratio" in c["flag"].lower()
++                 or (c["type"] == "float" and isinstance(c["default"], float) and 0 < c["default"] <= 1))]
++    if len(_frac) == 1:
++        WARMUP_ARGS = [_frac[0]["flag"], WARMUP_FRACTION]
++        print("WARMUP: auto-detected %s (type=%s, script default=%r) -> passing explicitly: %s %s" % (
++            _frac[0]["flag"], _frac[0]["type"], _frac[0]["default"], _frac[0]["flag"], WARMUP_FRACTION))
++    else:
++        raise RuntimeError(
++            "Cannot enforce warmup fraction %s automatically. Warmup-related argparse entries found in the pinned script: %s. "
++            "Expected exactly one fraction-type flag (none / several / step-count flags are refused rather than guessed). "
++            "If the script hard-codes warmup, 0.15 cannot be enforced from the notebook (needs a script change and a new pinned SHA)."
++            % (WARMUP_FRACTION, _cands if _cands is not None else "script unreadable"))
 +
 +
  def _auto_subset(path="/kaggle/working/s2t_v2/auto_subset.json"):
@@ -861,13 +903,13 @@
 +    # Single source of truth for pilot scope: auto_subset.json (restored; locked by the restore cell).
      import json as _j
      import os as _o
-@@ -38,4 +45,5 @@
+@@ -38,4 +86,5 @@
              return 0
  
 +
  subset_size = _auto_subset()
  
-@@ -46,15 +54,41 @@
+@@ -46,15 +95,36 @@
      "--pose-source", "remote",
      "--out", "/kaggle/working/s2t_v2",
 -    # DIAGNOSTIC RUN (Option-1 LR test, REVERT after): exactly 2 epochs.
@@ -888,11 +930,6 @@
 +
 +# ---- configuration gates (cheap, before any state change) ----
 +assert "--resume" not in cmd and "--force" not in cmd, "diagnostic run must not use --resume or --force"
-+if not WARMUP_ARGS and not WARMUP_DEFAULT_CONFIRMED:
-+    raise RuntimeError(
-+        "Warmup fraction 0.15 is not enforced by this command. Read the pinned train_sign_to_text.py, then set "
-+        "WARMUP_ARGS=[\"--<exact-flag>\", \"0.15\"] or WARMUP_DEFAULT_CONFIRMED=True in this cell.")
-+
 +_used_flags = ["--csv", "--pose-source", "--out", "--epochs", "--max-hours", "--lr", "--data-mode", "--stages"]
 +if subset_size > 0:
 +    _used_flags.append("--subset")
@@ -915,7 +952,7 @@
 +    print("WARNING: --help exited with code %s; flags are NOT verified. stderr tail: %s" % (_help.returncode, (_help.stderr or "")[-200:]))
  
  # Split counts come from the audit cell's report, never hardcoded.
-@@ -72,16 +106,14 @@
+@@ -72,16 +142,14 @@
  
  print("========================================")
 -print("STARTING SIGNSAGE V2 TRAINING")
@@ -937,7 +974,7 @@
 +_training_ran = False
  started = time.time()
  if _prepare_succeeded is not True:
-@@ -91,22 +123,33 @@
+@@ -91,22 +159,33 @@
      print(_pipeline_error)
  else:
 -    # DIAGNOSTIC RUN fresh start: reuse cache/tokenizer restored above, but drop
@@ -986,7 +1023,7 @@
 +        elif not _training_succeeded:
              _pipeline_error = "Training failed (collapse guard or overfit gate -- see classification below); recovery files remain available for Save Version."
      except KeyboardInterrupt:
-@@ -123,32 +166,32 @@
+@@ -123,32 +202,32 @@
  else:
      print("TRAINING STATUS:", _pipeline_error)
 -    import pathlib as _pl
