@@ -72,7 +72,7 @@ Top-10 expected labels:
 - Highly concentrated: True (descriptive heuristic for this analysis line only: top1_share >= 10% OR unique_ratio <= 5%).
 
 ## 8. Hallucination-risk observations
-- Wrong predictions are NOT automatically hallucinations; this section reports repetition/fluency patterns that warrant the controlled negative tests in docs/EXTERNAL_ISIGN_QUALITY_EVALUATION.md.
+- Wrong predictions are NOT automatically hallucinations; this section reports repetition/fluency patterns that warrant the controlled negative tests in docs/EXTERNAL_EVALUATION.md (§4).
 - Random/noise probe: not performed in this notebook (execution smoke tests used synthetic input only and make no quality claim); empty-frame / random-movement negative tests belong to the separate webcam protocol
 - Incorrect samples: 1887; top wrong prediction covers 21.3% of them (401x: "isn't that amazing!").
 - Empty-output count: 0 (rate 0.0000); empty output is a correct rejection, not a translation.

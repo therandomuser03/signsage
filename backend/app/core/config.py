@@ -19,8 +19,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="SIGNSAGE_", extra="ignore")
 
     # --- Server ----------------------------------------------------------
-    host: str = "0.0.0.0"
-    port: int = 8000
+    # Note: the process port comes from $PORT (Dockerfile/Render), not here.
     # Accepts a JSON array (Render/blueprint contract, e.g.
     # '["https://app.vercel.app"]'), a single bare origin, or a
     # comma-separated list. NoDecode keeps the raw env string so a bare
@@ -72,7 +71,6 @@ class Settings(BaseSettings):
 
     # --- Session buffering --------------------------------------------------
     max_frames_per_sequence: int = 160  # should match landmark_contract.json max_frames
-    max_sequence_seconds: float = 12.0
 
     # --- Rolling (streaming) inference --------------------------------------
     # Interim translations run on the trailing window every stride frames, so

@@ -28,7 +28,7 @@ As of research run `352868924` (2026-09-26, notebook `signsage.ipynb`):
 (`transformer_beats_trivial` AND `output_diversity_ok`, per the notebook's
 own Section 17 check). See
 `research/manifests/models/signsage-s2t_v352868924.yaml` and
-`docs/ai-ml/model-contract.md`.
+`docs/reference/end-to-end-contract.md` (§3, model input).
 
 With `SIGNSAGE_MODEL_PROMOTED=false` (the default), `/ws/translate`
 and `POST /api/v1/translation/sign-to-text` will refuse to serve

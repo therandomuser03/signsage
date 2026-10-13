@@ -1,5 +1,5 @@
 """English -> gloss IDs for the frontend's avatar. URL stays /api/v1/text-to-sign;
-module names are avatar_gloss to avoid the neural ml/*/text_to_sign.py."""
+module names are avatar_gloss (the neural text-to-sign stubs were removed 2026-10-12)."""
 from __future__ import annotations
 
 from typing import Optional

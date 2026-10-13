@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname('/mnt/D/Codes/signsage/backend'))
 from transformers import T5ForConditionalGeneration, AutoTokenizer
 import torch
 
-from backend.app.ml.adapters.i_sign_t5_adapter import signage_to_external
+from app.ml.adapters.i_sign_t5_adapter import signage_to_external
 
 
 # ---------------------------------------------------------------------------

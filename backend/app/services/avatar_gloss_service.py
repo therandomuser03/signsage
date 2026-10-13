@@ -1,8 +1,5 @@
 """English -> ISL gloss generation for the avatar pipeline.
 
-Named avatar_gloss_service (not text_to_sign_service): ml/*/text_to_sign.py is
-reserved for the NOT-served neural Text->Pose model.
-
 Groq -> Ollama -> deterministic fallback chain (see MODEL_CARD.md). Both LLM
 stages are constrained to the SAME fixed vocabulary the deterministic stage
 uses -- they choose which of your existing pre-authored signs to play, they

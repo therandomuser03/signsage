@@ -1,4 +1,9 @@
-# External iSign T5 Contract Verification
+# External iSign T5 Contract Verification (reference)
+
+> Line-by-line verification detail for `docs/EXTERNAL_EVALUATION.md`. The
+> condensed contract lives there; this file preserves the exact source-code
+> evidence (quotes from the external repository's `pose_utils.py`, `model.py`,
+> `inference.py`).
 
 ## 1. Source Files Inspected
 
@@ -434,129 +439,20 @@ print(f"Translation: {translation}")
 | Motion features | None | Explicit velocity concatenation | Motion models require velocity computation |
 | Sequence length | Variable | 500 max (padded/truncated) | Must pad/truncate to exactly 500 |
 
-## 13. Required Adapter
+## 13. Required Adapter (implemented — see code)
 
-### 13.1 Adapter Function: `convert_signage_to_hf()`
-
-```python
-import numpy as np
-import torch
-from typing import List, Tuple
-
-def convert_signage_to_hf(
-    holistic_frame: dict,  # SignSage HolisticFrame.landmarks
-    include_confidence: bool = True,
-    use_motion: bool = False,
-    max_length: int = 500,
-) -> Tuple[np.ndarray, int]:
-    """
-    Convert SignSage MediaPipe output to external model expected format.
-    
-    Returns: (pose_tensor, actual_length)
-    pose_tensor shape: (max_length, pose_dim) — ready for unsqueeze(0) → (1, max_length, pose_dim)
-    """
-    
-    # Step 1: Extract only the 3 required components
-    # SignSage landmarks order: POSE[0:33] + FACE[33:501] + LEFT_HAND[501:522] + RIGHT_HAND[522:543]
-    # We need: landmarks[0:33] (POSE) + landmarks[501:522] (LEFT_HAND) + landmarks[522:543] (RIGHT_HAND)
-    
-    landmarks = holistic_frame["landmarks"]  # list of [x,y,z], length 543
-    
-    pose_landmarks = landmarks[0:33]        # first 33 are pose
-    left_hand = landmarks[501:522]          # left hand
-    right_hand = landmarks[522:543]         # right hand
-    
-    # Step 2: Convert to numpy and append confidence
-    def to_array(landmark_list, include_conf):
-        arr = np.array(landmark_list, dtype=np.float32)  # (N, 3)
-        if include_confidence:
-            conf = np.ones((arr.shape[0], 1), dtype=np.float32)  # confidence=1.0
-            arr = np.concatenate([arr, conf], axis=1)  # (N, 4)
-        return arr
-    
-    pose_arr = to_array(pose_landmarks, include_confidence=True)   # (33, 4)
-    left_arr = to_array(left_hand, include_confidence=True)        # (21, 4)
-    right_arr = to_array(right_hand, include_confidence=True)      # (21, 4)
-    
-    # Step 3: Concatenate: 33 + 21 + 21 = 75 landmarks × 4 = 300 values
-    combined = np.concatenate([pose_arr, left_arr, right_arr], axis=0)  # (75, 4)
-    
-    # Step 4: Flatten — but it's already (75, 4). The expected input is (seq_length, pose_dim).
-    # For a single frame, we need (1, 300). But the model expects a sequence.
-    # The adapter assumes the caller provides a sequence of frames.
-    
-    # Actually, looking at the code flow more carefully:
-    # preprocess_pose() calls load_pose_file() which returns (num_frames, 75*4) = (N, 300)
-    # Then it pads/truncates to base_pose_dim per frame, normalizes, adds motion if needed, 
-    # then pads/truncates to max_length=500 frames.
-    # 
-    # For the adapter, we need to handle a SEQUENCE of frames, not just one.
-    # 
-    # But if we're processing a single frame, we'd need to repeat or handle it differently.
-    # Let's handle the sequence case:
-    
-    # For now, let's handle a single frame contribution to a sequence:
-    # The combined (75, 4) = 300 values per frame
-    
-    # Step 5: If this is the first frame of a sequence, just return it
-    # For a full sequence, the caller accumulates frames and then applies:
-    #   - z-score normalization across the sequence axis
-    #   - motion feature construction if use_motion
-    #   - padding/truncation to max_length
-    
-    # For the minimal adapter that handles a single frame contribution:
-    frame_values = combined.flatten()  # (300,)
-    
-    # Step 6: Return the frame values and length
-    # actual_length = 1 (one frame contributed)
-    # The sequence-level processing (normalization, motion, padding) is handled externally
-    
-    return frame_values, 1  # frame_values = (300,), actual_length = 1
-```
-
-### 13.2 Full Adapter Sequence Assembly
-
-The adapter must be used within a sequence-processing pipeline:
-
-```python
-# Adapter usage within a sequence pipeline
-
-frames_features = []  # list of (300,) arrays, one per frame
-for frame in holistic_frame_sequence:  # sequence of N holistic frames
-    frame_values, length = convert_signage_to_hf(frame, include_confidence=True, use_motion=False)
-    frames_features.append(frame_values)
-
-# Stack frames: (N, 300)
-pose_seq = np.stack(frames_features)  # (N, 300)
-
-# Step A: Z-score normalization (across sequence axis, axis=0)
-pose_seq = (pose_seq - np.nanmean(pose_seq, axis=0, keepdims=True)) / \
-           np.where(np.nanstd(pose_seq, axis=0, keepdims=True) == 0, 1.0, 
-                    np.nanstd(pose_seq, axis=0, keepdims=True))
-
-# Step B: If motion model, add velocity features
-if use_motion:
-    velocity = np.zeros_like(pose_seq)
-    velocity[1:] = pose_seq[1:] - pose_seq[:-1]
-    velocity[0] = 0
-    pose_seq = np.concatenate([pose_seq, velocity], axis=1)  # (N, 600)
-
-# Step C: Pad/truncate to max_length=500 frames
-if pose_seq.shape[0] < max_length:
-    padding = np.zeros((max_length - pose_seq.shape[0], pose_seq.shape[1]), dtype=pose_seq.dtype)
-    pose_seq = np.vstack([pose_seq, padding])
-elif pose_seq.shape[0] > max_length:
-    pose_seq = pose_seq[:max_length, :]
-
-# Step C: actual_length = min(N, max_length)
-actual_length = pose_seq.shape[0]
-
-# Step D: Convert to torch tensor
-pose_tensor = torch.from_numpy(pose_seq).float().unsqueeze(0)  # (1, N, pose_dim)
-pose_length = torch.tensor([actual_length], dtype=torch.long)
-
-# Step E: Ready for model.generate()
-```
+The adapter specified in the original §13 draft was implemented as
+`signage_to_external()` in `backend/app/ml/adapters/i_sign_t5_adapter.py` —
+the implementation is the truth; the draft pseudocode (`convert_signage_to_hf`,
+per-frame sketch, sequence-assembly sketch) is removed to avoid two competing
+specs. Contract summary: filter SignSage 543 landmarks to POSE[0:33] +
+LEFT_HAND[501:522] + RIGHT_HAND[522:543] (75 landmarks, FACE discarded); append
+confidence=1.0 per landmark → 300 values/frame; z-score normalize across the
+sequence axis (axis=0); if motion, concatenate velocity (`velocity[0]=0`,
+`velocity[t]=pose[t]-pose[t-1]`) → 600/frame; pad/truncate to 500 frames with
+`actual_length=min(T,500)` for the attention mask; torch tensor + batch dim.
+Full record in `docs/EXTERNAL_EVALUATION.md` (Adapter section); executable
+checks in `backend/tests/ml/test_external_isign_t5_smoke.py`.
 
 ## 14. Remaining Unknowns
 
@@ -626,3 +522,45 @@ pose_length = torch.tensor([actual_length], dtype=torch.long)
 | 9. Best checkpoint | t5-small-motion (T5-Small with motion features; CPU-inferable; motion critical for sign quality) |
 | 10. Biggest remaining technical risk | Distribution shift between SignSage MediaPipe landmarks (uncontrolled capture) and iSign training data (studio conditions); confidence mismatch (hardcoding 1.0 vs actual MediaPipe confidence) |
 | 11. Can we proceed to adapter implementation? | YES — proceed with Phase 1 adapter development, but do NOT promote until Phase 3 evaluation complete |
+
+## Appendix A. Adapter contract (consolidated 2026-10-12)
+
+Consolidated from `docs/EXTERNAL_ISIGN_ADAPTER.md` (removed). The implementation
+in `backend/app/ml/adapters/i_sign_t5_adapter.py` is the truth; this appendix
+records the contract it implements:
+
+- **Index map** (SignSage 543 → external 75): POSE `0:33`, FACE `33:501`
+  discarded, LEFT_HAND `501:522`, RIGHT_HAND `522:543`.
+- **Confidence**: SignSage landmarks are `[x, y, z]` only; the adapter appends a
+  `FallbackConfidenceProvider = 1.0` per landmark → 75 × 4 = 300 values/frame.
+  Swap for MediaPipe visibility if it ever becomes available; nothing else changes.
+- **Order (critical)**: component extract + confidence → z-score normalize across
+  `axis=0` → add motion (`velocity[0]=0`, `velocity[t]=pose[t]-pose[t-1]`,
+  concat `[pose | velocity]` → 600) → pad/truncate to 500 frames, reporting
+  `actual_length = min(T, 500)` for the attention mask.
+- **Tests**: the 12-test list (component extraction, ordering, confidence,
+  spatial/motion dimensionality, motion correctness, normalization equivalence,
+  sequence edges, NaN handling, dtype, golden compatibility, model smoke test) is
+  implemented in `backend/tests/ml/test_external_isign_t5_smoke.py` and related
+  adapter tests — run those instead of trusting this prose.
+- **Known risks**: distribution shift (studio vs webcam), confidence mismatch,
+  velocity-sign errors, `t5-base-motion-v2` naming quirk (spatial-only despite the
+  name), 500-frame truncation, and the promotion gate (`SIGNSAGE_MODEL_PROMOTED`
+  stays `false` until a quality evaluation says otherwise).
+
+## Appendix B. Integration-plan history (consolidated 2026-10-12)
+
+Consolidated from `docs/EXTERNAL_ISIGN_T5_AUDIT.md` (removed). Dated planning
+material, kept for provenance — the evaluation verdicts in
+`docs/EXTERNAL_EVALUATION.md` supersede any GO wording here:
+
+- **Architecture**: `PoseEncoder(pose_dim → 256 → T5 d_model)` MLP; pose
+  embeddings substituted via `inputs_embeds`; per-checkpoint `pose_dim`/`use_motion`
+  table in §1.4 above (note the `t5-base-motion-v2` spatial-only quirk).
+- **Dataset**: 18,867-sample iSign subset (16,979 train / 1,887 held-out test).
+- **Hardware guidance**: `t5-small-motion` is the CPU-inferable recommended
+  candidate (~60M params, ~5ms inference, ~1.2GB RAM); base/large need GPU.
+- **Original 5-phase plan** (M1 adapter → M2 tests → M3 inference → M4 end-to-end
+  → M5 evaluation → M6 go/no-go decision) was executed; outcome was **NO-GO**
+  (0/1887 exact match, degenerate output distribution — see the quality-evaluation
+  document §16).

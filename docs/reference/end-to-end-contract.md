@@ -1,4 +1,8 @@
-# SignSage End-to-End Contract (authoritative pin)
+# SignSage End-to-End Contract (authoritative pin, reference)
+
+> Value-level contract pin for the live pipeline. Summarized in
+> `docs/DEVELOPMENT.md` (Interfaces) and `docs/STATUS_AND_ROADMAP.md` (audit);
+> this file is the exact-values authority.
 
 Any change that alters a value below must update the contract files, the code constants, and the tests together. Counts alone are not the contract — order and versions are.
 

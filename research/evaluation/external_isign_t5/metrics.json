@@ -164,7 +164,7 @@
     "concentration_rule": "descriptive heuristic for this analysis line only: top1_share >= 10% OR unique_ratio <= 5%"
   },
   "hallucination_risk": {
-    "note": "Wrong predictions are NOT automatically hallucinations; this section reports repetition/fluency patterns that warrant the controlled negative tests in docs/EXTERNAL_ISIGN_QUALITY_EVALUATION.md.",
+    "note": "Wrong predictions are NOT automatically hallucinations; this section reports repetition/fluency patterns that warrant the controlled negative tests in docs/EXTERNAL_EVALUATION.md (§4).",
     "random_noise_probe": "not performed in this notebook (execution smoke tests used synthetic input only and make no quality claim); empty-frame / random-movement negative tests belong to the separate webcam protocol",
     "n_incorrect": 1887,
     "top_wrong_prediction": "isn't that amazing!",

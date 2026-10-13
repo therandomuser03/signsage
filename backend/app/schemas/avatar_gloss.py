@@ -1,5 +1,4 @@
-"""English -> ISL gloss contracts. Named avatar_gloss (not text_to_sign) to stay
-distinct from the NOT-served neural ml/*/text_to_sign.py."""
+"""English -> ISL gloss contracts (deterministic lookup + constrained LLM mapping)."""
 from __future__ import annotations
 
 from typing import List, Optional
