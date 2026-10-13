@@ -78,9 +78,10 @@ def test_auth_required_blocks_guest_translation(make_client):
 
 
 def test_capabilities_and_models_are_honest_about_the_unpromoted_model(make_client):
-    c = make_client()
+    c = make_client(fallback_enabled="false")
     caps = c.get("/api/v1/capabilities").json()
     assert caps["sign_to_text_available"] is False and caps["sign_to_text_unavailable_reason"] == "model_not_promoted"
+    assert caps["sign_to_text_source"] == "unavailable" and caps["fallback_vocabulary"] == []
     assert caps["auth_enabled"] is True and caps["history_enabled"] is True
     assert caps["landmark_count"] == 543 and caps["text_to_sign_mode"] == "avatar_gloss"
     assert caps["avatar_vocabulary_size"] == 14
@@ -88,13 +89,21 @@ def test_capabilities_and_models_are_honest_about_the_unpromoted_model(make_clie
     assert models["promoted"] is False and models["loaded"] is False
 
 
+def test_capabilities_disclose_the_heuristic_fallback_by_default(make_client):
+    caps = make_client().get("/api/v1/capabilities").json()
+    assert caps["sign_to_text_available"] is True
+    assert caps["sign_to_text_unavailable_reason"] is None
+    assert caps["sign_to_text_source"] == "heuristic-fallback"
+    assert set(caps["fallback_vocabulary"]) == {"HELLO", "YES", "NO", "YOU", "HELP"}
+
+
 def test_capabilities_when_promoted_but_bundle_missing(make_client, tmp_path):
-    caps = make_client(promoted=True, model_bundle_dir=str(tmp_path / "nope")).get("/api/v1/capabilities").json()
+    caps = make_client(promoted=True, model_bundle_dir=str(tmp_path / "nope"), fallback_enabled="false").get("/api/v1/capabilities").json()
     assert caps["sign_to_text_unavailable_reason"] == "model_bundle_missing"
 
 
 def test_promoted_with_missing_bundle_is_a_clean_503_not_a_500(make_client, tmp_path):
-    c = make_client(promoted=True, model_bundle_dir=str(tmp_path / "nope"))
+    c = make_client(promoted=True, model_bundle_dir=str(tmp_path / "nope"), fallback_enabled="false")
     frames = [{"landmarks": np.zeros((543, 3)).tolist()} for _ in range(3)]
     r = c.post("/api/v1/translation/sign-to-text", json={"frames": frames})
     assert r.status_code == 503 and r.json()["code"] == "MODEL_UNAVAILABLE"

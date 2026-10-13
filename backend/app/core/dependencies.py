@@ -10,17 +10,40 @@ from typing import Optional
 from fastapi import Depends, Request
 
 from app.core.config import Settings, get_settings
-from app.core.errors import AuthError, AuthNotConfiguredError, HistoryUnavailableError
+from app.core.errors import (
+    AuthError,
+    AuthNotConfiguredError,
+    HistoryUnavailableError,
+    ModelNotPromotedError,
+    ModelUnavailableError,
+)
 from app.core.security import AuthenticatedUser
 from app.ml.models.registry import get_sign_to_text_pipeline
 from app.services.authentication_service import authenticate_header
 from app.services.history_service import HistoryService, build_history_service
 from app.services.translation_service import TranslationService
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def build_translation_service(settings: Settings) -> TranslationService:
-    pipeline = get_sign_to_text_pipeline(settings, allow_unpromoted=settings.allow_unpromoted_dev)
-    return TranslationService(pipeline, settings)
+    """Transformer when promotable, else the heuristic fallback.
+
+    The transformer gate is unchanged: a NO-GO checkpoint is never served.
+    The fallback is checkpoint-free rule logic with its own 5-sign vocabulary,
+    reported as "heuristic-fallback" via /capabilities.
+    """
+    try:
+        pipeline = get_sign_to_text_pipeline(settings, allow_unpromoted=settings.allow_unpromoted_dev)
+        return TranslationService(pipeline, settings)
+    except (ModelNotPromotedError, ModelUnavailableError) as exc:
+        if not settings.fallback_enabled:
+            raise
+        logger.warning("[MODEL] transformer unavailable (%s); serving heuristic fallback.", exc)
+        from app.ml.inference.heuristic_signs import HeuristicSignPipeline
+
+        return TranslationService(HeuristicSignPipeline(), settings)
 
 
 def get_translation_service(settings: Settings = Depends(get_settings)) -> TranslationService:

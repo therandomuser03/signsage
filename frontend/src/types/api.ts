@@ -25,6 +25,8 @@ export interface CapabilitiesResponse {
   history_enabled: boolean;
   sign_to_text_available: boolean;
   sign_to_text_unavailable_reason: string | null;
+  sign_to_text_source: string;
+  fallback_vocabulary: string[];
   text_to_sign_mode: string;
   avatar_vocabulary_size: number;
   landmark_count: number;

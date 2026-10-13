@@ -18,6 +18,7 @@ export class Connection {
   private ws: WebSocket | null = null;
   private attempts = 0;
   private closedByUser = false;
+  private reconnectSuppressed = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly opts: ConnectionOptions;
 
@@ -32,6 +33,7 @@ export class Connection {
 
   connect(): void {
     this.closedByUser = false;
+    this.reconnectSuppressed = false;
     this.setStatus("connecting");
     const ws = (this.opts.webSocketFactory ?? ((u) => new WebSocket(u)))(this.opts.url);
     this.ws = ws;
@@ -52,10 +54,20 @@ export class Connection {
 
   private maybeReconnect() {
     const max = this.opts.maxReconnectAttempts ?? 0;
-    if (this.closedByUser || this.attempts >= max) return;
+    // A terminal server verdict (e.g. MODEL_UNAVAILABLE) suppresses retries:
+    // reconnecting cannot change the deployment gate, it only flashes status.
+    if (this.closedByUser || this.reconnectSuppressed || this.attempts >= max) return;
     const delay = (this.opts.reconnectBaseDelayMs ?? 500) * 2 ** this.attempts;
     this.attempts += 1;
     this.timer = setTimeout(() => this.connect(), delay);
+  }
+
+  /** Stop any further automatic reconnects (terminal server verdict).
+   * Only another connect() re-arms retries. Does not touch the socket. */
+  suppressReconnect(): void {
+    this.reconnectSuppressed = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
   }
 
   /** false if the socket isn't open (nothing is queued: stale landmark frames are worthless). */

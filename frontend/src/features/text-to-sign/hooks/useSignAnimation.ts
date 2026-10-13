@@ -1,17 +1,23 @@
 // SignSage — useSignAnimation
-// Drives an AvatarViewer ref from raw English text via a pluggable gloss mapper.
+// Drives an avatar ref from raw English text via a pluggable gloss mapper.
+// Works with the VRM <AvatarViewer /> or the procedural fallback: both
+// expose { playSequence, stop }.
 
 import { useCallback, useRef, useState } from "react";
-import type { AvatarViewerHandle } from "../components/AvatarViewer";
 import { localGlossMapper } from "../services/glossMapper";
 import type { GlossSequence, SignManifest, SignPlaybackState } from "../types";
+
+type AvatarHandle = {
+  playSequence: (glossIds: string[], onStep?: (id: string, index: number) => void) => Promise<void>;
+  stop: () => void;
+};
 
 type GlossMapper = (text: string, manifest: SignManifest) => GlossSequence | Promise<GlossSequence>;
 
 export function useSignAnimation(
-  avatarRef: React.RefObject<AvatarViewerHandle | null>,
+  avatarRef: React.RefObject<AvatarHandle | null>,
   manifest: SignManifest,
-  mapper: GlossMapper = localGlossMapper
+  mapper: GlossMapper = localGlossMapper,
 ) {
   const [state, setState] = useState<SignPlaybackState>({
     isPlaying: false,
@@ -26,9 +32,13 @@ export function useSignAnimation(
     async (text: string) => {
       const thisRun = ++runId.current;
       const { glossIds, unmatchedWords } = await mapper(text, manifest);
+      if (runId.current !== thisRun) return; // superseded while mapping
       setUnmatchedWords(unmatchedWords);
 
-      if (!avatarRef.current || glossIds.length === 0) return;
+      if (!avatarRef.current || glossIds.length === 0) {
+        setState({ isPlaying: false, currentIndex: -1, currentGlossId: null, queue: glossIds });
+        return;
+      }
 
       setState({ isPlaying: true, currentIndex: -1, currentGlossId: null, queue: glossIds });
 
@@ -41,8 +51,30 @@ export function useSignAnimation(
         setState((s) => ({ ...s, isPlaying: false, currentGlossId: null }));
       }
     },
-    [avatarRef, manifest, mapper]
+    [avatarRef, manifest, mapper],
   );
 
-  return { state, unmatchedWords, perform };
+  /** Cancel playback immediately; safe to call when idle. */
+  const stop = useCallback(() => {
+    runId.current += 1;
+    avatarRef.current?.stop();
+    setState((s) => ({ ...s, isPlaying: false, currentGlossId: null, currentIndex: -1 }));
+  }, [avatarRef]);
+
+  /** Re-play the last queue without re-running the mapper. */
+  const replay = useCallback(async () => {
+    const queue = state.queue;
+    if (!avatarRef.current || queue.length === 0 || state.isPlaying) return;
+    const thisRun = ++runId.current;
+    setState((s) => ({ ...s, isPlaying: true, currentIndex: -1, currentGlossId: null }));
+    await avatarRef.current.playSequence(queue, (id, index) => {
+      if (runId.current !== thisRun) return;
+      setState((s) => ({ ...s, currentIndex: index, currentGlossId: id }));
+    });
+    if (runId.current === thisRun) {
+      setState((s) => ({ ...s, isPlaying: false, currentGlossId: null }));
+    }
+  }, [avatarRef, state.queue, state.isPlaying]);
+
+  return { state, unmatchedWords, perform, stop, replay };
 }

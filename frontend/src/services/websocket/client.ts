@@ -1,6 +1,6 @@
 import { Connection, type ConnectionStatus } from "./connection";
 import {
-  COORDINATES_PER_LANDMARK, LANDMARK_COUNT, parseServerMessage,
+  COORDINATES_PER_LANDMARK, ErrorCode, LANDMARK_COUNT, parseServerMessage,
   type ClientMessage, type ErrorMessage, type TranslationTextMessage,
 } from "./protocol";
 
@@ -28,6 +28,10 @@ export interface TranslationSocketOptions {
 export class TranslationSocket {
   private readonly connection: Connection;
   private readonly opts: TranslationSocketOptions;
+  /** True once the server explicitly refused with MODEL_UNAVAILABLE.
+   * Terminal for this session: the deployment gate cannot change under us,
+   * so automatic reconnects are suppressed. Reset by connect(). */
+  modelUnavailable = false;
 
   constructor(opts: TranslationSocketOptions) {
     this.opts = opts;
@@ -47,6 +51,7 @@ export class TranslationSocket {
   }
 
   connect(): void {
+    this.modelUnavailable = false;
     this.connection.connect();
   }
 
@@ -79,6 +84,14 @@ export class TranslationSocket {
     if (!message) return;
     if (message.type === "translation.text") this.opts.onTranslation(message);
     else if (message.type === "auth.ok") this.opts.onAuthenticated?.(message.user_id);
-    else this.opts.onError?.(message);
+    else {
+      if (message.code === ErrorCode.MODEL_UNAVAILABLE) {
+        // Terminal verdict, not a network failure: the server will close
+        // normally right after this message. Stop auto-retry for this session.
+        this.modelUnavailable = true;
+        this.connection.suppressReconnect();
+      }
+      this.opts.onError?.(message);
+    }
   }
 }

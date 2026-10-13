@@ -53,6 +53,12 @@ class Settings(BaseSettings):
 
     device: str = "cpu"  # set to "cuda" only if a GPU is actually available at serve time
 
+    # --- Heuristic sign fallback (no checkpoint, no promotion gate) -----------
+    # Rule-based recognizer for a 5-sign static vocabulary (see
+    # ml/inference/heuristic_signs.py). Always reported as
+    # "heuristic-fallback" via /capabilities, never as the transformer model.
+    fallback_enabled: bool = True
+
     # Upper bound for one synchronous model inference (REST or WebSocket
     # final). Inference runs in a worker thread that torch cannot cancel, so
     # this only frees the request with a SESSION_ERROR instead of hanging it.

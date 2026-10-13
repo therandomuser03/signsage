@@ -47,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/services/api/instance";
 import { ApiError } from "@/services/api/errors";
+import { onAuthChange } from "@/services/supabase/auth";
 import type { Direction, HistoryItem } from "@/types/api";
 import { HistoryDetailDialog, formatDateTime } from "./HistoryDetailDialog";
 
@@ -100,6 +101,25 @@ export default function HistoryPage() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Sign-out must not leave the previous account's entries on screen: mirror
+  // the signed-out (401) state. Signing in here reloads instead of sitting
+  // on the guest prompt.
+  useEffect(() => {
+    return onAuthChange((signedIn) => {
+      if (!signedIn) {
+        setItems([]);
+        setTotal(0);
+        setTruncated(false);
+        setPage(0);
+        setSelected(null);
+        setState("error");
+        setError("Sign in to view your translation history.");
+      } else {
+        void load();
+      }
+    });
   }, [load]);
 
   const removeItem = useCallback(

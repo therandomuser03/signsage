@@ -8,7 +8,17 @@ export async function getAccessToken(): Promise<string | null> {
 }
 
 export async function signUp(email: string, password: string) {
-  const { data, error } = await getSupabase().auth.signUp({ email, password });
+  // The signup form gates on both checkboxes; record when they were accepted
+  // in the Auth user_metadata (no schema change) so acceptance is logged,
+  // not just required client-side.
+  const agreedAt = new Date().toISOString();
+  const { data, error } = await getSupabase().auth.signUp({
+    email,
+    password,
+    options: {
+      data: { terms_accepted_at: agreedAt, data_consent_accepted_at: agreedAt },
+    },
+  });
   if (error) throw error;
   return data;
 }

@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   ArrowUpRight,
   Camera,
@@ -151,6 +152,22 @@ const PRIVACY_FLOW = [
 export default function LandingPage() {
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const [showFaceLandmarks, setShowFaceLandmarks] = useState(false);
+  const [faceLandmarks, setFaceLandmarks] = useState<any[]>([]);
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8080");
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "landmarks.frame") {
+        const faceLm = message.landmarks.slice(33, 501);
+        setFaceLandmarks(faceLm);
+        setShowFaceLandmarks(true);
+      }
+    };
+    ws.onopen = () => {};
+    return () => ws.close();
+  }, []);
 
   return (
     <main className="overflow-x-clip bg-background text-foreground">
@@ -247,6 +264,8 @@ export default function LandingPage() {
             baseColor={theme === "light" ? "#d4d4d8" : "#3f3f46"}
             activeColor="#22c55e"
             proximity={120}
+            showFaceLandmarks={showFaceLandmarks}
+            faceLandmarks={faceLandmarks}
           />
         </div>
         <div

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CircleAlert, PackageOpen, Play, Sparkles } from "lucide-react";
+import { CircleAlert, Eraser, Mic, Play, RotateCcw, Sparkles, Square } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,9 @@ import {
   AvatarViewer,
   type AvatarViewerHandle,
 } from "@/features/text-to-sign/components/AvatarViewer";
+import { ProceduralAvatarViewer } from "@/features/text-to-sign/components/ProceduralAvatarViewer";
 import { useSignAnimation } from "@/features/text-to-sign/hooks/useSignAnimation";
+import { useSpeechInput } from "@/features/text-to-sign/hooks/useSpeechInput";
 import {
   localGlossMapper,
   remoteGlossMapper,
@@ -47,6 +49,7 @@ export default function TextToSignPage() {
   const [sequence, setSequence] = useState<GlossSequence | null>(null);
   const [working, setWorking] = useState(false);
   const [glossError, setGlossError] = useState<string | null>(null);
+  const speech = useSpeechInput();
 
   useEffect(() => {
     let live = true;
@@ -65,7 +68,7 @@ export default function TextToSignPage() {
     };
   }, []);
 
-  const { perform, state } = useSignAnimation(
+  const { perform, stop, replay, state } = useSignAnimation(
     avatarRef,
     manifest ?? {},
     mode === "dictionary"
@@ -75,7 +78,7 @@ export default function TextToSignPage() {
 
   const generate = async () => {
     const value = text.trim();
-    if (!manifest || value.length === 0) return;
+    if (!manifest || value.length === 0) return null;
     setWorking(true);
     setGlossError(null);
     try {
@@ -84,6 +87,7 @@ export default function TextToSignPage() {
           ? localGlossMapper(value, manifest)
           : await remoteGlossMapper(value, manifest, apiClient, loadPrefs().saveHistory);
       setSequence(result);
+      return result;
     } catch {
       setGlossError(
         mode === "assisted"
@@ -91,15 +95,28 @@ export default function TextToSignPage() {
           : "Gloss generation failed."
       );
       setSequence(null);
+      return null;
     } finally {
       setWorking(false);
     }
   };
 
   const play = async () => {
-    await generate();
-    await perform(text.trim());
+    if (state.isPlaying) return;
+    const result = await generate();
+    if (result && result.glossIds.length > 0) await perform(text.trim());
   };
+
+  const clear = () => {
+    stop();
+    setText("");
+    setSequence(null);
+    setGlossError(null);
+  };
+
+  // The VRM avatar needs hand-authored assets; the procedural avatar is
+  // always available, so playback never depends on the HEAD check.
+  const usingVrm = avatarReady === true;
 
   const progress =
     state.queue.length > 0 && state.currentIndex >= 0
@@ -123,9 +140,9 @@ export default function TextToSignPage() {
           <p className="text-foreground/60">
             {avatarReady === null
               ? "Checking avatar…"
-              : avatarReady
+              : usingVrm
                 ? "Avatar ready"
-                : "Avatar unavailable"}
+                : "Procedural preview"}
           </p>
         </div>
       </div>
@@ -164,14 +181,52 @@ export default function TextToSignPage() {
                   {text.length}/{MAX_CHARS}
                 </span>
               </div>
-              <Textarea
-                id="tts-input"
-                value={text}
-                onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
-                placeholder="e.g. Hello, thank you for your help"
-                rows={4}
-                disabled={state.isPlaying}
-              />
+              <div className="flex gap-2">
+                <Textarea
+                  id="tts-input"
+                  value={text}
+                  onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
+                  placeholder="e.g. Hello, thank you for your help"
+                  rows={4}
+                  disabled={state.isPlaying}
+                  className="flex-1"
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span>
+                        <Button
+                          variant={speech.listening ? "destructive" : "outline"}
+                          size="icon"
+                          disabled={!speech.supported || state.isPlaying}
+                          onClick={() =>
+                            speech.listening
+                              ? speech.stop()
+                              : speech.start((t) =>
+                                  setText((prev) =>
+                                    (prev ? `${prev} ${t}` : t).slice(0, MAX_CHARS)
+                                  )
+                                )
+                          }
+                          aria-label={speech.listening ? "Stop listening" : "Dictate with microphone"}
+                        >
+                          <Mic aria-hidden="true" className={speech.listening ? "motion-safe:animate-pulse" : ""} />
+                        </Button>
+                      </span>
+                    }
+                  />
+                  <TooltipContent>
+                    {speech.supported
+                      ? speech.listening
+                        ? "Listening… press to stop."
+                        : "Dictate with your microphone."
+                      : "Speech recognition is not supported in this browser. Type instead."}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {speech.error && (
+                <p className="text-xs text-destructive">{speech.error}</p>
+              )}
               <p className="text-xs text-foreground/50">
                 {mode === "dictionary"
                   ? "Offline word lookup against the local sign library."
@@ -194,7 +249,6 @@ export default function TextToSignPage() {
                     onClick={() => void play()}
                     disabled={
                       !manifest ||
-                      !avatarReady ||
                       working ||
                       state.isPlaying ||
                       text.trim().length === 0
@@ -206,11 +260,41 @@ export default function TextToSignPage() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {avatarReady
-                    ? "Generate the gloss and perform it on the avatar."
-                    : "Needs the avatar assets, which are not bundled."}
+                  Generate the gloss and perform it on the avatar.
                 </TooltipContent>
               </Tooltip>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={stop}
+                disabled={!state.isPlaying}
+                className="flex-1"
+              >
+                <Square aria-hidden="true" />
+                Stop
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void replay()}
+                disabled={state.isPlaying || state.queue.length === 0}
+                className="flex-1"
+              >
+                <RotateCcw aria-hidden="true" />
+                Replay
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clear}
+                disabled={state.isPlaying || (text.length === 0 && sequence === null)}
+                className="flex-1"
+              >
+                <Eraser aria-hidden="true" />
+                Clear
+              </Button>
             </div>
             {glossError && (
               <Alert variant="destructive">
@@ -238,42 +322,63 @@ export default function TextToSignPage() {
               02 · Sign sequence
             </p>
             <p className="mt-1 text-xs text-foreground/60">
-              Pre-authored clips on one avatar. No generative model involved.
+              {usingVrm
+                ? "Pre-authored clips on one avatar. No generative model involved."
+                : "Built-in 3D figure, one motion per sign. No generative model involved."}
             </p>
           </div>
           <div className="px-5 py-5">
             <div className="aspect-video overflow-hidden rounded-lg bg-muted">
-              {manifest && avatarReady ? (
-                <AvatarViewer
-                  ref={avatarRef}
-                  vrmUrl={VRM_URL}
-                  manifest={manifest}
-                  className="h-full w-full"
-                />
+              {manifest ? (
+                usingVrm ? (
+                  <AvatarViewer
+                    ref={avatarRef}
+                    vrmUrl={VRM_URL}
+                    manifest={manifest}
+                    className="h-full w-full"
+                  />
+                ) : (
+                  <ProceduralAvatarViewer
+                    ref={avatarRef}
+                    className="h-full w-full"
+                    caption={
+                      state.currentGlossId ??
+                      (state.isPlaying ? "Signing…" : "Procedural preview")
+                    }
+                  />
+                )
               ) : (
                 <Empty className="h-full border-0">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
-                      <PackageOpen aria-hidden="true" className="h-6 w-6" />
+                      <Sparkles aria-hidden="true" className="h-6 w-6" />
                     </EmptyMedia>
                     <EmptyTitle>
                       {manifestError
                         ? "Sign library unavailable"
-                        : avatarReady === null
-                          ? "Checking avatar assets…"
-                          : "Visual sign assets are not currently available"}
+                        : "Checking avatar assets…"}
                     </EmptyTitle>
                     <EmptyDescription>
                       {manifestError
                         ? "The sign library could not be loaded in this build."
-                        : avatarReady === null
-                          ? "Looking for the avatar package…"
-                          : "The VRM avatar and clips are hand-authored assets and are not bundled here. Gloss preview still works — this is where the performance would play."}
+                        : "Looking for the avatar package…"}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               )}
             </div>
+            {!usingVrm && manifest && (
+              <Alert className="mt-3">
+                <CircleAlert aria-hidden="true" />
+                <AlertTitle>Procedural motion preview</AlertTitle>
+                <AlertDescription>
+                  The hand-authored VRM avatar and clips are not bundled here,
+                  so a built-in 3D figure performs a distinct motion per sign.
+                  Word lookup and sequencing are real; the movements are not
+                  authored ISL.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="mt-5 border-t border-foreground/10 pt-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
                 Gloss sequence

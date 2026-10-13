@@ -48,7 +48,14 @@ async def test_list_uses_pagination_and_parses_total_from_content_range():
 
 
 async def test_delete_reports_whether_a_row_was_removed():
-    assert await _repo(lambda r: httpx.Response(200, json=[ROW])).delete(USER, "r1") is True
+    seen = {}
+    def handler(req):
+        seen["auth"] = req.headers["authorization"]
+        return httpx.Response(200, json=[ROW])
+    assert await _repo(handler).delete(USER, "r1") is True
+    # Delete-by-id still rides the caller's JWT: Postgres RLS is what turns a
+    # cross-user id into an empty (→404) response instead of a deletion.
+    assert seen["auth"] == "Bearer user-jwt"
     assert await _repo(lambda r: httpx.Response(200, json=[])).delete(USER, "nope") is False
 
 

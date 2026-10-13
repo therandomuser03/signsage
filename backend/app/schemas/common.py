@@ -28,6 +28,8 @@ class CapabilitiesResponse(BaseModel):
     history_enabled: bool
     sign_to_text_available: bool
     sign_to_text_unavailable_reason: Optional[str]  # "model_not_promoted" | "model_bundle_missing"
+    sign_to_text_source: str = "unavailable"  # "transformer" | "heuristic-fallback" | "unavailable"
+    fallback_vocabulary: List[str] = []  # gloss IDs the heuristic fallback recognizes
     text_to_sign_mode: str  # "avatar_gloss"
     avatar_vocabulary_size: int
     landmark_count: int

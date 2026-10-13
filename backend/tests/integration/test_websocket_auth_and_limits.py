@@ -92,9 +92,20 @@ def test_oversized_message_is_rejected(make_client, fake_bundle):
 
 
 def test_unpromoted_model_closes_with_model_unavailable(make_client):
-    c = make_client(promoted=False)
+    c = make_client(promoted=False, fallback_enabled="false")
     with c.websocket_connect("/ws/translate") as ws:
         assert ws.receive_json()["code"] == "MODEL_UNAVAILABLE"
+
+
+def test_unpromoted_model_serves_heuristic_fallback_by_default(make_client):
+    """Default config: the socket stays open and translates the 5-sign
+    fallback vocabulary instead of closing with MODEL_UNAVAILABLE."""
+    c = make_client(promoted=False)
+    with c.websocket_connect("/ws/translate") as ws:
+        _frames(ws)
+        ws.send_json({"type": "sentence.boundary"})
+        msg = ws.receive_json()
+    assert msg["type"] == "translation.text" and msg["final"] is True
 
 
 def test_dev_flag_serves_unpromoted_bundle_without_flipping_promotion(make_client, fake_bundle):

@@ -1,4 +1,4 @@
-# ponytail: minimal — only what this repo actually produces
+# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -10,23 +10,43 @@ build/
 .pytest_cache/
 .ipynb_checkpoints/
 
-
-# frontend
+# Frontend
 frontend/node_modules/
 frontend/.next/
 frontend/out/
 
-# graphify
-graphify-out/
-
-# kaggle results staging (11.6GB original + 14.7GB extracted; never commit)
+# Large datasets and caches (never commit)
 results.zip
 results(1).zip
 staging_kaggle_results/
 
-# os
+# OS
 .DS_Store
 Thumbs.db
 
-.vscode
-research/artifacts/
+# VS Code
+.vscode/
+
+# Research artifacts (generated, not source)
+graphify-out/
+
+# Backend
+backend/.venv/
+backend/pyproject.toml.lock* 2>/dev/null || true
+backend/backend.egg-info/
+
+# Model checkpoints (large binaries not tracked)
+models/checkpoints/*.pt
+models/iSign_t5_small_motion/**/*.pt
+
+# Research outputs
+research/results/
+research/artifacts/**/*.pt
+research/training/artifacts/**/*.pt
+
+# Frontend build
+frontend/dist/
+frontend/.next/
+
+# TOON/cache
+graphify-out/

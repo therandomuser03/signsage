@@ -35,11 +35,15 @@ type Dot = {
   _inertiaApplied: boolean;
 };
 
+const FACE_OPACITY = 0.30;
+
 type DotGridProps = {
   dotSize?: number;
   gap?: number;
   baseColor?: string;
   activeColor?: string;
+  showFaceLandmarks?: boolean;
+  faceLandmarks: any[];
   proximity?: number;
   speedTrigger?: number;
   shockRadius?: number;
@@ -64,7 +68,9 @@ const DotGrid = ({
   resistance = 750,
   returnDuration = 1.5,
   className = '',
-  style
+  style,
+  showFaceLandmarks = false,
+  faceLandmarks
 }: DotGridProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -292,6 +298,38 @@ const DotGrid = ({
       window.removeEventListener('click', onClick);
     };
   }, [maxSpeed, speedTrigger, proximity, resistance, returnDuration, shockRadius, shockStrength]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !faceLandmarks || faceLandmarks.length === 0 || !showFaceLandmarks) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.globalAlpha = FACE_OPACITY;
+    ctx.beginPath();
+    faceLandmarks.slice(0, 468).forEach((landmark, i) => {
+      const x = landmark.x * canvas.width;
+      const y = landmark.y * canvas.height;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.closePath();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.30)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Draw individual face landmark dots
+    faceLandmarks.slice(0, 468).forEach(landmark => {
+      const x = landmark.x * canvas.width;
+      const y = landmark.y * canvas.height;
+      ctx.beginPath();
+      const radius = 1.5;
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.30)";
+      ctx.fill();
+    });
+  }, [faceLandmarks, showFaceLandmarks, canvasRef]);
 
   return (
     <section className={`dot-grid ${className}`} style={style}>

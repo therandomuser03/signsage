@@ -18,7 +18,7 @@ from app.ml.adapters.sign_to_text_adapter import SignToTextAdapter
 
 
 class TranslationService:
-    def __init__(self, pipeline: SignToTextAdapter, settings: Settings):
+    def __init__(self, pipeline, settings: Settings):
         self._pipeline = pipeline
         self._settings = settings
 

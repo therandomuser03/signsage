@@ -34,11 +34,22 @@ def _bundle_found(settings: Settings) -> bool:
 
 @router.get("/capabilities", response_model=CapabilitiesResponse)
 def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResponse:
+    from app.ml.inference.heuristic_signs import FALLBACK_VOCABULARY
+
     reason = None
+    source = "unavailable"
     if not settings.model_promoted and not settings.allow_unpromoted_dev:
         reason = "model_not_promoted"
     elif not _bundle_found(settings):
         reason = "model_bundle_missing"
+    else:
+        source = "transformer"
+    fallback_vocab = list(FALLBACK_VOCABULARY) if settings.fallback_enabled else []
+    if reason is not None and fallback_vocab:
+        # Transformer correctly gated, but the checkpoint-free heuristic
+        # fallback serves a 5-sign vocabulary -- report honestly.
+        reason = None
+        source = "heuristic-fallback"
     return CapabilitiesResponse(
         api_version="v1",
         websocket_path="/ws/translate",
@@ -47,6 +58,8 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         history_enabled=build_history_service(settings) is not None,
         sign_to_text_available=reason is None,
         sign_to_text_unavailable_reason=reason,
+        sign_to_text_source=source,
+        fallback_vocabulary=fallback_vocab,
         text_to_sign_mode="avatar_gloss",
         avatar_vocabulary_size=len(load_vocabulary(settings)),
         landmark_count=TOTAL_LANDMARKS,

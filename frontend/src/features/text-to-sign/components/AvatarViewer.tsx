@@ -8,6 +8,7 @@ import type { SignManifest } from "../types";
 
 export interface AvatarViewerHandle {
   playSequence: (glossIds: string[], onStep?: (id: string, index: number) => void) => Promise<void>;
+  stop: () => void;
 }
 
 interface AvatarViewerProps {
@@ -44,6 +45,7 @@ export const AvatarViewer = forwardRef<AvatarViewerHandle, AvatarViewerProps>(
         if (!controllerRef.current) return Promise.resolve();
         return controllerRef.current.playSequence(glossIds, onStep);
       },
+      stop: () => controllerRef.current?.stop(),
     }));
 
     return (

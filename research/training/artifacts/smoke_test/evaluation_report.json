@@ -1,0 +1,91 @@
+{
+ "history": [
+  {
+   "epoch": 1,
+   "train_loss": 14.941864967346191,
+   "val_loss": 12.883538246154785,
+   "unique": 2,
+   "unique_fraction": 0.5,
+   "top_prediction": "hello6l421 worldw worldw4or",
+   "top_prediction_freq": 0.75,
+   "grad_norm_mean": 131.1724395751953,
+   "grad_norm_max": 131.1724395751953,
+   "grad_clip_frac": 1.0,
+   "param_norm": 143.558837890625
+  }
+ ],
+ "test_metrics": {
+  "WER": 1.1666666666666667,
+  "BLEU": 0.0,
+  "BLEU-1": 0.0,
+  "BLEU-2": 0.0,
+  "BLEU-3": 0.0,
+  "BLEU-4": 0.0,
+  "ROUGE-L": 0.0,
+  "exact_match": 0.0,
+  "nonempty_output": 1.0,
+  "per_class_recall": {
+   "hello world 0": 0.0,
+   "hello world 1": 0.0,
+   "hello world 2": 0.0,
+   "hello world 3": 0.0
+  }
+ },
+ "trivial_baseline": {
+  "WER": 0.25,
+  "BLEU": 0.0,
+  "BLEU-1": 75.0,
+  "BLEU-2": 62.5,
+  "BLEU-3": 25.0,
+  "BLEU-4": 0.0,
+  "ROUGE-L": 0.7499999999999999,
+  "exact_match": 0.25,
+  "nonempty_output": 1.0,
+  "per_class_recall": {
+   "hello world 0": 1.0,
+   "hello world 1": 0.0,
+   "hello world 2": 0.0,
+   "hello world 3": 0.0
+  }
+ },
+ "diversity": {
+  "unique": 2,
+  "unique_fraction": 0.5,
+  "top_prediction": "hello6l421 worldw worldw4or",
+  "top_prediction_freq": 0.75
+ },
+ "lengths": {
+  "gen_mean": 3.5,
+  "ref_mean": 3.0
+ },
+ "samples": [
+  {
+   "ref": "hello world 0",
+   "hyp": "hello6l421 worldw worldw4or",
+   "conf": 0.6986624002456665
+  },
+  {
+   "ref": "hello world 1",
+   "hyp": "hello6l421 worldw worldw4or",
+   "conf": 0.7075663805007935
+  },
+  {
+   "ref": "hello world 2",
+   "hyp": "hello6l421 worldw worldw4ord hello6ehhh hello60r",
+   "conf": 0.727990984916687
+  },
+  {
+   "ref": "hello world 3",
+   "hyp": "hello6l421 worldw worldw4or",
+   "conf": 0.7034616470336914
+  }
+ ],
+ "gate": {
+  "beats_trivial_wer": false,
+  "beats_trivial_bleu": false,
+  "diversity_ok": true,
+  "exact_match_nonzero": false,
+  "GO": false
+ },
+ "mean_confidence_proxy": 0.7094203531742096
+}

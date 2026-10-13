@@ -4,9 +4,9 @@
 // intentionally dumb (no grammar reordering, no multi-word signs) so the
 // avatar pipeline can be built and tested before any NLP work happens.
 //
-// Swap `localGlossMapper` for `remoteGlossMapper` once the backend's
-// Groq/Ollama-assisted gloss endpoint (see backend/app/services/gloss_service.py)
-// is ready — the GlossSequence shape doesn't change.
+// Swap `localGlossMapper` for `remoteGlossMapper` for the backend's
+// Groq/Ollama-assisted gloss endpoint (see backend/app/services/avatar_gloss_service.py)
+// — the GlossSequence shape doesn't change.
 
 import type { ApiClient } from "../../../services/api/client";
 import type { GlossSequence, SignManifest } from "../types";

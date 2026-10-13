@@ -22,6 +22,15 @@ import { TranslationSocket } from "@/services/websocket/client";
 import type { ConnectionStatus } from "@/services/websocket/connection";
 import type { TranslationTextMessage } from "@/services/websocket/protocol";
 import type { CapabilitiesResponse } from "@/types/api";
+import {
+  activityLabel,
+  modelLabel,
+  resolveModelState,
+  sessionBadgeLabel,
+  shouldShowTransport,
+  startActionLabel,
+  transportLabel,
+} from "./sessionStatus";
 import { HolisticExtractor, type HolisticFrame } from "./landmarks";
 import { loadPrefs } from "@/features/settings/preferences";
 
@@ -182,7 +191,12 @@ export default function TranslatePage() {
       maxReconnectAttempts: 5,
       reconnectBaseDelayMs: 500,
       onStatus: (s) => {
-        if (s === "open") everOpenRef.current = true;
+        if (s === "open") {
+          everOpenRef.current = true;
+          // The server spoke to us: it is reachable even if it then
+          // refuses with MODEL_UNAVAILABLE. Never report it offline.
+          setBackendOnline(true);
+        }
         // A reconnect starts a fresh backend session: drop the stale partial.
         if (s === "connecting" && everOpenRef.current) setPartial(null);
         setSocketStatus(s);
@@ -197,11 +211,21 @@ export default function TranslatePage() {
       },
       onError: (msg) => {
         setSocketError(msg.message);
-        if (msg.code === "MODEL_UNAVAILABLE") setModelError(msg.message);
+        if (msg.code === "MODEL_UNAVAILABLE") {
+          // Terminal verdict for this session (auto-retry already
+          // suppressed in TranslationSocket): the server answered, so it
+          // is online — recognition alone is disabled by the deploy gate.
+          setBackendOnline(true);
+          setModelError(msg.message);
+        }
       },
     });
     socketRef.current = socket;
     socket.connect();
+    // User-initiated (Start/Reconnect) only — never polled. Refreshes the
+    // model banner in case the deployment changed since mount.
+    apiClient.health().then(() => setBackendOnline(true)).catch(() => setBackendOnline(false));
+    apiClient.capabilities().then(setCapabilities).catch(() => setCapabilities(null));
   }, []);
 
   const start = useCallback(async () => {
@@ -293,14 +317,28 @@ export default function TranslatePage() {
     setFramesSent(0);
   }, []);
 
+  const terminalUnavailable = modelError !== null;
   const running = phase === "live" || phase === "paused";
+  const modelAvailable = capabilities?.sign_to_text_available ?? null;
+  // One authoritative model state: the terminal server verdict wins over the
+  // capability snapshot, so this stays correct when REST failed or is stale.
+  const modelState = resolveModelState({
+    terminalUnavailable,
+    available: modelAvailable,
+  });
+  const modelBlocked = modelState === "unavailable";
+  const showTransport = shouldShowTransport(socketStatus, terminalUnavailable);
+  const transportText = transportLabel(socketStatus, everOpenRef.current);
+  const sessionBadge = sessionBadgeLabel(socketStatus, {
+    modelUnavailable: terminalUnavailable,
+    everOpened: everOpenRef.current,
+  });
   const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   const busy = phase === "starting-camera" || phase === "loading-detector";
   const latest = results[0] ?? null;
   // A finalized result wins; otherwise show the stabilizing live partial.
   const display = latest ?? partial;
   const showingPartial = latest === null && partial !== null;
-  const modelAvailable = capabilities?.sign_to_text_available ?? null;
   const noSignRecently =
     phase === "live" &&
     framesSent > 0 &&
@@ -320,19 +358,16 @@ export default function TranslatePage() {
             <span
               aria-hidden="true"
               className={
-                modelAvailable === null
+                modelState === "unknown"
                   ? "inline-block h-2 w-2 rounded-full bg-foreground/30"
-                  : modelAvailable
+                  : modelState === "ready"
                     ? "inline-block h-2 w-2 rounded-full bg-green-500"
                     : "inline-block h-2 w-2 rounded-full bg-red-500"
               }
             />
-            {modelAvailable === null
-              ? "Model status unknown"
-              : modelAvailable
-                ? "Ready"
-                : "Model unavailable"}
+            {modelLabel(modelState)}
           </p>
+          {showTransport && (
           <p className="flex items-center justify-end gap-1.5 text-foreground/60">
             <span
               aria-hidden="true"
@@ -344,18 +379,13 @@ export default function TranslatePage() {
                     : "inline-block h-2 w-2 rounded-full bg-foreground/30"
               }
             />
-            {socketStatus === "open"
-              ? "Connected"
-              : socketStatus === "connecting"
-                ? everOpenRef.current
-                  ? "Reconnecting…"
-                  : "Connecting"
-                : "Disconnected"}
+            {transportText}
           </p>
+          )}
         </div>
       </div>
 
-      {modelAvailable === false && (
+      {modelBlocked && (
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
           <CircleAlert
             aria-hidden="true"
@@ -369,6 +399,24 @@ export default function TranslatePage() {
               Camera preview is still available.
             </p>
           </div>
+        </div>
+      )}
+
+      {capabilities?.sign_to_text_source === "heuristic-fallback" && (
+        <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
+          <p className="font-medium">Recognizable signs (limited preview)</p>
+          <p className="mt-0.5 text-xs text-foreground/60">
+            Rule-based recognition of 5 static one-hand shapes — hold each steady
+            toward the camera for ~2 seconds, then press Stop to finalize. Not
+            general ISL translation.
+          </p>
+          <ul className="mt-2 grid gap-1 text-xs text-foreground/75 sm:grid-cols-2">
+            <li><span className="font-medium text-foreground">Hello</span> — open palm, fingers spread</li>
+            <li><span className="font-medium text-foreground">Yes</span> — thumbs up only</li>
+            <li><span className="font-medium text-foreground">No</span> — closed fist</li>
+            <li><span className="font-medium text-foreground">You</span> — index finger only</li>
+            <li><span className="font-medium text-foreground">Help</span> — index + middle fingers</li>
+          </ul>
         </div>
       )}
 
@@ -410,14 +458,16 @@ export default function TranslatePage() {
                   <Camera aria-hidden="true" className="h-7 w-7" />
                 </span>
                 <p className="mt-3 text-base font-semibold text-white">
-                  Ready to interpret
+                  {modelBlocked ? "Camera preview only" : "Ready to interpret"}
                 </p>
                 <p className="mt-1 text-sm">
                   {phase === "error"
                     ? (cameraMessage ??
                       detectorMessage ??
                       "Something went wrong. Try again.")
-                    : "Position yourself in frame and start signing."}
+                    : modelBlocked
+                      ? "Translation is unavailable — the recognition model has not passed the deployment gate. Camera preview and landmark overlay will still work."
+                      : "Position yourself in frame and start signing."}
                 </p>
                 <Button
                   onClick={() => void start()}
@@ -425,7 +475,11 @@ export default function TranslatePage() {
                   className="mt-5 rounded-full px-6"
                 >
                   <Play aria-hidden="true" />
-                  {phase === "error" ? "Retry" : "Start interpreting"}
+                  {startActionLabel({
+                    isError: phase === "error",
+                    modelBlocked,
+                    modelReady: modelState === "ready",
+                  })}
                 </Button>
               </div>
             )}
@@ -446,13 +500,7 @@ export default function TranslatePage() {
                 {phase === "live" ? "Live" : "Paused"}
               </span>
               <span className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur-md">
-                {socketStatus === "open"
-                  ? "Connected"
-                  : socketStatus === "connecting"
-                    ? everOpenRef.current
-                      ? "Reconnecting…"
-                      : "Connecting"
-                    : "Disconnected"}
+                {sessionBadge}
               </span>
             </div>
             {noSignRecently && (
@@ -479,13 +527,12 @@ export default function TranslatePage() {
                     : "inline-block h-1.5 w-1.5 rounded-full bg-foreground/30"
                 }
               />
-              {display
-                ? showingPartial
-                  ? "live · stabilizing"
-                  : "final"
-                : running
-                  ? "listening"
-                  : "waiting"}
+              {activityLabel({
+                hasDisplay: display !== null,
+                showingPartial,
+                running,
+                modelUnavailable: terminalUnavailable,
+              })}
             </p>
           </div>
           <div className="flex flex-1 flex-col justify-center px-5 py-5">
@@ -561,13 +608,7 @@ export default function TranslatePage() {
                   : "inline-block h-2 w-2 rounded-full bg-foreground/30"
             }
           />
-          {socketStatus === "open"
-            ? "Connected"
-            : socketStatus === "connecting"
-              ? everOpenRef.current
-                ? "Reconnecting…"
-                : "Connecting"
-              : "Disconnected"}
+          {sessionBadge}
         </span>
         <span className="font-medium tabular-nums" aria-label="Session time">
           {elapsedLabel}

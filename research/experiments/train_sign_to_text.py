@@ -1387,7 +1387,20 @@ def compute_metrics(refs: list[str], hyps: list[str]) -> dict:
         "ROUGE-L": float(np.mean([rouge.score(r, h)["rougeL"].fmeasure for r, h in zip(refs, hyps)])),
         "exact_match": float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)])),
         "nonempty_output": float(np.mean([bool(normalize_text(h)) for h in hyps])),
+        "per_class_recall": per_class_recall(refs, hyps),
     }
+
+
+def per_class_recall(refs: list[str], hyps: list[str]) -> dict:
+    """Normalized-reference -> recall. Exposes single-class collapse that a
+    global exact-match can hide (required by the small6 acceptance criteria)."""
+    support: dict[str, list[int]] = {}
+    for r, h in zip(refs, hyps):
+        rn = normalize_text(r)
+        cell = support.setdefault(rn, [0, 0])
+        cell[1] += 1
+        cell[0] += (rn == normalize_text(h))
+    return {k: v[0] / v[1] for k, v in sorted(support.items())}
 
 
 # --------------------------------------------------------------------------

@@ -30,6 +30,7 @@ export class AvatarController {
   private manifest: SignManifest;
   private rafId: number | null = null;
   private canvas: HTMLCanvasElement;
+  private runId = 0;
 
   constructor(canvas: HTMLCanvasElement, manifest: SignManifest) {
     this.canvas = canvas;
@@ -116,10 +117,19 @@ export class AvatarController {
 
   /** Play a sequence of glosses back-to-back. */
   async playSequence(glossIds: string[], onStep?: (id: string, index: number) => void): Promise<void> {
+    const thisRun = ++this.runId;
     for (let i = 0; i < glossIds.length; i++) {
+      if (thisRun !== this.runId) return; // stop() was called
       onStep?.(glossIds[i], i);
       await this.play(glossIds[i]);
     }
+  }
+
+  /** Cancel an in-flight playSequence; the awaiting promise resolves. */
+  stop(): void {
+    this.runId += 1;
+    this.currentAction?.fadeOut(CROSSFADE_SECONDS);
+    this.currentAction = null;
   }
 
   private startLoop() {

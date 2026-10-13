@@ -84,10 +84,11 @@ def test_rolling_interim_then_final(promoted_client):
 
 
 def test_rest_endpoint_refuses_when_model_not_promoted(fake_bundle, monkeypatch):
-    """The default-safe state: SIGNSAGE_MODEL_PROMOTED unset/false must
-    refuse to serve, even with a perfectly loadable bundle available."""
+    """With the fallback disabled, SIGNSAGE_MODEL_PROMOTED=false must refuse
+    to serve, even with a perfectly loadable bundle available."""
     monkeypatch.setenv("SIGNSAGE_MODEL_BUNDLE_DIR", str(fake_bundle))
     monkeypatch.setenv("SIGNSAGE_MODEL_PROMOTED", "false")
+    monkeypatch.setenv("SIGNSAGE_FALLBACK_ENABLED", "false")
 
     from app.core.config import get_settings
 
@@ -103,6 +104,39 @@ def test_rest_endpoint_refuses_when_model_not_promoted(fake_bundle, monkeypatch)
 
     assert resp.status_code == 503
     assert resp.json()["code"] == "MODEL_NOT_PROMOTED"
+
+    get_settings.cache_clear()
+    reset_registry()
+
+
+def test_rest_endpoint_serves_heuristic_fallback_when_gated(monkeypatch):
+    """Default config (unpromoted, no bundle): the heuristic fallback serves
+    a 5-sign vocabulary instead of MODEL_NOT_PROMOTED."""
+    monkeypatch.delenv("SIGNSAGE_MODEL_BUNDLE_DIR", raising=False)
+    monkeypatch.setenv("SIGNSAGE_MODEL_PROMOTED", "false")
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    from app.ml.models.registry import reset_registry
+
+    reset_registry()
+    from app.main import app
+
+    client = fastapi_testclient.TestClient(app)
+
+    caps = client.get("/api/v1/capabilities").json()
+    assert caps["sign_to_text_available"] is True
+    assert caps["sign_to_text_source"] == "heuristic-fallback"
+    assert set(caps["fallback_vocabulary"]) == {"HELLO", "YES", "NO", "YOU", "HELP"}
+
+    # All-zero frames: no hand -> honest rejection, not a fabricated guess.
+    frames = [{"landmarks": np.zeros((543, 3)).tolist()} for _ in range(30)]
+    resp = client.post("/api/v1/translation/sign-to-text", json={"frames": frames})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["accepted"] is False
+    assert body["text"] == ""
 
     get_settings.cache_clear()
     reset_registry()

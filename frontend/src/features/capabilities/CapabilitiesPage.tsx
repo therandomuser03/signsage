@@ -26,8 +26,8 @@ const CAPABILITIES = [
   {
     icon: Languages,
     title: "Sign → Text",
-    status: "Live",
-    text: "Open the camera and sign. Landmarks stream to the interpretation pipeline and results appear as readable text with backend-reported confidence.",
+    status: "Research preview",
+    text: "Open the camera and sign. Capture, landmark streaming, and status handling work; the translation model is currently gated with no supported vocabulary yet, so the app reports availability honestly instead of guessing.",
     to: "/app/translate",
     action: "Open Translate",
   },
@@ -99,8 +99,9 @@ export default function CapabilitiesPage() {
             className="animate-rise mt-8 max-w-2xl text-lg font-medium leading-8 text-foreground/55"
             style={{ animationDelay: "180ms" }}
           >
-            Everything below exists in the application today. Nothing
-            listed is aspirational.
+            Everything below exists in the application today. Research-preview
+            items are labelled as such — nothing here promises accuracy the
+            models have not earned.
           </p>
         </div>
       </section>

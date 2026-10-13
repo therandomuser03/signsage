@@ -1,0 +1,71 @@
+{
+ "project": "SignSage",
+ "task": "ISL_to_English",
+ "dataset": "iSign v1.1",
+ "feature_dim": 1629,
+ "model_input_dim": 3258,
+ "max_frames": 160,
+ "max_tokens": 96,
+ "vocab_size": 22,
+ "tokenizer": "SentencePiece unigram trained on training targets only",
+ "tokenizer_model": "tokenizer/signsage_en_sp.model",
+ "special_token_ids": {
+  "pad": 0,
+  "unk": 1,
+  "bos": 2,
+  "eos": 3
+ },
+ "normalization_version": "pose_normalize_v1",
+ "model_architecture": {
+  "input_dim": 3258,
+  "raw_feature_dim": 1629,
+  "vocab_size": 22,
+  "d_model": 256,
+  "nhead": 4,
+  "layers": 4,
+  "ff": 1024,
+  "dropout": 0.15,
+  "norm_first": true,
+  "max_frames": 160,
+  "max_tokens": 96
+ },
+ "decoding": {
+  "decoder_runtime": "constrained_greedy",
+  "max_decode_tokens": 94,
+  "min_output_tokens": 1,
+  "no_repeat_ngram_size": 3,
+  "repetition_penalty": 1.15
+ },
+ "training_config": {
+  "architecture": {
+   "d_model": 256,
+   "nhead": 4,
+   "layers": 4,
+   "ff": 1024,
+   "dropout": 0.15,
+   "norm_first": true
+  },
+  "label_smoothing": 0.1,
+  "peak_lr": 0.0001,
+  "batch": 64,
+  "seed": 42,
+  "history": [
+   {
+    "epoch": 1,
+    "train_loss": 14.941864967346191,
+    "val_loss": 12.883538246154785,
+    "unique": 2,
+    "unique_fraction": 0.5,
+    "top_prediction": "hello6l421 worldw worldw4or",
+    "top_prediction_freq": 0.75,
+    "grad_norm_mean": 131.1724395751953,
+    "grad_norm_max": 131.1724395751953,
+    "grad_clip_frac": 1.0,
+    "param_norm": 143.558837890625
+   }
+  ],
+  "decoder_input_dropout": 0.0,
+  "is_pilot": 0
+ },
+ "checkpoint": "checkpoint/signsage_transformer_full.pt"
+}

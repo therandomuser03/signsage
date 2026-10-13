@@ -1,0 +1,35 @@
+{
+ "threshold": 0.95,
+ "passed": true,
+ "seed": 42,
+ "gate_uids": [
+  "smoke-0",
+  "smoke-1",
+  "smoke-2",
+  "smoke-3",
+  "smoke-4",
+  "smoke-5",
+  "smoke-6",
+  "smoke-7"
+ ],
+ "n_gate": 8,
+ "n_excluded_unreachable": 0,
+ "final": {
+  "step": 100,
+  "loss": 9.506740752840415e-05,
+  "lr": 0.0009336825748732972,
+  "exact_constrained": 1.0,
+  "exact_unconstrained": 1.0
+ },
+ "checks": [
+  {
+   "step": 100,
+   "loss": 9.506740752840415e-05,
+   "lr": 0.0009336825748732972,
+   "exact_constrained": 1.0,
+   "exact_unconstrained": 1.0
+  }
+ ],
+ "error": null,
+ "failures": []
+}
