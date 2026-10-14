@@ -45,43 +45,15 @@ def decode_all(model: PoseT5, loader, tokenizer, device) -> tuple[list, list, li
     return refs, hyps, uids
 
 
-def norm(s: str) -> str:
-    return " ".join(str(s).lower().strip().split())
-
-
-def compute_metrics(refs: list[str], hyps: list[str]) -> dict:
-    import jiwer
-    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
-    from rouge_score import rouge_scorer
-
-    r = [norm(x).split() for x in refs]
-    h = [norm(x).split() for x in hyps]
-    smooth = SmoothingFunction().method1
-    bleu = {}
-    for n in (1, 2, 3, 4):
-        w = tuple([1 / n] * n + [0] * (4 - n))
-        bleu[f"BLEU-{n}"] = float(corpus_bleu(
-            [[x] for x in r], h, weights=w, smoothing_function=smooth))
-    scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
-    rouge_l = float(np.mean([scorer.score(a, b)["rougeL"].fmeasure
-                             for a, b in zip(refs, hyps)]))
-    return {
-        "WER": float(jiwer.wer([norm(x) for x in refs], [norm(x) for x in hyps])),
-        "ROUGE-L": rouge_l,
-        "exact_match": float(np.mean([norm(a) == norm(b) for a, b in zip(refs, hyps)])),
-        "non_empty_rate": float(np.mean([bool(norm(b)) for b in hyps])),
-        "gen_len_mean": float(np.mean([len(norm(b).split()) for b in hyps])),
-        "ref_len_mean": float(np.mean([len(norm(a).split()) for a in refs])),
-        **bleu,
-    }
-
-
-def diversity(hyps: list[str]) -> dict:
-    top, count = Counter(hyps).most_common(1)[0] if hyps else ("", 0)
-    return {"unique": len(set(hyps)),
-            "unique_fraction": len(set(hyps)) / max(1, len(hyps)),
-            "top_prediction": top,
-            "top_prediction_freq": count / max(1, len(hyps))}
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "research" / "experiments"))
+from evaluation_metrics import (
+    compute_metrics,
+    diversity_metrics,
+    build_trivial_baseline,
+    evaluate_gate,
+    normalize_text,
+)
 
 
 def sensitivity(model: PoseT5, loader, tokenizer, device, k: int = 4) -> dict:
@@ -130,11 +102,11 @@ def main(argv=None) -> int:
     refs, hyps, uids = decode_all(model, loader, tokenizer, device)
 
     metrics = compute_metrics(refs, hyps)
-    div = diversity([norm(h) for h in hyps])
-    pool = Counter(norm(r) for r in refs)
-    trivial = [pool.most_common(1)[0][0]] * len(refs)
+    div = diversity_metrics(hyps, refs)
+    trivial = build_trivial_baseline(refs)
     trivial_metrics = compute_metrics(refs, trivial)
     sens = sensitivity(model, loader, tokenizer, device)
+    gate = evaluate_gate(metrics, trivial_metrics, div)
 
     rng = np.random.default_rng(42)
     idx = rng.choice(len(refs), size=min(args.examples, len(refs)), replace=False)
@@ -142,9 +114,12 @@ def main(argv=None) -> int:
 
     report = {"test_metrics": metrics, "trivial_baseline": trivial_metrics,
               "diversity": div, "sensitivity": sens, "examples": examples,
-              "beats_trivial_bleu4": metrics["BLEU-4"] > trivial_metrics["BLEU-4"],
+              "gate": gate,
+              "beats_trivial_wer": gate["beats_trivial_wer"],
+              "beats_trivial_bleu": gate["beats_trivial_bleu"],
+              "beats_trivial_chrf": gate["beats_trivial_chrf"],
               "pose_conditioned": sens["pose_conditioned"],
-              "collapsed": div["unique_fraction"] < 0.05}
+              "collapsed": div["collapsed"]}
     (out / "eval_report.json").write_text(json.dumps(report, indent=1))
 
     print(json.dumps({k: v for k, v in report.items()

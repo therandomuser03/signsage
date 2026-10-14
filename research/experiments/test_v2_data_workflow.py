@@ -340,25 +340,43 @@ def test_gate_reachability_selection_and_alignment() -> None:
     assert reference_reachability(too_long)["reason"] == "max_decode_tokens"
 
     uids = [f"u{i}" for i in range(70)]
-    targets = [reachable] * 65 + [blocked] * 5
+    # Distinct reachable targets: vary the final content token per sample
+    # (30+i avoids specials/EOS and the blocked trigram ending in 22), so
+    # every selected ref row differs and reversal genuinely reorders.
+    targets = [[2, 20, 21, 22, 20, 21, 30 + i, 3] for i in range(65)] + [blocked] * 5
+    assert all(reference_reachability(t)["reachable"] for t in targets[:65])
     selected, excluded = select_gate_examples(uids, targets, 64, 42)
     again, excluded_again = select_gate_examples(uids, targets, 64, 42)
     assert selected == again and excluded == excluded_again
     assert len(selected) == 64 and len(excluded) == 5
     selected_uids = [uids[i] for i in selected]
     refs = [[int(token) for token in targets[i][1:]] for i in selected]
+    assert len({tuple(r) for r in refs}) == 64, "fixture must hold distinct refs"
+    strs = [f"text-{i}" for i in range(64)]
     assert_gate_pass_alignment(selected_uids, selected_uids, refs, refs, refs,
-                               ["same"] * 64, ["same"] * 64)
+                               strs, strs)
     try:
         assert_gate_pass_alignment(selected_uids, selected_uids[::-1], refs, refs, refs,
-                                   ["same"] * 64, ["same"] * 64)
+                                   strs, strs)
         raise AssertionError("misaligned UIDs should fail")
     except RuntimeError:
         pass
     try:
         assert_gate_pass_alignment(selected_uids, selected_uids, refs, refs[::-1], refs,
-                                   ["same"] * 64, ["same"] * 64)
+                                   strs, strs)
         raise AssertionError("misaligned references should fail")
+    except RuntimeError:
+        pass
+    try:
+        assert_gate_pass_alignment(selected_uids, selected_uids, refs, refs, refs,
+                                   strs[:-1], strs)
+        raise AssertionError("truncated constrained strings should fail")
+    except RuntimeError:
+        pass
+    try:
+        assert_gate_pass_alignment(selected_uids, selected_uids, refs, refs, refs[:-1],
+                                   strs, strs)
+        raise AssertionError("truncated unconstrained ids should fail")
     except RuntimeError:
         pass
     print("PASS gate reachability, deterministic 64-item selection, and pass alignment")
@@ -386,7 +404,7 @@ def test_training_serving_preprocessing_parity(tmp: Path) -> None:
 def test_notebook_stage_order_and_failure_persistence() -> None:
     import json as _json
 
-    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    notebook = _json.loads((REPO_ROOT / "research/notebooks/signsage_kaggle.ipynb").read_text())
     sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
     titles = [next((line for line in source.splitlines()
                     if line.startswith("# ") and not line.startswith("# Requires")), "")
@@ -405,7 +423,7 @@ def test_notebook_stage_order_and_failure_persistence() -> None:
 def test_notebook_collapse_vs_gate_failure_classification() -> None:
     import json as _json
 
-    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    notebook = _json.loads((REPO_ROOT / "research/notebooks/signsage_kaggle.ipynb").read_text())
     sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
     titles = [next((line for line in source.splitlines()
                     if line.startswith("# ") and not line.startswith("# Requires")), "")
@@ -424,7 +442,7 @@ def test_notebook_collapse_vs_gate_failure_classification() -> None:
 def test_notebook_restore_ambiguous_candidates_guard() -> None:
     import json as _json
 
-    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    notebook = _json.loads((REPO_ROOT / "research/notebooks/signsage_kaggle.ipynb").read_text())
     sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
     titles = [next((line for line in source.splitlines()
                     if line.startswith("# ") and not line.startswith("# Requires")), "")
@@ -454,7 +472,7 @@ def test_notebook_restore_slug_strictness_live() -> None:
     import json as _json
     import os as _os
 
-    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    notebook = _json.loads((REPO_ROOT / "research/notebooks/signsage_kaggle.ipynb").read_text())
     sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
     titles = [next((line for line in source.splitlines()
                     if line.startswith("# ") and not line.startswith("# Requires")), "")
@@ -713,7 +731,7 @@ def test_notebook_diagnostic_run_flags() -> None:
     fresh start without --resume so stale optimizer state cannot leak in."""
     import json as _json
 
-    notebook = _json.loads((REPO_ROOT / "research/training/signsage_kaggle.ipynb").read_text())
+    notebook = _json.loads((REPO_ROOT / "research/notebooks/signsage_kaggle.ipynb").read_text())
     sources = ["".join(cell.get("source", [])) for cell in notebook["cells"]]
     titles = [next((line for line in source.splitlines()
                     if line.startswith("# ") and not line.startswith("# Requires")), "")
@@ -785,7 +803,10 @@ def test_cache_budget_refuse(tmp: Path) -> None:
     orig = _sh.disk_usage
     _sh.disk_usage = lambda p: orig(p)._replace(free=1 * 1024 ** 3)
     try:
-        TT.check_cache_budget(10.0, 10.0, tmp, existing_bytes=int(9.5 * 1024 ** 3))
+        TT.check_cache_budget(10.0, 10.0, tmp)
+        raise AssertionError("10 GiB projection vs 1 GiB free should refuse")
+    except SystemExit:
+        pass
     finally:
         _sh.disk_usage = orig
     try:

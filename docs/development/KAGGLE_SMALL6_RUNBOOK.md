@@ -216,7 +216,7 @@ python research/training/train_sign_to_text.py   --pose-source remote   --csv /k
 | `--lr` | `1e-4` | ✅ |
 | `--decoder-input-dropout` | `0.2` | ✅ |
 | `--max-hours` | `4.0` | ✅ |
-| `--seed` | `42` | ✅ |
+| `--seed` | `1` | ✅ |
 | `--out` | `/kaggle/working/s2t_small6` | ✅ |
 | `--stages` | `all` | ✅ |
 
@@ -536,7 +536,7 @@ Activity gate self-test passed (reason='insufficient_motion').
 - [ ] Kaggle notebook: GPU T4 x2, secrets `GITHUB_TOKEN`
 - [ ] Repo cloned at pinned SHA, architecture patch applied and verified
 - [ ] Training command copy-pasted exactly (no trailing backslash spaces)
-- [ ] `--max-hours 4.0 --patience 2 --seed 42` confirmed
+- [ ] `--max-hours 4.0 --patience 2 --seed 1` confirmed
 - [ ] Artifact verification step planned after training
 - [ ] Notebook **Save Version** workflow understood
 - [ ] Local `model_check.py` test planned after download

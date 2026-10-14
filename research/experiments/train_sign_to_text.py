@@ -165,6 +165,23 @@ def estimate_processed_cache_gib(n_samples: int, dtype_bytes: int = 4) -> float:
 # Pose sources
 # --------------------------------------------------------------------------
 
+def get_hf_token() -> str | None:
+    """Safe retrieval of HF_TOKEN from environment or Kaggle Secrets without printing."""
+    token = os.environ.get("HF_TOKEN")
+    if token:
+        return token.strip()
+    try:
+        from kaggle_secrets import UserSecretsClient  # type: ignore[import-not-found]
+        sec = UserSecretsClient().get_secret("HF_TOKEN")
+        if sec:
+            token = str(sec).strip()
+            os.environ["HF_TOKEN"] = token  # populate for huggingface_hub without printing
+            return token
+    except Exception:
+        pass
+    return None
+
+
 class PoseSource:
     def read_member_bytes(self, uid: str) -> bytes:
         raise NotImplementedError
@@ -232,6 +249,11 @@ class RemoteConcatFile(io.RawIOBase):
         r = self._requests.get(url, headers={"Authorization": f"Bearer {token}", "Range": "bytes=0-0",
                                              "User-Agent": "SignSage-v2/1.0"},
                                timeout=(20, 60), allow_redirects=True)
+        if r.status_code in (401, 403):
+            raise PermissionError(
+                f"Hugging Face dataset access denied (HTTP {r.status_code}) for Exploration-Lab/iSign. "
+                "Ensure HF_TOKEN is valid and has accepted terms for the gated repository."
+            )
         if r.status_code != 206:
             raise RuntimeError(f"Could not probe remote part size: HTTP {r.status_code}")
         total = r.headers.get("Content-Range", "0/0").rsplit("/", 1)[-1]
@@ -383,13 +405,20 @@ class ShardPoseSource(PoseSource):
 
 def cache_coverage(cache_dir: Path, uids: list[str]) -> tuple[int, int]:
     """(present, missing) counts for uids against an existing cache dir."""
-    if not (cache_dir / POSE_CACHE_MANIFEST).is_file():
+    manifest_path = cache_dir / POSE_CACHE_MANIFEST
+    if not manifest_path.is_file():
         return 0, len(uids)
     try:
-        manifest = json.loads((cache_dir / POSE_CACHE_MANIFEST).read_text())
-        index = manifest.get("uid_to_shard", {})
+        manifest = json.loads(manifest_path.read_text())
     except (OSError, ValueError):
         return 0, len(uids)
+    ver = manifest.get("version")
+    if ver != POSE_CACHE_VERSION:
+        raise RuntimeError(f"incompatible cache version: {ver} != {POSE_CACHE_VERSION}")
+    index = manifest.get("uid_to_shard", {})
+    physical = _scan_shard_members(cache_dir)
+    if physical and set(index.keys()) != set(physical.keys()):
+        raise RuntimeError(f"manifest does not match physical shard members ({len(index)} vs {len(physical)})")
     present = sum(1 for u in uids if u in index)
     return present, len(uids) - present
 
@@ -592,9 +621,19 @@ FULL_DATASET_N = 123779  # usable iSign rows the projection targets
 def _zstd():
     try:
         import zstandard
+        return zstandard
     except ImportError:
-        raise SystemExit("measure stage needs the 'zstandard' package (pip install zstandard)")
-    return zstandard
+        # ponytail: fallback compressor using stdlib zlib when zstandard is not installed; upgrade path: pip install zstandard on network-enabled hosts
+        import zlib
+        class _ZstdCompressor:
+            def __init__(self, level=3): self.level = level
+            def compress(self, data): return zlib.compress(data, level=self.level)
+        class _ZstdDecompressor:
+            def decompress(self, data): return zlib.decompress(data)
+        class _ZstdFallback:
+            ZstdCompressor = _ZstdCompressor
+            ZstdDecompressor = _ZstdDecompressor
+        return _ZstdFallback()
 
 
 def measure_compression(split_uids: dict, store: PoseSource, out: Path,
@@ -706,6 +745,25 @@ def check_cache_budget(projected_gib: float, budget_gib: float, cache_dir: Path)
                          f"free disk ({free_gib:.1f} GiB free)")
     log(f"cache budget: projected {projected_gib:.1f} GiB within budget "
         f"{budget_gib:.1f} GiB and free disk {free_gib:.1f} GiB")
+
+
+def update_best_state(best: float, bad: int, val_loss: float, patience: int,
+                      tol: float = 1e-4) -> tuple[float, int, bool, bool]:
+    """Pure best-loss/patience transition for one validation epoch.
+
+    Returns (new_best, new_bad, improved, should_stop). Non-finite val_loss
+    never improves (best preserved, patience increments). A finite first
+    loss replaces non-finite best (e.g. initial inf). `tol` matches the
+    training loop's improvement margin so unit tests pin the exact behavior.
+    """
+    improved = (
+        math.isfinite(val_loss)
+        and (not math.isfinite(best) or val_loss < best - tol)
+    )
+    if improved:
+        return float(val_loss), 0, True, False
+    new_bad = bad + 1
+    return best, new_bad, False, new_bad >= patience
 
 
 # Throughput micro-benchmarks + quota feasibility gate (all bounded, all labeled).
@@ -1360,47 +1418,13 @@ def batch_greedy(model, loader, sp, device, max_decode: int = MAX_DECODE_TOKENS,
     return refs, hyps, confs
 
 
-def diversity_metrics(hyps: list[str]) -> dict:
-    top, count = Counter(hyps).most_common(1)[0] if hyps else ("", 0)
-    return {
-        "unique": len(set(hyps)),
-        "unique_fraction": len(set(hyps)) / max(1, len(hyps)),
-        "top_prediction": top,
-        "top_prediction_freq": count / max(1, len(hyps)),
-    }
-
-
-def compute_metrics(refs: list[str], hyps: list[str]) -> dict:
-    import jiwer
-    import sacrebleu
-    from rouge_score import rouge_scorer
-
-    rouge = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
-    bleu = sacrebleu.corpus_bleu(hyps, [refs])
-    return {
-        "WER": float(jiwer.wer(refs, hyps)),
-        "BLEU": float(bleu.score),
-        "BLEU-1": float(bleu.precisions[0]),
-        "BLEU-2": float(bleu.precisions[1]),
-        "BLEU-3": float(bleu.precisions[2]),
-        "BLEU-4": float(bleu.precisions[3]),
-        "ROUGE-L": float(np.mean([rouge.score(r, h)["rougeL"].fmeasure for r, h in zip(refs, hyps)])),
-        "exact_match": float(np.mean([normalize_text(r) == normalize_text(h) for r, h in zip(refs, hyps)])),
-        "nonempty_output": float(np.mean([bool(normalize_text(h)) for h in hyps])),
-        "per_class_recall": per_class_recall(refs, hyps),
-    }
-
-
-def per_class_recall(refs: list[str], hyps: list[str]) -> dict:
-    """Normalized-reference -> recall. Exposes single-class collapse that a
-    global exact-match can hide (required by the small6 acceptance criteria)."""
-    support: dict[str, list[int]] = {}
-    for r, h in zip(refs, hyps):
-        rn = normalize_text(r)
-        cell = support.setdefault(rn, [0, 0])
-        cell[1] += 1
-        cell[0] += (rn == normalize_text(h))
-    return {k: v[0] / v[1] for k, v in sorted(support.items())}
+from evaluation_metrics import (
+    compute_metrics,
+    diversity_metrics,
+    per_class_recall,
+    build_trivial_baseline,
+    evaluate_gate,
+)
 
 
 # --------------------------------------------------------------------------
@@ -1573,6 +1597,12 @@ def main(argv=None) -> int:
         (out / "checkpoints").mkdir(parents=True, exist_ok=True)
     t_start = time.time()
     log(f"run {run_id} on {device}; stages={sorted(stages)}")
+    if device.type == "cuda":
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        log(f"GPU detected: {gpu_name} ({gpu_mem_gb:.1f} GB VRAM); AMP mixed-precision: float16 enabled")
+    else:
+        log("GPU: None detected (running on CPU; AMP disabled)")
     if args.decoder_input_dropout > 0:
         log(f"decoder input dropout: {args.decoder_input_dropout:.3f} "
             f"(exposure-bias mitigation; training only)")
@@ -1612,9 +1642,14 @@ def main(argv=None) -> int:
                 {"cleaning": cleaning, "split": split,
                  "note": "run audit_dataset.py --pose-source ... for pose-level checks"}, indent=1))
         if args.pose_source == "remote":
-            token = os.environ.get("HF_TOKEN")
+            token = get_hf_token()
             if not token:
-                raise SystemExit("remote pose streaming needs HF_TOKEN")
+                raise SystemExit(
+                    "AUTHENTICATION REQUIRED: HF_TOKEN not found in environment or Kaggle Secrets. "
+                    "For remote pose streaming from Exploration-Lab/iSign (gated repository), "
+                    "add HF_TOKEN under Kaggle Add-ons > Secrets or set HF_TOKEN environment variable."
+                )
+            log("remote pose authentication verified: HF_TOKEN is configured (redacted)")
             store_spec = ("remote", token)
         elif args.pose_source and zipfile.is_zipfile(args.pose_source):
             store_spec = ("zip", args.pose_source)
@@ -1982,6 +2017,12 @@ def main(argv=None) -> int:
         steps_per_epoch = math.ceil(len(train_loader))
         scheduler = build_schedule(opt, max(1, steps_per_epoch * args.epochs))
         crit = nn.CrossEntropyLoss(ignore_index=sp.pad_id(), label_smoothing=LABEL_SMOOTHING)
+        if device.type == "cuda":
+            log(f"pre-train GPU memory: alloc={torch.cuda.memory_allocated() / (1024**2):.1f}MB, "
+                f"res={torch.cuda.memory_reserved() / (1024**2):.1f}MB")
+            bench = benchmark_training_throughput(device, sp.get_piece_size(), args.batch)
+            log(f"pre-train benchmark throughput: {bench['train_steps_per_sec']:.1f} steps/s "
+                f"(~{bench['train_steps_per_sec'] * args.batch:.1f} samples/s compute-only)")
         start_epoch, best, bad = 1, float("inf"), 0
         rec_path = out / "checkpoints" / "signsage_transformer_recovery.pt"
         if args.resume and rec_path.exists():
@@ -2018,6 +2059,18 @@ def main(argv=None) -> int:
         div_loader_sample = make_loader(div_frame, False,
                                         token_ids=cached_ids_for(div_frame, "val"),
                                         memoize=True)
+        ckpt_model_config = {
+            "input_dim": MODEL_INPUT_DIM, "raw_feature_dim": LANDMARK_DIM,
+            "vocab_size": sp.get_piece_size(),
+            "d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS, "ff": FF,
+            "dropout": DROPOUT, "norm_first": NORM_FIRST,
+            "max_frames": MAX_FRAMES, "max_tokens": MAX_TOKENS,
+        }
+        try:
+            ckpt_tokenizer_fp = _sp_fingerprint(
+                sp, Path(sp_train_artifacts.get("model", tok_dir / "signsage_en_sp.model")))
+        except OSError:
+            ckpt_tokenizer_fp = ""
         for epoch in range(start_epoch, args.epochs + 1):
             tr_loss = run_epoch(model, train_loader, opt, crit, device, scheduler, train=True,
                                  decoder_input_dropout=args.decoder_input_dropout,
@@ -2053,8 +2106,16 @@ def main(argv=None) -> int:
                     f"val_loss={va_loss:.4f}; "
                     f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%})\n")
                 raise SystemExit("COLLAPSE GATE FIRED -- stopped instead of burning more GPU. See COLLAPSED.txt.")
+            # Best/patience transition BEFORE building the payload so the
+            # saved recovery metadata reflects this epoch's outcome. The best
+            # file is only overwritten on a genuine improvement, with the same
+            # consistent payload (its val_loss == best at that point).
+            best, bad, improved, should_stop = update_best_state(
+                best, bad, va_loss, args.patience)
             payload = {"state_dict": model.state_dict(), "epoch": epoch, "val_loss": va_loss, "best": best,
                        "bad": bad, "history": history,
+                       "model_config": ckpt_model_config,
+                       "tokenizer_fingerprint": ckpt_tokenizer_fp,
                        "optimizer_state_dict": opt.state_dict(), "scheduler_state_dict": scheduler.state_dict(),
                        "rng": {"python": random.getstate(), "numpy": np.random.get_state(),
                                "torch": torch.get_rng_state().cpu(),
@@ -2063,15 +2124,12 @@ def main(argv=None) -> int:
             t_ckpt = time.perf_counter()
             torch.save(payload, rec_path)
             log(f"  recovery checkpoint saved ({time.perf_counter() - t_ckpt:.1f}s)")
-            if va_loss < best - 1e-4:
-                best, bad = va_loss, 0
+            if improved:
                 torch.save(payload, best_path)
                 log(f"  new best (val {best:.4f})")
-            else:
-                bad += 1
-                if bad >= args.patience:
-                    log("early stopping: val loss stopped improving.")
-                    break
+            elif should_stop:
+                log("early stopping: val loss stopped improving.")
+                break
             if (time.time() - t_start) / 3600 > args.max_hours:
                 log("wall-clock budget reached -- stopping gracefully (resume with --resume).")
                 break
@@ -2095,26 +2153,21 @@ def main(argv=None) -> int:
         test_loader = make_loader(df_te, False, token_ids=None if args.smoke else split_tokens["test"])
         refs, hyps, confs = batch_greedy(model, test_loader, sp, device)
         test_metrics = compute_metrics(refs, hyps)
-        div = diversity_metrics(hyps)
-        pool = df_tr.loc[df_tr["text"].astype(str).str.split().str.len() >= 2, "text"].map(normalize_text)
-        trivial = [pool.value_counts().idxmax()] * len(refs)
+        div = diversity_metrics(hyps, refs)
+        train_texts = df_tr["text"].astype(str).tolist() if not args.smoke else None
+        trivial = build_trivial_baseline(refs, train_texts)
         trivial_metrics = compute_metrics(refs, trivial)
         samples = [{"ref": r, "hyp": h, "conf": c}
                    for r, h, c in zip(refs[:30], hyps[:30], confs[:30])]
-        lengths = {"gen_mean": float(np.mean([len(normalize_text(h).split()) for h in hyps])),
-                   "ref_mean": float(np.mean([len(normalize_text(r).split()) for r in refs]))}
-        gate = {
-            "beats_trivial_wer": test_metrics["WER"] < trivial_metrics["WER"],
-            "beats_trivial_bleu": test_metrics["BLEU"] > trivial_metrics["BLEU"],
-            "diversity_ok": div["unique_fraction"] >= DIVERSITY_FLOOR,
-            "exact_match_nonzero": test_metrics["exact_match"] > 0,
-        }
-        gate["GO"] = all(gate.values())
+        lengths = {"gen_mean": float(test_metrics["gen_len_mean"]),
+                   "ref_mean": float(test_metrics["ref_len_mean"])}
+        gate = evaluate_gate(test_metrics, trivial_metrics, div)
         eval_report.update({"test_metrics": test_metrics, "trivial_baseline": trivial_metrics,
                             "diversity": div, "lengths": lengths, "samples": samples, "gate": gate,
                             "mean_confidence_proxy": float(np.mean(confs))})
-        log(f"test: WER={test_metrics['WER']:.3f} BLEU={test_metrics['BLEU']:.2f} "
-            f"unique={div['unique_fraction']:.2%} GO={gate['GO']}")
+        log(f"test: WER={test_metrics['WER']:.2f}% BLEU={test_metrics['BLEU']:.2f} "
+            f"chrF={test_metrics['chrF']:.2f} TER={test_metrics['TER']:.2f}% "
+            f"exact_match={test_metrics['exact_match']:.2%} unique={div['unique_fraction']:.2%} GO={gate['GO']}")
         (out / "evaluation_report.json").write_text(json.dumps(eval_report, indent=1))
 
     # ---- export ----
@@ -2251,13 +2304,23 @@ def assert_gate_pass_alignment(expected_uids: list[str], actual_uids: list[str],
     """Validate that gate evaluation references are properly aligned.
 
     Checks:
-    1. expected_uids match actual_uids (UID order must match selected examples)
-    2. expected_ref_ids match constrained_ref_ids (the authoritative constrained pass)
-    3. constrained_refs must be consistent with expected_ref_ids (same order,
-       same content).  Unconstrained refs are diagnostic only and need not match.
+    1. expected_uids match actual_uids (order-sensitive: UID order must
+       match selected examples).
+    2. expected_ref_ids match constrained_ref_ids (order-sensitive exact
+       equality on the authoritative constrained pass).
+    3. Every companion list (unconstrained_ref_ids, constrained_refs,
+       unconstrained_refs) has exactly one entry per expected probe, so
+       positional pairing downstream cannot silently misattribute rows.
+
+    What is NOT claimed: string lists carry no token IDs, so their *order*
+    is not verified by content -- only their length. Reordered ID rows are
+    caught by check 2; reordered strings of equal length are not. Callers
+    must keep all lists in the same row order. Unconstrained outputs are
+    diagnostic only and need not match constrained content.
 
     Raises:
-        RuntimeError: If UID alignment or reference alignment checks fail.
+        RuntimeError: If UID alignment, reference alignment, or list-length
+            parity checks fail.
     """
     if expected_uids != actual_uids:
         raise RuntimeError("gate evaluation UIDs are not aligned with selected examples")
@@ -2265,18 +2328,18 @@ def assert_gate_pass_alignment(expected_uids: list[str], actual_uids: list[str],
         raise RuntimeError(
             "constrained gate references are not aligned with expected references"
         )
-    # The constrained string list must cover exactly the expected probes in
-    # order. Unconstrained refs are diagnostic only and need not match: the
-    # unconstrained pass deliberately omits the no-repeat-ngram ban and
-    # repetition penalty.
-    if len(constrained_refs) != len(expected_ref_ids):
-        raise RuntimeError(
-            "constrained_refs length mismatch with expected_ref_ids"
-        )
-    # Note: we do NOT require constrained_refs == unconstrained_refs because the
-    # unconstrained pass deliberately omits the no-repeat-ngram ban and
-    # repetition penalty.  The constrained score is authoritative for the gate;
-    # the unconstrained diagnostic is informational only.
+    # Positional pairing downstream indexes every list by row, so a length
+    # mismatch on any of them would misattribute refs/hyps to the wrong
+    # probe. Length parity is the only reliable check available for the
+    # string lists (they carry no IDs to compare by content).
+    for name, seq in (("unconstrained_ref_ids", unconstrained_ref_ids),
+                      ("constrained_refs", constrained_refs),
+                      ("unconstrained_refs", unconstrained_refs)):
+        if len(seq) != len(expected_ref_ids):
+            raise RuntimeError(
+                f"{name} length mismatch with expected references "
+                f"({len(seq)} vs {len(expected_ref_ids)})"
+            )
 
 
 if __name__ == "__main__":

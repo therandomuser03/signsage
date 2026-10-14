@@ -35,7 +35,7 @@ class FrameProjection(nn.Module):
         # infer all derivatives from absolute coordinates alone.
         delta = torch.zeros_like(x)
         delta[:, 1:] = x[:, 1:] - x[:, :-1]
-        y = self.net(x + delta)
+        y = self.net(torch.cat([x, delta], dim=-1))
         y = self.temporal(y.transpose(1, 2)).transpose(1, 2)
         return y
 
