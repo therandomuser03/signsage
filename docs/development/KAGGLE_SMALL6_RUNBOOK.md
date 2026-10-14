@@ -44,6 +44,15 @@ Upload `subset6.csv` to Kaggle as a **dataset** (private or public). Note the da
 - Input dataset: attach your `subset6.csv` dataset. Note the mount path, e.g. `/kaggle/input/signsage-subset6/subset6.csv`
 - Optional: `HF_TOKEN` under Add-ons → Secrets for HuggingFace pose streaming (required only if using `--pose-source remote` in training)
 
+> **CSV mount check (run before training — newer Kaggle sessions mount datasets
+> under `/kaggle/input/datasets/<owner>/<slug>/` instead of
+> `/kaggle/input/<slug>/`). If the §5 `--csv` path does not exist, list the
+> actual mount and substitute it in the command; do not guess.
+> ```bash
+> %%bash
+> ls /kaggle/input/signsage-subset6/subset6.csv /kaggle/input/datasets/therandomuser03/signsage-subset6/subset6.csv 2>&1
+> ```
+
 ### 2.2 Verify Environment (First Cell)
 
 ```python
@@ -123,8 +132,11 @@ with urllib.request.urlopen(req, timeout=20) as r:
     info = json.loads(r.read().decode())
 print("Repo accessible:", info.get("full_name"), "| private:", info.get("private"))
 
-# Clone at pinned commit (update if repo advances)
-PINNED_SHA = "43ed3572d7854de4aa8c39ef27b21a8632c51f64"
+# Clone at pinned commit (update if repo advances).
+# c83b3eb is the minimum revision carrying --decoder-input-dropout and the
+# checkpoint best-loss/patience fix; 43ed357 lacks the dropout flag, so the
+# §5 command fails arg parsing there.
+PINNED_SHA = "c83b3eb287211c12842510295181c7969ce3dd25"
 if not (DEST / ".git").exists():
     subprocess.run(["git", "clone", REPO_URL, str(DEST)], check=True)
 subprocess.run(["git", "-C", str(DEST), "fetch", "origin"], check=True)
@@ -203,7 +215,7 @@ cd /kaggle/working/signsage
 python research/training/train_sign_to_text.py   --pose-source remote   --csv /kaggle/input/signsage-subset6/subset6.csv   --data-mode stream   --cache-budget-gib 2.0   --epochs 8   --patience 2   --batch 32   --lr 1e-4   --decoder-input-dropout 0.2   --max-hours 4.0   --seed 1   --out /kaggle/working/s2t_small6   --stages all
 ```
 
-### Verified Arguments (vs. parser at `train_sign_to_text.py:1495-1556`)
+### Verified Arguments (vs. parser at `train_sign_to_text.py:1517-1584`)
 
 | Arg | Value | Verified |
 |-----|-------|----------|
@@ -222,13 +234,13 @@ python research/training/train_sign_to_text.py   --pose-source remote   --csv /k
 
 ### Active Guards (Code-Confirmed)
 
-- **4-hour wall-clock stop** → `train_sign_to_text.py:2075`
-- **Early stop (patience=2)** → line 2072-2073
-- **Collapse gate (unique_fraction ≥ 0.05)** → line 2037-2042
-- **Overfit gate (64 reachable samples ≥ 95% exact)** → line 1802-1825
-- **Video-grouped split (seed=1)** → line 1598, 1601, 2017
-- **Export on `export` stage** → line 2122-2124
-- **Evaluation with trivial baseline, per-class recall, diversity** → line 2100-2113
+- **4-hour wall-clock stop** → `train_sign_to_text.py:2133`
+- **Early stop (patience=2)** → `update_best_state` patience gate, line 2114
+- **Collapse gate (unique_fraction ≥ 0.05)** → line 2103-2105
+- **Overfit gate (64 reachable samples ≥ 95% exact)** → line 1856 (`min(64, …)`)
+- **Video-grouped split (seed=1)** → line 1628
+- **Export on `export` stage** → line 2188
+- **Evaluation with trivial baseline, per-class recall, diversity** → line 2164-2166
 
 ---
 
@@ -241,7 +253,7 @@ After training completes (or is interrupted):
 | Artifact | Path | Description |
 |----------|------|-------------|
 | Best checkpoint | `checkpoints/signsage_transformer_full.pt` | `torch.save` with `state_dict` + `model_config` |
-| Recovery checkpoints | `checkpoints/recovery_epoch_*.pt` | Per-epoch resume points |
+| Recovery checkpoint | `checkpoints/signsage_transformer_recovery.pt` | Per-epoch resume point (model + optimizer + scheduler + RNG + best/bad) |
 | Training history | `training_history.json` | Loss, diversity, grad stats per epoch |
 | Evaluation report | `evaluation_report.json` | **Must contain acceptance keys** |
 | Tokenizer | `tokenizer/signsage_en_sp.model` + `.vocab` | SentencePiece unigram |
@@ -263,14 +275,8 @@ test -d /kaggle/working/s2t_small6 && echo "s2t_small6/ directory: EXISTS" || { 
 # Check best checkpoint
 test -f /kaggle/working/s2t_small6/checkpoints/signsage_transformer_full.pt && echo "signsage_transformer_full.pt: EXISTS ($(stat -c%s /kaggle/working/s2t_small6/checkpoints/signsage_transformer_full.pt) bytes)" || { echo "FAIL: signsage_transformer_full.pt missing"; exit 1; }
 
-# Check recovery checkpoints
-recovery_found=$(ls /kaggle/working/s2t_small6/checkpoints/recovery_epoch_*.pt 2>/dev/null | wc -l)
-if [ "$recovery_found" -gt 0 ]; then
-    echo "Recovery checkpoints: EXISTS ($recovery_found files)"
-else
-    echo "FAIL: recovery_epoch_*.pt missing"
-    exit 1
-fi
+# Check recovery checkpoint (single file, overwritten each epoch)
+test -f /kaggle/working/s2t_small6/checkpoints/signsage_transformer_recovery.pt && echo "signsage_transformer_recovery.pt: EXISTS ($(stat -c%s /kaggle/working/s2t_small6/checkpoints/signsage_transformer_recovery.pt) bytes)" || { echo "FAIL: signsage_transformer_recovery.pt missing"; exit 1; }
 
 # Check training history
 test -f /kaggle/working/s2t_small6/training_history.json && echo "training_history.json: EXISTS" || { echo "FAIL: training_history.json missing"; exit 1; }
@@ -336,7 +342,7 @@ ls /kaggle/working/s2t_small6/signsage_deployment_bundle/
 s2t_small6/
 ├── checkpoints/
 │   ├── signsage_transformer_full.pt
-│   └── recovery_epoch_*.pt
+│   └── signsage_transformer_recovery.pt
 ├── training_history.json
 ├── evaluation_report.json
 ├── tokenizer/
@@ -514,7 +520,7 @@ Activity gate self-test passed (reason='insufficient_motion').
 |-------------|-------------|---------|
 | `yourname/signsage-subset6` | Kaggle dataset slug for subset6.csv | `therandomuser03/signsage-subset6` |
 | `/kaggle/input/.../subset6.csv` | Actual mount path of attached dataset | `/kaggle/input/signsage-subset6/subset6.csv` |
-| `PINNED_SHA` | Git commit to train from | `43ed3572d7854de4aa8c39ef27b21a8632c51f64` |
+| `PINNED_SHA` | Git commit to train from (must advertise `--decoder-input-dropout` and carry the checkpoint best-loss fix) | `c83b3eb287211c12842510295181c7969ce3dd25` |
 | `REPO_URL` | Your fork or upstream | `https://github.com/therandomuser03/signsage.git` |
 
 ---
@@ -533,7 +539,7 @@ Activity gate self-test passed (reason='insufficient_motion').
 
 - [ ] `subset6.csv` built locally, 74 rows / 49 videos, 6 classes
 - [ ] `subset6.csv` uploaded to Kaggle, mount path known
-- [ ] Kaggle notebook: GPU T4 x2, secrets `GITHUB_TOKEN`
+- [ ] Kaggle notebook: GPU T4 x2, secrets `GITHUB_TOKEN` + `HF_TOKEN` (both required: §5 uses `--pose-source remote`)
 - [ ] Repo cloned at pinned SHA, architecture patch applied and verified
 - [ ] Training command copy-pasted exactly (no trailing backslash spaces)
 - [ ] `--max-hours 4.0 --patience 2 --seed 1` confirmed
