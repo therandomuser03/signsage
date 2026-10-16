@@ -152,7 +152,7 @@ Ignored, never committed: `results.zip`, `staging_kaggle_results/`,
 `research/artifacts/` (empty bundle skeleton — operator supplies a bundle),
 `backend/.env`, `frontend/.env.local`. Entry points: `uvicorn app.main:app`,
 `npm run dev`/`build`, `research/training/train_sign_to_text.py` via the
-`signsage_kaggle_fixed.ipynb` runbook (see `research/training/READINESS.md`).
+`signsage_kaggle.ipynb` runbook (see `research/training/READINESS.md`).
 
 ## 10. Documentation authority
 

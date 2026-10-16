@@ -416,7 +416,8 @@ def test_notebook_stage_order_and_failure_persistence() -> None:
     train_source = sources[positions[2]]
     eval_source = sources[positions[3]]
     assert "_training_succeeded" in train_source
-    assert "_training_succeeded" in eval_source and "raise RuntimeError" not in train_source
+    assert "_training_succeeded" in eval_source
+    assert "raise RuntimeError" in train_source
     print("PASS notebook stage order and failure-to-persist path")
 
 
@@ -457,8 +458,7 @@ def test_notebook_restore_ambiguous_candidates_guard() -> None:
             or "SystemExit" in restore_source)
     assert "rev-parse" in restore_source
     assert "complete" in restore_source
-    assert ("INCOMPLETE" in restore_source
-            or "not complete" in restore_source.lower())
+    assert "_blockers" in restore_source
     print("PASS notebook restore guards ambiguous candidates and logs commit")
 
 
@@ -740,8 +740,8 @@ def test_notebook_diagnostic_run_flags() -> None:
                                 if title.startswith("# V2 TRAINING"))]
     assert "DIAGNOSTIC" in train_source
     assert '"--lr"' in train_source and '"1e-4"' in train_source
-    assert '"--epochs", "2"' in train_source
-    assert '"--resume"' not in train_source
+    assert 'EPOCHS = 2' in train_source
+    assert 'assert "--resume" not in cmd' in train_source
     print("PASS notebook diagnostic run flags (2 epochs, LR 1e-4, fresh start)")
 
 

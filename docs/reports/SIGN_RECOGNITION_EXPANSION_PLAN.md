@@ -200,5 +200,5 @@ SIGNSAGE_MODEL_BUNDLE_DIR=/kaggle/output/s2t_small6/signsage_deployment_bundle \
 ```
 
 Then evaluate §7 against `evaluation_report.json` in the output dir. Notebook
-alternative: `research/training/signsage_kaggle.ipynb` cells measure →
+alternative: `research/notebooks/signsage_kaggle.ipynb` cells measure →
 certify → prepare (with the subset CSV) → train with the flags above.
