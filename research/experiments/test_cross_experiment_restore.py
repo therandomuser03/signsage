@@ -310,7 +310,7 @@ def test_dataset_identity_limitation_documented():
 def test_training_cell_matches_runbook_small6():
     """Cell 11 must execute the runbook's validated small6 command:
     --epochs 8 --max-hours 4 --lr 1e-4 --data-mode stream --stages all
-    --batch 32 --patience 2 --cache-budget-gib 2.0 --seed 1
+    --batch 32 --patience 2 --cache-budget-gib 10.0 --seed 1
     --decoder-input-dropout 0.2 --out /kaggle/working/s2t_small6"""
     nb = _load_notebook()
     src = _cell_source(nb, 11)
@@ -329,7 +329,7 @@ def test_training_cell_matches_runbook_small6():
     assert '--stages", "all"' in src, "Cell 11 must use --stages all"
     assert '--batch", "32"' in src, "Cell 11 must use --batch 32"
     assert '--patience", "2"' in src, "Cell 11 must use --patience 2"
-    assert '--cache-budget-gib", "2.0"' in src, "Cell 11 must use --cache-budget-gib 2.0"
+    assert '--cache-budget-gib", "10"' in src, "Cell 11 must use --cache-budget-gib 10"
     assert '--seed", "1"' in src, "Cell 11 must use --seed 1"
     assert '"/kaggle/working/s2t_small6"' in src, "Cell 11 must output to s2t_small6"
 
@@ -343,19 +343,19 @@ def test_training_cell_matches_runbook_small6():
 
 
 # ---------------------------------------------------------------------------
-# Test 14: Prepare cell (cell 10) uses s2t_small6 with cache-budget-gib 2.0
+# Test 14: Prepare cell (cell 10) uses s2t_small6 with cache-budget-gib 10
 # ---------------------------------------------------------------------------
 
 def test_prepare_cell_uses_s2t_small6():
-    """Cell 10 must target s2t_small6 with --cache-budget-gib 2.0."""
+    """Cell 10 must target s2t_small6 with --cache-budget-gib 10."""
     nb = _load_notebook()
     src = _cell_source(nb, 10)
 
     assert '"/kaggle/working/s2t_small6"' in src, (
         "Cell 10 must output to s2t_small6"
     )
-    assert '--cache-budget-gib", "2.0"' in src, (
-        "Cell 10 must use --cache-budget-gib 2.0"
+    assert '--cache-budget-gib", "10"' in src, (
+        "Cell 10 must use --cache-budget-gib 10"
     )
 
 

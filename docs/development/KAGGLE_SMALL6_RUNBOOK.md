@@ -178,41 +178,13 @@ print("Training module importable")
 
 ---
 
-## 4. Architecture Patch (Apply Before Training)
-
-```bash
-%%bash
-cd /kaggle/working/signsage
-
-# Verify current constants
-grep -n "D_MODEL, NHEAD, NLAYERS, FF" research/training/train_sign_to_text.py
-# Should show: 256, 4, 4, 1024
-
-# Apply patch (exact line, no extra whitespace)
-sed -i 's/D_MODEL, NHEAD, NLAYERS, FF = 256, 4, 4, 1024/D_MODEL, NHEAD, NLAYERS, FF = 128, 4, 2, 512  # small6 experiment only/'     research/training/train_sign_to_text.py
-
-# Verify
-grep -n "D_MODEL, NHEAD, NLAYERS, FF" research/training/train_sign_to_text.py
-# Must now show: 128, 4, 2, 512
-
-# Fail if patch did not apply correctly
-if ! grep -q "D_MODEL, NHEAD, NLAYERS, FF = 128, 4, 2, 512" research/training/train_sign_to_text.py; then
-    echo "ARCHITECTURE PATCH FAILED: expected line not found"
-    exit 1
-fi
-```
-
-**Do not proceed if the line differs from expected. Edit manually if needed.**
-
----
-
 ## 5. Exact Training Command (Validated)
 
 ```bash
 %%bash
 cd /kaggle/working/signsage
 
-python research/training/train_sign_to_text.py   --pose-source remote   --csv /kaggle/input/signsage-subset6/subset6.csv   --data-mode stream   --cache-budget-gib 2.0   --epochs 8   --patience 2   --batch 32   --lr 1e-4   --decoder-input-dropout 0.2   --max-hours 4.0   --seed 1   --out /kaggle/working/s2t_small6   --stages all
+python research/training/train_sign_to_text.py   --pose-source remote   --csv /kaggle/input/signsage-subset6/subset6.csv   --data-mode stream   --epochs 8   --patience 2   --batch 32   --lr 1e-4   --decoder-input-dropout 0.2   --max-hours 4.0   --seed 1   --out /kaggle/working/s2t_small6   --stages all
 ```
 
 ### Verified Arguments (vs. parser at `train_sign_to_text.py:1517-1584`)
@@ -221,7 +193,6 @@ python research/training/train_sign_to_text.py   --pose-source remote   --csv /k
 |-----|-------|----------|
 | `--csv` | `/kaggle/input/signsage-subset6/subset6.csv` | ✅ |
 | `--data-mode` | `stream` | ✅ |
-| `--cache-budget-gib` | `2.0` | ✅ |
 | `--epochs` | `8` | ✅ |
 | `--patience` | `2` | ✅ |
 | `--batch` | `32` | ✅ |
@@ -504,7 +475,7 @@ Activity gate self-test passed (reason='insufficient_motion').
 |---------|-----------|-----|
 | `ModuleNotFoundError: pose_format` | Missing deps | Run pip install cell first |
 | `GITHUB_TOKEN missing` | Secret not set | Add under Add-ons → Secrets |
-| `Disk full` | Cache too large | Reduce `--cache-budget-gib` or clear `/kaggle/working` |
+| `Disk full` | Cache too large | Clear `/kaggle/working` only when appropriate and after confirming no needed artifacts will be lost. In stream mode, preparation is disabled, but training automatically uses a complete local pose cache if available; otherwise, it falls back to the configured pose source. |
 | `CUDA OOM` | Batch too large | Reduce `--batch` to 16 |
 | `Collapse gate fired` | Diversity < 5% | Experiment failed; inspect `COLLAPSED.txt` |
 | `Overfit gate failed` | <95% exact on 64 samples | Check reachability filtering; may need more data |
@@ -527,11 +498,7 @@ Activity gate self-test passed (reason='insufficient_motion').
 
 ## 11. Files Changed in This Runbook
 
-| File | Change |
-|------|--------|
-| `research/training/train_sign_to_text.py` | Line 88: `256,4,4,1024` → `128,4,2,512` (patched at runtime) |
-
-**No other files modified.** No commits, no pushes.
+**No files modified.** The training script uses the default architecture (256,4,4,1024). No commits, no pushes.
 
 ---
 
@@ -540,7 +507,7 @@ Activity gate self-test passed (reason='insufficient_motion').
 - [ ] `subset6.csv` built locally, 74 rows / 49 videos, 6 classes
 - [ ] `subset6.csv` uploaded to Kaggle, mount path known
 - [ ] Kaggle notebook: GPU T4 x2, secrets `GITHUB_TOKEN` + `HF_TOKEN` (both required: §5 uses `--pose-source remote`)
-- [ ] Repo cloned at pinned SHA, architecture patch applied and verified
+- [ ] Repo cloned at pinned SHA (no architecture patch needed)
 - [ ] Training command copy-pasted exactly (no trailing backslash spaces)
 - [ ] `--max-hours 4.0 --patience 2 --seed 1` confirmed
 - [ ] Artifact verification step planned after training
