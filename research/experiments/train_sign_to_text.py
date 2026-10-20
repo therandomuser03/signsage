@@ -1983,7 +1983,7 @@ def main(argv=None) -> int:
                 except (TypeError, ValueError):
                     proj = float("nan")
                 if (feas.get("verdict") == "FAIL" and not math.isfinite(proj)
-                        and args.data_mode == "cache" and missing == 0 and present):
+                        and missing == 0 and present):
                     # Cache-mode measure could not price prepare; now that the cache
                     # is complete the cost is sunk -- recompute instead of refusing.
                     log("feasibility was FAIL-unknown-prepare but the pose cache is "
