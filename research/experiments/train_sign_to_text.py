@@ -127,6 +127,21 @@ def log(msg: str) -> None:
     print(f"[s2t-v2 {datetime.now(timezone.utc):%H:%M:%S}] {msg}", flush=True)
 
 
+def _retry_after_delay(retry_after: str | None, attempt: int) -> float:
+    """Delay before retrying a transient remote server error.
+
+    Honors a Retry-After header (seconds) when present and valid; otherwise
+    uses bounded exponential backoff plus jitter so concurrent workers do not
+    hammer the server in lockstep. Never exceeds the per-attempt timeout budget.
+    """
+    if retry_after is not None:
+        try:
+            return max(0.0, float(retry_after.strip()))
+        except ValueError:
+            pass
+    return 1.5 * (2 ** attempt) + random.random()
+
+
 class PhaseTimer:
     """Tiny perf probe: split data-wait vs compute vs misc; periodic logs only."""
 
@@ -307,6 +322,14 @@ class RemoteConcatFile(io.RawIOBase):
                     r = self.session.get(self.urls[part_idx], headers={"Range": f"bytes={chunk_start}-{chunk_end}"},
                                          timeout=(20, 180), allow_redirects=True)
                 if r.status_code != 206:
+                    if 500 <= r.status_code < 600 and attempt < 4:
+                        # Transient server error (e.g. HTTP 503): bounded retry with
+                        # backoff, honoring Retry-After when the server supplies it.
+                        delay = _retry_after_delay(r.headers.get("Retry-After"), attempt)
+                        last = RuntimeError(f"range request failed: HTTP {r.status_code}")
+                        self.resolved.pop(part_idx, None)
+                        time.sleep(delay)
+                        continue
                     raise RuntimeError(f"range request failed: HTTP {r.status_code}")
                 m = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", r.headers.get("Content-Range", "").strip())
                 if not m:
@@ -1756,6 +1779,16 @@ def main(argv=None) -> int:
                                    budget_gib=args.cache_budget_gib,
                                    jobs=args.jobs,
                                    source_factory=lambda: _open_pose_store(*store_spec))
+            # Fail closed: preparation is only complete when every required
+            # pilot UID is actually present in the cache. Never claim prepare
+            # complete on partial coverage; the partial cache is kept and the
+            # cell can be re-run to resume.
+            _prep_present, _prep_missing = cache_coverage(pose_cache_dir, need_uids)
+            if _prep_missing != 0:
+                raise SystemExit(
+                    f"pose cache incomplete after prepare: {_prep_missing:,}/{len(need_uids):,} "
+                    f"samples not cached; partial cache kept, re-run the prepare cell to resume."
+                )
             log(f"prepare: materialization took {(time.perf_counter() - t_prep) / 60:.1f} min")
         elif "prepare" in stages:
             log("prepare: skipped (data-mode=stream; nothing to materialize)")
