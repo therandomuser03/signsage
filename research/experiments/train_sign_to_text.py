@@ -123,6 +123,41 @@ TOKEN_CACHE_NAME = "tokens.npz"
 TOKEN_CACHE_META = "tokens_meta.json"
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict:
+    """object_pairs_hook that rejects JSON objects containing duplicate keys.
+
+    Used when loading the pose-cache manifest so duplicate UID keys can never
+    be silently overwritten by stdlib json (which keeps the last value).
+    """
+    result: dict = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key!r}")
+        result[key] = value
+    return result
+
+
+def load_strict_manifest(path: str | Path) -> dict:
+    """Load a pose-cache manifest JSON, rejecting duplicate keys.
+
+    Fails closed: duplicate object keys raise ValueError instead of being
+    collapsed to the last value by stdlib json.
+    """
+    return json.loads(Path(path).read_text(), object_pairs_hook=_reject_duplicate_json_keys)
+
+
+def check_cache_identity(uid_to_shard: dict, expected_ids: set[str]) -> tuple[list[str], list[str]]:
+    """Compare cached identities against expected pilot identities.
+
+    Returns (missing, extra) sorted lists of identities. Both empty == exact
+    set equality (no expected sample missing, no unexpected sample present).
+    """
+    manifest_ids = set(uid_to_shard.keys())
+    missing = sorted(expected_ids - manifest_ids)
+    extra = sorted(manifest_ids - expected_ids)
+    return missing, extra
+
+
 def log(msg: str) -> None:
     print(f"[s2t-v2 {datetime.now(timezone.utc):%H:%M:%S}] {msg}", flush=True)
 
@@ -401,7 +436,7 @@ class ShardPoseSource(PoseSource):
         from collections import OrderedDict
 
         self.cache_dir = Path(cache_dir)
-        self.manifest = json.loads((self.cache_dir / POSE_CACHE_MANIFEST).read_text())
+        self.manifest = load_strict_manifest(self.cache_dir / POSE_CACHE_MANIFEST)
         if self.manifest.get("version") != POSE_CACHE_VERSION:
             raise RuntimeError(f"pose cache version {self.manifest.get('version')} != {POSE_CACHE_VERSION}")
         self.index: dict = self.manifest["uid_to_shard"]
@@ -432,7 +467,7 @@ def cache_coverage(cache_dir: Path, uids: list[str]) -> tuple[int, int]:
     if not manifest_path.is_file():
         return 0, len(uids)
     try:
-        manifest = json.loads(manifest_path.read_text())
+        manifest = load_strict_manifest(manifest_path)
     except (OSError, ValueError):
         return 0, len(uids)
     ver = manifest.get("version")
