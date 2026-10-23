@@ -22,7 +22,10 @@ def _load_notebook():
 
 
 def _cell8_source(nb):
-    return "".join(nb["cells"][8]["source"])
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _notebook_cells import cell_source_by_role
+    return cell_source_by_role(nb, "measure")
 
 
 def _find_outer_else_idx(lines):

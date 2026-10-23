@@ -18,6 +18,8 @@ selected one.
 """
 
 import json
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 import math
 import os
 import tempfile
@@ -32,10 +34,8 @@ def _load_notebook():
 
 
 def _cell_source(nb, idx):
-    cell = nb["cells"][idx]
-    if cell["cell_type"] != "code":
-        raise AssertionError(f"Cell {idx} is not a code cell")
-    return "".join(cell["source"])
+    from _notebook_cells import legacy_cell_source
+    return legacy_cell_source(nb, idx)
 
 
 def test_cell8_writes_auto_subset_to_s2t_small6_with_subset_key():

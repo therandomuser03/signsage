@@ -39,11 +39,15 @@ class TranscriptionResult:
 
 
 class SignToTextAdapter:
-    def __init__(self, model: SignTransformer, tokenizer, contract: DeploymentContract, device: torch.device):
+    def __init__(self, model: SignTransformer, tokenizer, contract: DeploymentContract, device: torch.device,
+                 training_scope: str = "unknown"):
         self.model = model
         self.tokenizer = tokenizer
         self.contract = contract
         self.device = device
+        # "full_dataset" | "pilot_subset" | "smoke_synthetic" | "unknown" (bundles that predate the key).
+        # Recorded by the training script in the checkpoint's model_config; never inferred here.
+        self.training_scope = training_scope
 
     def transcribe(self, landmarks_xyz, min_motion: float = 0.002, min_confidence: float = 0.0) -> TranscriptionResult:
         """landmarks_xyz: raw (T, 543, 3) array from MediaPipe Holistic, in the
@@ -160,4 +164,9 @@ class SignToTextAdapter:
             if fingerprint.hexdigest()[:16] != expected_fingerprint:
                 raise ModelLoadError("Checkpoint tokenizer fingerprint does not match tokenizer artifact.")
 
-        return cls(model=model, tokenizer=sp, contract=contract, device=torch_device)
+        scope = str(mc.get("training_scope") or "unknown")
+        if mc.get("is_smoke"):
+            scope = "smoke_synthetic"
+        elif mc.get("is_pilot") and scope in ("unknown", "full_dataset"):
+            scope = "pilot_subset"
+        return cls(model=model, tokenizer=sp, contract=contract, device=torch_device, training_scope=scope)

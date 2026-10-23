@@ -162,6 +162,31 @@ def log(msg: str) -> None:
     print(f"[s2t-v2 {datetime.now(timezone.utc):%H:%M:%S}] {msg}", flush=True)
 
 
+HTTP_RETRY_ATTEMPTS = 5      # bounded: total attempts for one transient remote failure
+RETRY_AFTER_CAP_S = 60.0     # never sleep longer than this on a server-supplied Retry-After
+
+
+class RemoteTransportError(ConnectionError):
+    """Remote pose access still failing after bounded retries (transport reset / 5xx).
+
+    A subclass of ConnectionError so existing handlers keep working. It signals a DATA-ACCESS
+    failure: never a model-quality verdict, and never a reason to switch to another cache."""
+
+
+def _atomic_torch_save(obj, path) -> None:
+    """torch.save to `path` atomically (tmp file + fsync + os.replace).
+
+    A Kaggle session killed mid-write leaves the previous good file intact instead of a
+    truncated checkpoint that would break --resume and lose all progress."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "wb") as fh:
+        torch.save(obj, fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
 def _retry_after_delay(retry_after: str | None, attempt: int) -> float:
     """Delay before retrying a transient remote server error.
 
@@ -171,7 +196,7 @@ def _retry_after_delay(retry_after: str | None, attempt: int) -> float:
     """
     if retry_after is not None:
         try:
-            return max(0.0, float(retry_after.strip()))
+            return min(RETRY_AFTER_CAP_S, max(0.0, float(retry_after.strip())))
         except ValueError:
             pass
     return 1.5 * (2 ** attempt) + random.random()
@@ -296,9 +321,32 @@ class RemoteConcatFile(io.RawIOBase):
         self.resolved: dict = {}  # part idx -> post-redirect CDN URL (re-resolved on expiry)
 
     def _probe(self, url: str, token: str) -> int:
-        r = self._requests.get(url, headers={"Authorization": f"Bearer {token}", "Range": "bytes=0-0",
-                                             "User-Agent": "SignSage-v2/1.0"},
-                               timeout=(20, 60), allow_redirects=True)
+        """Size probe (GET bytes=0-0) with BOUNDED retries on transient failures.
+
+        Runs when a store is opened -- including inside every DataLoader worker that re-opens
+        it -- so one connection reset here must not kill the run. Retried: timeouts, connection
+        errors, chunked-encoding errors and HTTP 5xx. NOT retried: 401/403 and any other status
+        (those are configuration errors). Exhaustion raises RemoteTransportError."""
+        headers = {"Authorization": f"Bearer {token}", "Range": "bytes=0-0", "User-Agent": "SignSage-v2/1.0"}
+        last = None
+        for attempt in range(HTTP_RETRY_ATTEMPTS):
+            retry_after = None
+            try:
+                r = self._requests.get(url, headers=headers, timeout=(20, 60), allow_redirects=True)
+            except (self._requests.exceptions.Timeout, self._requests.exceptions.ConnectionError,
+                    self._requests.exceptions.ChunkedEncodingError) as exc:
+                last = exc
+            else:
+                if not 500 <= r.status_code < 600:
+                    break
+                last = RuntimeError(f"probe failed: HTTP {r.status_code}")
+                retry_after = r.headers.get("Retry-After")
+            if attempt < HTTP_RETRY_ATTEMPTS - 1:
+                time.sleep(_retry_after_delay(retry_after, attempt))
+        else:
+            raise RemoteTransportError(
+                f"remote size probe failed after {HTTP_RETRY_ATTEMPTS} attempts "
+                f"({type(last).__name__}); data-access failure, not a model verdict") from last
         if r.status_code in (401, 403):
             raise PermissionError(
                 f"Hugging Face dataset access denied (HTTP {r.status_code}) for Exploration-Lab/iSign. "
@@ -390,7 +438,7 @@ class RemoteConcatFile(io.RawIOBase):
                 last = exc
                 self.resolved.pop(part_idx, None)
                 time.sleep(1.5 * 2 ** attempt)
-        raise ConnectionError(f"range fetch failed after retries: {key}") from last
+        raise RemoteTransportError(f"range fetch failed after retries: {key}") from last
 
     def read(self, n=-1):
         if self.pos >= self.total_size:
@@ -500,6 +548,20 @@ def _write_manifest(cache_dir: Path, uid_to_shard: dict, complete: bool) -> None
     tmp.write_text(json.dumps({"version": POSE_CACHE_VERSION, "uid_to_shard": uid_to_shard,
                                "complete": complete, "n": len(uid_to_shard)}))
     os.replace(tmp, cache_dir / POSE_CACHE_MANIFEST)
+
+
+def require_local_cache(data_mode: str, stages: set, present: int, missing: int, total: int) -> None:
+    """Fail closed: in --data-mode cache, model stages must read a COMPLETE local pose cache.
+
+    Without this, an incomplete or mismatched cache (e.g. prepare ran with another --seed/--subset)
+    silently falls back to remote streaming -- slow, fragile, and not what was requested."""
+    if data_mode == "cache" and missing and stages & {"overfit", "train", "evaluate", "export"}:
+        raise SystemExit(
+            f"LOCAL POSE CACHE INCOMPLETE: {present:,}/{total:,} cached ({missing:,} missing) in "
+            f"--data-mode cache. Refusing to silently stream the rest remotely. Most likely prepare "
+            f"ran with a different --seed/--subset than this run (the seed picks the pilot subset), "
+            f"or prepare was interrupted/budget-refused. Re-run prepare with IDENTICAL "
+            f"--seed/--subset, or choose --data-mode stream explicitly.")
 
 
 def materialize_pose_cache(uids: list[str], remote: PoseSource, cache_dir: Path,
@@ -1495,6 +1557,7 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
     (bundle / "checkpoint").mkdir(parents=True, exist_ok=True)
     (bundle / "tokenizer").mkdir(parents=True, exist_ok=True)
     is_pilot = bool(train_cfg.get("is_pilot", False))
+    is_smoke = bool(train_cfg.get("is_smoke", False))
     mc = {
         "input_dim": MODEL_INPUT_DIM, "raw_feature_dim": LANDMARK_DIM,
         "vocab_size": sp.get_piece_size(),
@@ -1507,9 +1570,13 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
         mc["subset"] = train_cfg.get("subset")
         mc["subset_seed"] = train_cfg.get("subset_seed")
         mc["note"] = "PILOT / PIPELINE VALIDATION ONLY -- NOT FOR PRODUCTION"
-    torch.save({"state_dict": model.state_dict(), "model_config": mc,
-                "vocab": {sp.id_to_piece(i): i for i in range(sp.get_piece_size())}},
-               bundle / "checkpoint" / "signsage_transformer_full.pt")
+    mc["training_scope"] = (train_cfg.get("data_counts") or {}).get("scope", "unknown")
+    if is_smoke:
+        mc["is_smoke"] = True
+        mc["note"] = "SMOKE TEST ON SYNTHETIC DATA -- NOT A TRAINED MODEL"
+    _atomic_torch_save({"state_dict": model.state_dict(), "model_config": mc,
+                        "vocab": {sp.id_to_piece(i): i for i in range(sp.get_piece_size())}},
+                       bundle / "checkpoint" / "signsage_transformer_full.pt")
     shutil.copy(sp_train_artifacts["model"], bundle / "tokenizer" / "signsage_en_sp.model")
     if contract_src and contract_src.is_file():
         shutil.copy(contract_src, bundle / "landmark_contract.json")
@@ -1551,7 +1618,9 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
         "metrics": eval_report.get("test_metrics", {}),
         "diversity": eval_report.get("diversity", {}),
         "gate": eval_report.get("gate", {}),
-        "status": ("PILOT / PIPELINE VALIDATION ONLY -- NOT FOR PRODUCTION"
+        "status": ("SMOKE TEST ON SYNTHETIC DATA -- NOT A TRAINED MODEL"
+                   if train_cfg.get("is_smoke") else
+                   "PILOT / PIPELINE VALIDATION ONLY -- NOT FOR PRODUCTION"
                    if train_cfg.get("is_pilot") else
                    "unpromoted — set SIGNSAGE_MODEL_PROMOTED=true only after the quality gate passes"),
     }
@@ -1672,6 +1741,9 @@ def main(argv=None) -> int:
         df_tr = pd.DataFrame({"uid": [f"smoke-{i}" for i in range(8)], "text": vocab_texts})
         df_va = df_tr.iloc[:4].reset_index(drop=True)
         df_te = df_tr.iloc[:4].reset_index(drop=True)
+        _rows_available = {"train": len(df_tr), "val": len(df_va), "test": len(df_te)}
+        _usable_rows = None
+        _scope = "smoke_synthetic"
         store = None
         store_spec = None
     else:
@@ -1685,6 +1757,9 @@ def main(argv=None) -> int:
             raise SystemExit("duplicate UIDs after cleaning -- refusing.")
         df_tr_all, df_va_all, df_te_all, split = video_split(cleaned, args.seed)
         df_tr, df_va, df_te = df_tr_all, df_va_all, df_te_all
+        _rows_available = {"train": len(df_tr_all), "val": len(df_va_all), "test": len(df_te_all)}
+        _usable_rows = int(cleaning["usable_rows"])
+        _scope = "pilot_subset" if (args.subset and args.subset > 0) else "full_dataset"
         if args.subset and args.subset > 0:
             df_tr, df_va, df_te = apply_subset(df_tr, df_va, df_te, args.subset, args.seed)
         log(f"data: {cleaning['usable_rows']:,} usable; "
@@ -1830,6 +1905,7 @@ def main(argv=None) -> int:
         present, missing = cache_coverage(pose_cache_dir, need_uids)
         log(f"pose cache: {present:,}/{len(need_uids):,} samples cached "
             f"(tensor equivalent ~{estimate_processed_cache_gib(len(need_uids)):.1f} GiB fp32 NOT written)")
+        require_local_cache(args.data_mode, stages, present, missing, len(need_uids))
         if missing == 0 and present:
             store_spec = ("shards", str(pose_cache_dir))
             store = _open_pose_store(*store_spec)
@@ -2011,7 +2087,11 @@ def main(argv=None) -> int:
                         "hyp_unconstrained_eos_pos": _eos_pos(uid_, sp.eos_id()),
                         "ref_has_unk": sp.unk_id() in rid,
                     })
-            _gate_report = {"threshold": 0.95, "passed": exact >= 0.95,
+            _gate_report = {"threshold": 0.95, "passed": exact >= 0.95 and _gate_error is None,
+                            "status": ("interrupted" if _gate_error
+                                       else ("passed" if exact >= 0.95 else "failed")),
+                            "quality_verdict": (None if _gate_error else bool(exact >= 0.95)),
+                            "pose_source": (store_spec[0] if store_spec else "synthetic"),
                             "seed": args.seed, "gate_uids": gate_uids,
                             "n_gate": len(gate_uids),
                             "n_excluded_unreachable": len(gate_excluded),
@@ -2094,7 +2174,14 @@ def main(argv=None) -> int:
         start_epoch, best, bad = 1, float("inf"), 0
         rec_path = out / "checkpoints" / "signsage_transformer_recovery.pt"
         if args.resume and rec_path.exists():
-            rec = torch.load(rec_path, map_location=device, weights_only=False)
+            try:
+                rec = torch.load(rec_path, map_location=device, weights_only=False)
+            except Exception as exc:  # noqa: BLE001 -- surface an actionable message, not a raw traceback
+                raise SystemExit(
+                    f"recovery checkpoint {rec_path} is unreadable ({type(exc).__name__}: {exc}). "
+                    f"It was probably truncated by a killed session. The best checkpoint "
+                    f"({out / 'checkpoints' / 'signsage_transformer_full.pt'}) is untouched. Move the "
+                    f"recovery file aside and re-run, or restore the last saved output version.") from exc
             model.load_state_dict(rec["state_dict"])
             opt.load_state_dict(rec["optimizer_state_dict"])
             if rec.get("scheduler_state_dict"):
@@ -2190,10 +2277,10 @@ def main(argv=None) -> int:
                                "cuda": (torch.cuda.get_rng_state_all()
                                         if torch.cuda.is_available() else None)}}
             t_ckpt = time.perf_counter()
-            torch.save(payload, rec_path)
+            _atomic_torch_save(payload, rec_path)
             log(f"  recovery checkpoint saved ({time.perf_counter() - t_ckpt:.1f}s)")
             if improved:
-                torch.save(payload, best_path)
+                _atomic_torch_save(payload, best_path)
                 log(f"  new best (val {best:.4f})")
             elif should_stop:
                 log("early stopping: val loss stopped improving.")
@@ -2214,7 +2301,8 @@ def main(argv=None) -> int:
             return 0
 
     # ---- evaluate ----
-    eval_report: dict = {"history": history}
+    eval_report: dict = {"history": history, "scope": _scope,
+                         "rows_evaluated": {"test": len(df_te)}, "rows_available": _rows_available}
     if "evaluate" in stages:
         model = build_model()
         model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
@@ -2242,13 +2330,18 @@ def main(argv=None) -> int:
     if "export" in stages:
         model = build_model()
         model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
-        is_pilot = args.subset and args.subset > 0
+        is_pilot = bool(args.subset and args.subset > 0)
         train_cfg = {"architecture": {"d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS,
                                       "ff": FF, "dropout": DROPOUT, "norm_first": NORM_FIRST},
                      "label_smoothing": LABEL_SMOOTHING, "peak_lr": args.lr,
                      "batch": args.batch, "seed": args.seed, "history": history,
                      "decoder_input_dropout": args.decoder_input_dropout,
-                     "is_pilot": is_pilot}
+                     "is_pilot": is_pilot, "is_smoke": bool(args.smoke),
+                     "data_counts": {"scope": _scope, "usable_rows": _usable_rows,
+                                     "rows_available": _rows_available,
+                                     "rows_used": {"train": len(df_tr), "val": len(df_va),
+                                                   "test": len(df_te)},
+                                     "seed": args.seed, "data_mode": args.data_mode}}
         if is_pilot:
             train_cfg["subset"] = args.subset
             train_cfg["subset_seed"] = args.seed

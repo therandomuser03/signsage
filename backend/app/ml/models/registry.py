@@ -51,12 +51,20 @@ def get_sign_to_text_pipeline(settings: Optional[Settings] = None, allow_unpromo
             try:
                 bundle_dir = resolve_bundle_dir(settings)
                 logger.info("Loading Sign->Text pipeline from %s", bundle_dir)
-                _pipeline = SignToTextAdapter.load(bundle_dir, device=settings.device)
+                adapter = SignToTextAdapter.load(bundle_dir, device=settings.device)
             except (
                 ModelBundleNotConfiguredError, ModelBundleNotFoundError, ModelLoadError,
                 LandmarkContractError, ModelContractError, InferenceContractError,
             ) as exc:
                 raise ModelUnavailableError(f"Sign->Text model could not be loaded: {exc}") from exc
+            if not allow_unpromoted and adapter.training_scope in ("pilot_subset", "smoke_synthetic"):
+                # A pilot-subset or synthetic-smoke bundle is pipeline validation only. Setting
+                # SIGNSAGE_MODEL_PROMOTED=true must not be able to put one in front of users.
+                raise ModelNotPromotedError(
+                    f"The configured bundle was trained with scope={adapter.training_scope!r} "
+                    f"(pipeline validation only) and cannot be served as a promoted model. Train a "
+                    f"full-dataset model, or use SIGNSAGE_ALLOW_UNPROMOTED_DEV=true on a dev machine.")
+            _pipeline = adapter
         return _pipeline
 
 

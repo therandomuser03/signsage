@@ -1,3 +1,10 @@
+> **SUPERSEDED for the current pilot flow — read `research/training/TRAINING_AND_INFERENCE.md` instead.**
+> This runbook describes the earlier *subset6* experiment. Its values (`--seed 1`, `--data-mode stream`,
+> `--stages all`, the `PINNED_SHA` below) are **not** what `research/notebooks/signsage_kaggle.ipynb` uses now:
+> the seed picks both the video split and the pilot subset, so training with a seed different from prepare's
+> caused the 21-Oct run to find only ~471/7,500 samples cached and stream the rest. The notebook now uses
+> seed 42 everywhere, cache mode, `--stages tokenizer,overfit,train`, and pins the training script by content hash.
+
 # SignSage — Kaggle `small6` Experiment Runbook
 
 **Status:** Ready to run. Preflight verified. No training launched.

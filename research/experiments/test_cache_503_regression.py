@@ -184,7 +184,9 @@ def _cell_11_source():
     import json as _json
     with NOTEBOOK.open() as f:
         nb = _json.load(f)
-    return "".join(nb["cells"][11]["source"])
+    sys.path.insert(0, "research/experiments")
+    from _notebook_cells import cell_source_by_role
+    return cell_source_by_role(nb, "training")
 
 
 def test_cell_11_has_infrastructure_classification():

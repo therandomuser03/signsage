@@ -9,6 +9,8 @@ Tests that:
 """
 
 import json
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 import tempfile
 from pathlib import Path
 
@@ -21,10 +23,8 @@ def _load_notebook():
 
 
 def _cell_source(nb, idx):
-    cell = nb["cells"][idx]
-    if cell["cell_type"] != "code":
-        raise AssertionError(f"Cell {idx} is not a code cell")
-    return "".join(cell["source"])
+    from _notebook_cells import legacy_cell_source
+    return legacy_cell_source(nb, idx)
 
 
 def _restore_cell_source(nb):
@@ -194,7 +194,7 @@ def test_training_cell_no_resume_or_force():
     nb = _load_notebook()
     src = _cell_source(nb, 11)  # training cell
 
-    assert '--resume" not in cmd' in src, (
+    assert '("--resume" in cmd) == RESUME_TRAINING' in src and 'RESUME_TRAINING = False' in src, (
         "Training cell must assert --resume not in cmd"
     )
     assert '--force" not in cmd' in src, (

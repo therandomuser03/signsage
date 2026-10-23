@@ -14,6 +14,8 @@ These tests verify the SAFE behavior AFTER the fix:
 """
 
 import json
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 from pathlib import Path
 
 NOTEBOOK = Path(__file__).resolve().parent.parent / "notebooks" / "signsage_kaggle.ipynb"
@@ -25,10 +27,8 @@ def _load_notebook():
 
 
 def _cell_source(nb, idx):
-    cell = nb["cells"][idx]
-    if cell["cell_type"] != "code":
-        raise AssertionError(f"Cell {idx} is not a code cell")
-    return "".join(cell["source"])
+    from _notebook_cells import legacy_cell_source
+    return legacy_cell_source(nb, idx)
 
 
 def _restore_cell_source(nb):
@@ -325,16 +325,25 @@ def test_training_cell_matches_runbook_small6():
     )
 
     # Command flags
-    assert '--data-mode", "stream"' in src, "Cell 11 must use --data-mode stream"
-    assert '--stages", "all"' in src, "Cell 11 must use --stages all"
+    # Post-21-Oct design: pilot cache is complete before training, so training reads the LOCAL cache
+    # (never --data-mode stream) and runs only tokenizer,overfit,train; evaluate/export have their own cell
+    # (running them here too decoded the test split twice).
+    assert '--data-mode", "cache"' in src, "training cell must use --data-mode cache"
+    assert '--data-mode", "stream"' not in src, "training cell must not stream remotely"
+    assert '--stages", "tokenizer,overfit,train"' in src, "training cell must run tokenizer,overfit,train only"
+    assert '--stages", "all"' not in src, "--stages all would repeat prepare/evaluate/export"
     assert '--batch", "32"' in src, "Cell 11 must use --batch 32"
     assert '--patience", "2"' in src, "Cell 11 must use --patience 2"
     assert '--cache-budget-gib", "10"' in src, "Cell 11 must use --cache-budget-gib 10"
-    assert '--seed", "1"' in src, "Cell 11 must use --seed 1"
+    # seed 42 everywhere: the seed picks BOTH the video split and the pilot subset, so a different seed
+    # than prepare used made the 21-Oct run read ~471/7,500 cached samples and stream the rest.
+    assert '--seed", "42"' in src, "training cell must use --seed 42"
+    assert '--seed", "1"' not in src, "seed 1 reintroduces the 21-Oct split/subset mismatch"
     assert '"/kaggle/working/s2t_small6"' in src, "Cell 11 must output to s2t_small6"
 
     # No resume/force for fresh run
-    assert '--resume" not in cmd' in src, "Cell 11 must forbid --resume (fresh run)"
+    assert 'RESUME_TRAINING = False' in src, "default must be a fresh start"
+    assert '("--resume" in cmd) == RESUME_TRAINING' in src, "--resume only via RESUME_TRAINING"
     assert '--force" not in cmd' in src, "Cell 11 must forbid --force (fresh run)"
 
     # _used_flags includes new flags
@@ -370,8 +379,8 @@ def test_fresh_run_safeguards():
     src11 = _cell_source(nb, 11)
 
     # Training cell forbids --resume and --force
-    assert '--resume" not in cmd' in src11, (
-        "Training cell must forbid --resume for fresh run"
+    assert '("--resume" in cmd) == RESUME_TRAINING' in src11 and 'RESUME_TRAINING = False' in src11, (
+        "Training cell must default to a fresh run and allow --resume only via RESUME_TRAINING"
     )
     assert '--force" not in cmd' in src11, (
         "Training cell must forbid --force for fresh run"

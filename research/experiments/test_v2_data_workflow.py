@@ -481,13 +481,13 @@ def test_notebook_restore_slug_strictness_live() -> None:
                                   if title.startswith("# SESSION RESTORE"))]
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
-        fake_in, fake_out = td / "input", td / "working" / "s2t_v2"
+        fake_in, fake_out = td / "input", td / "working" / "s2t_small6"
         for slug in ("slugA", "slugB"):
-            d = fake_in / slug / "s2t_v2" / "tokenizer"
+            d = fake_in / slug / "s2t_small6" / "tokenizer"
             d.mkdir(parents=True)
             (d / "x").write_text("x")
         code = restore_source.replace("/kaggle/input", str(fake_in)).replace(
-            "/kaggle/working/s2t_v2", str(fake_out)).replace(
+            "/kaggle/working/s2t_small6", str(fake_out)).replace(
             "/kaggle/working/signsage", str(td / "nosuchrepo"))
         old = _os.environ.get("PRIOR_OUTPUT_SLUG")
         try:
@@ -501,7 +501,7 @@ def test_notebook_restore_slug_strictness_live() -> None:
             _os.environ["PRIOR_OUTPUT_SLUG"] = "slugA"
             g = {"__name__": "__t2__"}
             exec(compile(code, "<restore-exact>", "exec"), g)
-            assert g["restored"] == str(fake_in / "slugA" / "s2t_v2"), g["restored"]
+            assert g["restored"] == str(fake_in / "slugA" / "s2t_small6"), g["restored"]
             assert (fake_out / "tokenizer").is_dir()
         finally:
             if old is None:
@@ -738,10 +738,9 @@ def test_notebook_diagnostic_run_flags() -> None:
               for source in sources]
     train_source = sources[next(i for i, title in enumerate(titles)
                                 if title.startswith("# V2 TRAINING"))]
-    assert "DIAGNOSTIC" in train_source
     assert '"--lr"' in train_source and '"1e-4"' in train_source
-    assert 'EPOCHS = 2' in train_source
-    assert 'assert "--resume" not in cmd' in train_source
+    assert 'EPOCHS = 8' in train_source  # temporary 2-epoch diagnostic was reverted to the runbook value
+    assert '("--resume" in cmd) == RESUME_TRAINING' in train_source and 'RESUME_TRAINING = False' in train_source
     print("PASS notebook diagnostic run flags (2 epochs, LR 1e-4, fresh start)")
 
 
