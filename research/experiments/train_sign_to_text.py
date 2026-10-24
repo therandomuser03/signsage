@@ -6,8 +6,8 @@ pose-sequence -> English translation on iSign v1.1. It reuses the backend's
  OWN model, preprocessing, and masks (single canonical implementation), keeps
 every training mechanic the 352868924 audit verified as correct
 (shift / masks / ignore_index / video-level split / tokenizer procedure),
-and changes only what the root-cause analysis justified (see
-research/training/READINESS.md): pre-norm, larger capacity, label smoothing,
+and uses the configuration described in research/training/READINESS.md:
+pre-norm, larger capacity, label smoothing,
 longer schedule, per-epoch diversity collapse gate, hard overfit gate.
 
 Stages (select with --stages subset, default all):
@@ -21,7 +21,9 @@ Stages (select with --stages subset, default all):
 Resumable: a per-epoch recovery snapshot (<out>/checkpoints/
 signsage_transformer_recovery.pt holds model + optimizer + scheduler +
 epoch/best/bad/history + RNG states) plus the best checkpoint are written
-every epoch; re-run with --resume to continue. Never overwrites run 352868924.
+after accepted epochs; re-run with --resume to continue. Epoch 1 is provisional:
+the diversity guard is enforced from epoch 2, not proof of model quality.
+Never overwrites run 352868924.
 
 Multi-session (Kaggle): the prepare stage materializes a resumable local
 pose cache (<out>/pose_cache) once; later sessions reuse it plus the token
@@ -32,8 +34,8 @@ and re-attach it as an input dataset next session (see signsage_kaggle.ipynb).
 EXPOSURE-BIAS MITIGATION (added after the 2-epoch diagnostic collapsed):
     --decoder-input-dropout P replaces each non-BOS decoder input token with a
     random vocab id (in [4, vocab_size)) with probability P during training.
-    This forces the decoder to recover from perturbed prefixes and suppresses
-    the repeated-token collapse observed at inference. Default 0.0 preserves
+    This is an experimental prefix-perturbation control, not a demonstrated
+    fix for autoregressive collapse. Default 0.0 preserves
     the original behavior. Gate and validation paths are unaffected.
 """
 from __future__ import annotations
@@ -84,7 +86,7 @@ LANDMARK_DIM = TOTAL_LANDMARKS * COORDINATES_PER_LANDMARK  # 1629
 MODEL_INPUT_DIM = LANDMARK_DIM * 2  # model concatenates frame deltas
 FULL_FEATURE_MASK = list(range(LANDMARK_DIM))
 
-# v2 model capacity (root-cause fix: 352868924's d192x3L underfit 100k pairs).
+# v2 model capacity; effectiveness requires held-out validation.
 D_MODEL, NHEAD, NLAYERS, FF = 256, 4, 4, 1024
 DROPOUT = 0.15
 NORM_FIRST = True  # pre-norm: stable from step 0 on short budgets
@@ -886,6 +888,60 @@ def update_best_state(best: float, bad: int, val_loss: float, patience: int,
     return best, new_bad, False, new_bad >= patience
 
 
+def check_checkpoint_not_collapsed(payload: dict, path) -> None:
+    """Reject explicit collapse evidence, including older pre-flag checkpoint history.
+
+    An unchecked epoch (notably epoch 1) remains loadable, not certified healthy.
+    Only the saved epoch matters; a directory marker may describe a later failure.
+    """
+    epoch = payload.get("epoch", 0)
+    row = next((r for r in reversed(payload.get("history") or [])
+                if r.get("epoch") == epoch), {})
+    old_guard_failed = ("diversity_checked" not in row and epoch >= 2
+                        and row.get("unique_fraction", 1.0) < DIVERSITY_FLOOR)
+    if (payload.get("collapsed") or row.get("collapsed") or old_guard_failed
+            or (row.get("diversity_checked") and row.get("diversity_pass") is False)):
+        raise SystemExit(f"refusing explicitly collapsed checkpoint {path}; "
+                         "use a recovery/best checkpoint from an earlier accepted epoch")
+
+
+def init_token_embedding(model, mode: str) -> None:
+    """Initialize decoder embeddings for a bounded scale-control experiment.
+
+    `scaled` draws N(0, d_model**-0.5), with the padding row zero, to offset
+    decode's sqrt(d_model) multiplier. `legacy` leaves nn.Embedding's default
+    initialization intact. This changes initial scale, not proven collapse causality
+    or translation quality. Keys/shapes and the untied output head are unchanged.
+    Apply before loading any checkpoint so saved weights always take precedence.
+    """
+    if mode == "legacy":
+        return
+    if mode != "scaled":
+        raise ValueError(f"unknown embed init mode {mode!r}")
+    with torch.no_grad():
+        nn.init.normal_(model.tok_embed.weight, mean=0.0, std=model.tok_embed.embedding_dim ** -0.5)
+        if model.tok_embed.padding_idx is not None:
+            model.tok_embed.weight[model.tok_embed.padding_idx].zero_()
+
+
+def unigram_baseline_nll(train_ids, val_ids, vocab_size: int,
+                         add_k=(1.0, 0.3, 0.1, 0.03, 0.01)) -> float:
+    """Unsmoothed val NLL (nats/token) of the best add-k unigram model fit on train targets.
+
+    Beating this pose-independent reference is diagnostic, not proof of pose use or
+    translation quality. Inputs are token-id sequences WITH BOS/EOS; targets are
+    ids[1:] (same shift as collate_sign_text). Return the minimum over add_k."""
+    def targets(seqs):
+        return np.concatenate([np.asarray(s, dtype=np.int64)[1:] for s in seqs])
+    tr, va = targets(train_ids), targets(val_ids)
+    cnt = np.bincount(tr, minlength=vocab_size).astype(np.float64)
+    best = float("inf")
+    for k in add_k:
+        q = (cnt + k) / (cnt.sum() + k * vocab_size)
+        best = min(best, float(-np.log(q[va]).mean()))
+    return best
+
+
 # Throughput micro-benchmarks + quota feasibility gate (all bounded, all labeled).
 BENCH_TRAIN_STEPS = 20
 BENCH_DECODE_SAMPLES = 256
@@ -895,32 +951,39 @@ GATE_STEPS = 1200
 FEASIBILITY_REPORT = "feasibility.json"
 
 
-def benchmark_training_throughput(device, vocab_size: int, batch: int) -> dict:
-    """Real-config model, synthetic same-shape batch: pure compute rate."""
-    t0 = time.perf_counter()
-    model = SignTransformer(MODEL_INPUT_DIM, vocab_size, MAX_FRAMES, MAX_TOKENS,
-                            pad_idx=0, d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
-                            ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=PEAK_LR, weight_decay=WEIGHT_DECAY)
-    crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=LABEL_SMOOTHING)
-    frames = torch.randn(batch, MAX_FRAMES, LANDMARK_DIM, device=device)
-    lengths = torch.full((batch,), MAX_FRAMES, device=device, dtype=torch.long)
-    tin = torch.randint(4, vocab_size, (batch, 32), device=device)
-    tout = torch.randint(4, vocab_size, (batch, 32), device=device)
-    amp = torch.autocast(device_type="cuda", dtype=torch.float16) if device.type == "cuda" else nullcontext()
-    model.train()
-    for _ in range(BENCH_TRAIN_STEPS):
-        opt.zero_grad(set_to_none=True)
-        with amp:
-            loss = crit(model(frames, padding_mask(lengths, frames.size(1)), tin,
-                              causal_mask(tin.size(1), device)).reshape(-1, vocab_size),
-                        tout.reshape(-1))
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
-        opt.step()
-    dt = time.perf_counter() - t0
+def benchmark_training_throughput(device, vocab_size: int, batch: int,
+                                  embed_init: str = "scaled") -> dict:
+    """Temporary real-config model; preserve training RNG and run_epoch quality stats."""
+    devices = ([device.index if device.index is not None else torch.cuda.current_device()]
+               if device.type == "cuda" else [])
+    with torch.random.fork_rng(devices=devices):
+        t0 = time.perf_counter()
+        model = SignTransformer(MODEL_INPUT_DIM, vocab_size, MAX_FRAMES, MAX_TOKENS,
+                                pad_idx=0, d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
+                                ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST)
+        init_token_embedding(model, embed_init)
+        model = model.to(device)
+        opt = torch.optim.AdamW(model.parameters(), lr=PEAK_LR, weight_decay=WEIGHT_DECAY)
+        crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=LABEL_SMOOTHING)
+        frames = torch.randn(batch, MAX_FRAMES, LANDMARK_DIM, device=device)
+        lengths = torch.full((batch,), MAX_FRAMES, device=device, dtype=torch.long)
+        tin = torch.randint(4, vocab_size, (batch, 32), device=device)
+        tout = torch.randint(4, vocab_size, (batch, 32), device=device)
+        amp = torch.autocast(device_type="cuda", dtype=torch.float16) if device.type == "cuda" else nullcontext()
+        model.train()
+        for _ in range(BENCH_TRAIN_STEPS):
+            opt.zero_grad(set_to_none=True)
+            with amp:
+                loss = crit(model(frames, padding_mask(lengths, frames.size(1)), tin,
+                                  causal_mask(tin.size(1), device)).reshape(-1, vocab_size),
+                            tout.reshape(-1))
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+            opt.step()
+        dt = time.perf_counter() - t0
     return {"train_steps_per_sec": BENCH_TRAIN_STEPS / dt, "device": str(device),
-            "note": "synthetic batch, real config+shapes; excludes data loading"}
+            "embed_init": embed_init,
+            "note": "synthetic batch, temporary model; excludes data loading"}
 
 
 # Local-cache read rate for cache-mode feasibility. Measured 2026-10-08 on
@@ -1371,8 +1434,27 @@ def build_schedule(opt, total_steps: int):
     return torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
 
 
+class PoseRolledLoader:
+    """Eval-only within-batch pose-roll control; targets stay in their original order.
+
+    A positive NLL gap is evidence of pose sensitivity, not a quality verdict.
+    Singleton batches are unchanged, and duplicate poses can weaken the control.
+    """
+
+    def __init__(self, loader):
+        self.loader = loader
+
+    def __len__(self):
+        return len(self.loader)
+
+    def __iter__(self):
+        for frames, lengths, tin, tout in self.loader:
+            yield frames.roll(1, 0), lengths.roll(1, 0), tin, tout
+
+
 def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = True,
-              decoder_input_dropout: float = 0.0, vocab_size: int = 0) -> float:
+              decoder_input_dropout: float = 0.0, vocab_size: int = 0,
+              token_weighted: bool = False) -> float:
     """One pass over `loader`.
 
     decoder_input_dropout: probability of replacing a non-BOS decoder input
@@ -1380,9 +1462,17 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
     This is a token-level exposure-bias mitigation (a simple form of
     scheduled sampling). Position 0 (BOS) is never perturbed. Validation
     and gate calls leave it at 0.0 so metric semantics are unchanged.
+
+    token_weighted=True reports mean CE per non-ignored target token (including
+    EOS), for comparison with unigram NLL. It requires an unweighted mean CE.
+    Default False preserves the historical mean-of-batch-means loss reporting;
+    neither mode changes the loss used for backpropagation.
     """
+    if token_weighted and (not isinstance(crit, nn.CrossEntropyLoss)
+                           or crit.reduction != "mean" or crit.weight is not None):
+        raise ValueError("token_weighted requires unweighted mean CrossEntropyLoss")
     model.train(train)
-    total = 0.0
+    total, token_count = 0.0, 0
     ctx = torch.enable_grad() if train else torch.no_grad()
     amp = torch.autocast(device_type="cuda", dtype=torch.float16) if device.type == "cuda" else nullcontext()
     scaler = getattr(run_epoch, "_scaler", None)
@@ -1434,7 +1524,13 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
                 opt.zero_grad(set_to_none=True)
                 if scheduler is not None:
                     scheduler.step()
-            total += loss.item()
+            if token_weighted:
+                n_tokens = int(tout.ne(crit.ignore_index).sum().item())
+                if n_tokens:
+                    total += loss.item() * n_tokens
+                    token_count += n_tokens
+            else:
+                total += loss.item()
             timer.add_batch(t_comp0 - t_data0, time.perf_counter() - t_comp0)
     log(timer.summary())
     if train and gnorms:
@@ -1446,7 +1542,9 @@ def run_epoch(model, loader, opt, crit, device, scheduler=None, train: bool = Tr
             "grad_norm_max": float(max(gnorms)),
             "grad_clip_frac": float(sum(g > GRAD_CLIP for g in gnorms) / len(gnorms)),
             "param_norm": _pnorm}
-    return total / max(1, len(loader))
+    if token_weighted and not token_count:
+        raise ValueError("token-weighted NLL requires at least one non-ignored target")
+    return total / max(1, token_count if token_weighted else len(loader))
 
 
 @torch.no_grad()
@@ -1575,6 +1673,7 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
         mc["is_smoke"] = True
         mc["note"] = "SMOKE TEST ON SYNTHETIC DATA -- NOT A TRAINED MODEL"
     _atomic_torch_save({"state_dict": model.state_dict(), "model_config": mc,
+                        "initialization_config": train_cfg.get("initialization_config"),
                         "vocab": {sp.id_to_piece(i): i for i in range(sp.get_piece_size())}},
                        bundle / "checkpoint" / "signsage_transformer_full.pt")
     shutil.copy(sp_train_artifacts["model"], bundle / "tokenizer" / "signsage_en_sp.model")
@@ -1695,10 +1794,13 @@ def parse_args(argv=None):
     ap.add_argument("--decoder-input-dropout", type=float, default=0.0,
                     help="Token-level dropout on decoder inputs during training: with this "
                          "probability, each non-BOS decoder input token is replaced by a "
-                         "uniform random vocab id in [4, vocab_size). Reduces exposure bias "
-                         "in autoregressive decoding; suppressed the repeated-token collapse "
-                         "observed in the 2-epoch diagnostic. 0.0 disables (original behavior). "
+                         "uniform random vocab id in [4, vocab_size). Experimental prefix "
+                         "perturbation, not a proven collapse fix. 0.0 disables (original behavior). "
                          "Validation and gate paths are unaffected.")
+    ap.add_argument("--embed-init", choices=("scaled", "legacy"), default="scaled",
+                    help="decoder token-embedding init. scaled (default): N(0, d_model**-0.5), matching "
+                         "the model's *sqrt(d_model) scaling. legacy: nn.Embedding default N(0,1) "
+                         "(for initialization-scale A/B comparisons).")
     ap.add_argument("--max-hours", type=float, default=8.0, help="graceful stop budget")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--preflight-only", action="store_true",
@@ -1820,7 +1922,8 @@ def main(argv=None) -> int:
             tok_h = (time.perf_counter() - t_tok) / 3600
             log(f"measure: tokenizer ready in {tok_h * 3600:.0f}s (reused by later stages)")
             # Compute benches on the real config/shapes (random weights noted).
-            bench = benchmark_training_throughput(device, sp_m.get_piece_size(), args.batch)
+            bench = benchmark_training_throughput(device, sp_m.get_piece_size(), args.batch,
+                                                               embed_init=args.embed_init)
             t_ckpt = time.perf_counter()
             tmp_ckpt = out / "bench_ckpt.pt"
             torch.save({"probe": torch.randn(16)}, tmp_ckpt)
@@ -1839,7 +1942,9 @@ def main(argv=None) -> int:
             bmodel = SignTransformer(MODEL_INPUT_DIM, sp_m.get_piece_size(), MAX_FRAMES, MAX_TOKENS,
                                      pad_idx=sp_m.pad_id(), d_model=D_MODEL, nhead=NHEAD,
                                      layers=NLAYERS, ff=FF, dropout=DROPOUT,
-                                     norm_first=NORM_FIRST).to(device)
+                                     norm_first=NORM_FIRST)
+            init_token_embedding(bmodel, args.embed_init)
+            bmodel = bmodel.to(device)
             btids = [np.asarray(encode_text(sp_m, t), dtype=np.int64) for t in bench_texts]
             bloader = DataLoader(
                 SignToTextDataset(np.array(bench_pool), np.array(bench_texts), sp_m,
@@ -1973,9 +2078,11 @@ def main(argv=None) -> int:
 
     # ---- model ----
     def build_model():
-        return SignTransformer(MODEL_INPUT_DIM, sp.get_piece_size(), MAX_FRAMES, MAX_TOKENS,
-                               pad_idx=sp.pad_id(), d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
-                               ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST).to(device)
+        _m = SignTransformer(MODEL_INPUT_DIM, sp.get_piece_size(), MAX_FRAMES, MAX_TOKENS,
+                             pad_idx=sp.pad_id(), d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
+                             ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST)
+        init_token_embedding(_m, args.embed_init)  # checkpoint loads below override initialization
+        return _m.to(device)
 
     # ---- overfit gate (mandatory) ----
     if "overfit" in stages:
@@ -2168,11 +2275,20 @@ def main(argv=None) -> int:
         if device.type == "cuda":
             log(f"pre-train GPU memory: alloc={torch.cuda.memory_allocated() / (1024**2):.1f}MB, "
                 f"res={torch.cuda.memory_reserved() / (1024**2):.1f}MB")
-            bench = benchmark_training_throughput(device, sp.get_piece_size(), args.batch)
+            bench = benchmark_training_throughput(device, sp.get_piece_size(), args.batch,
+                                                               embed_init=args.embed_init)
             log(f"pre-train benchmark throughput: {bench['train_steps_per_sec']:.1f} steps/s "
                 f"(~{bench['train_steps_per_sec'] * args.batch:.1f} samples/s compute-only)")
         start_epoch, best, bad = 1, float("inf"), 0
+        log(f"embed init: {args.embed_init}")
+        unigram_nll = None
+        if split_tokens is not None:
+            unigram_nll = unigram_baseline_nll(split_tokens["train"], split_tokens["val"], sp.get_piece_size())
+            log(f"baselines (val NLL nats/token): uniform={math.log(sp.get_piece_size()):.3f} "
+                f"best-unigram={unigram_nll:.3f}; diagnostic reference, not proof of pose use")
+        crit_plain = nn.CrossEntropyLoss(ignore_index=sp.pad_id())
         rec_path = out / "checkpoints" / "signsage_transformer_recovery.pt"
+        initialization_config = {"seed": args.seed, "embed_init": args.embed_init}
         if args.resume and rec_path.exists():
             try:
                 rec = torch.load(rec_path, map_location=device, weights_only=False)
@@ -2182,6 +2298,8 @@ def main(argv=None) -> int:
                     f"It was probably truncated by a killed session. The best checkpoint "
                     f"({out / 'checkpoints' / 'signsage_transformer_full.pt'}) is untouched. Move the "
                     f"recovery file aside and re-run, or restore the last saved output version.") from exc
+            check_checkpoint_not_collapsed(rec, rec_path)
+            initialization_config = rec.get("initialization_config") or {"seed": None, "embed_init": None}
             model.load_state_dict(rec["state_dict"])
             opt.load_state_dict(rec["optimizer_state_dict"])
             if rec.get("scheduler_state_dict"):
@@ -2232,17 +2350,47 @@ def main(argv=None) -> int:
                                  vocab_size=sp.get_piece_size())
             _gstats = getattr(run_epoch, "last_train_stats", None) or {}
             va_loss = run_epoch(model, val_loader, opt, crit, device, train=False)
-            history.append({"epoch": epoch, "train_loss": tr_loss, "val_loss": va_loss})
+            # Unsmoothed val NLL: comparable to the unigram baseline (val_loss carries label smoothing).
+            va_nll = run_epoch(model, val_loader, opt, crit_plain, device, train=False,
+                               token_weighted=True)
+            va_nll_shuf = run_epoch(model, PoseRolledLoader(val_loader), opt, crit_plain, device,
+                                    train=False, token_weighted=True)
+            history.append({"epoch": epoch, "train_loss": tr_loss, "val_loss": va_loss,
+                            "val_nll": va_nll, "val_nll_shuffled_pose": va_nll_shuf,
+                            "pose_gap": va_nll_shuf - va_nll, "unigram_val_nll": unigram_nll,
+                            "embed_init": initialization_config["embed_init"],
+                            "epoch_completed": True, "diversity_checked": False,
+                            "diversity_pass": None, "accepted_for_checkpoint": False,
+                            "checkpoint_written": False})
             log(f"epoch {epoch:02d}/{args.epochs}: train={tr_loss:.4f} val={va_loss:.4f} "
+                f"val_nll={va_nll:.4f} (unigram={'n/a' if unigram_nll is None else f'{unigram_nll:.4f}'}) "
+                f"shuffled-pose nll={va_nll_shuf:.4f} gap={va_nll_shuf - va_nll:+.4f} "
                 f"lr={scheduler.get_last_lr()[0]:.2e}")
             if _gstats:
                 log(f"  grads: norm mean={_gstats['grad_norm_mean']:.4f} "
                     f"max={_gstats['grad_norm_max']:.4f} "
                     f"clipped={_gstats['grad_clip_frac']:.1%} "
                     f"param_norm={_gstats['param_norm']:.2f}")
-            # Diversity collapse gate on real decodes (not teacher-forced loss).
-            _, dhyps, _ = batch_greedy(model, div_loader_sample, sp, device)
+            # Reuse this bounded held-out decode for diagnostics; no extra decode/evaluation.
+            drefs, dhyps, dconfs = batch_greedy(model, div_loader_sample, sp, device)
             div = diversity_metrics(dhyps)
+            dominant = build_trivial_baseline(drefs, df_tr["text"].astype(str).tolist())
+            diversity_checked = epoch >= 2
+            diversity_pass = div["unique_fraction"] >= DIVERSITY_FLOOR if diversity_checked else None
+            history[-1].update({
+                "diversity_checked": diversity_checked, "diversity_pass": diversity_pass,
+                "accepted_for_checkpoint": not diversity_checked or diversity_pass,
+                "diagnostic_only": True, "quality_verdict": None,
+                "diagnostic_metrics": compute_metrics(drefs, dhyps),
+                "dominant_sentence_baseline": {"prediction": dominant[0],
+                                               "metrics": compute_metrics(drefs, dominant)},
+                "validation_samples": [{"uid": str(uid), "ref": r, "hyp": h, "conf": c}
+                                       for uid, r, h, c in zip(div_frame["uid"].iloc[:16],
+                                                               drefs[:16], dhyps[:16], dconfs[:16])],
+            })
+            if not diversity_checked:
+                log("  epoch 1: diversity guard unchecked (warmup); checkpoint provisional, not proven healthy")
+            log("  held-out sample metrics vs dominant training sentence: diagnostic only, not a quality PASS")
             log(f"  diversity: unique={div['unique']}/{len(dhyps)} ({div['unique_fraction']:.2%}) "
                 f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%})")
             history[-1].update({"unique": div["unique"], "unique_fraction": div["unique_fraction"],
@@ -2255,11 +2403,23 @@ def main(argv=None) -> int:
             _htmp = out / "training_history.json.tmp"
             _htmp.write_text(json.dumps(history, indent=1))
             os.replace(_htmp, out / "training_history.json")
-            if epoch >= 2 and div["unique_fraction"] < DIVERSITY_FLOOR:
+            if diversity_checked and not diversity_pass:
+                # Keep previous accepted recovery/best files (epoch 1 may be unchecked).
+                # checkpoint_written tracks accepted checkpoints, not this forensic artifact.
+                _cpath = out / "checkpoints" / f"signsage_transformer_collapsed_epoch{epoch:02d}.pt"
+                _atomic_torch_save({"state_dict": model.state_dict(), "epoch": epoch, "val_loss": va_loss,
+                                    "history": history, "collapsed": True,
+                                    "initialization_config": initialization_config,
+                                    "training_args": vars(args).copy(),
+                                    "model_config": ckpt_model_config,
+                                    "tokenizer_fingerprint": ckpt_tokenizer_fp,
+                                    "optimizer_state_dict": opt.state_dict(),
+                                    "scheduler_state_dict": scheduler.state_dict()}, _cpath)
                 (out / "COLLAPSED.txt").write_text(
                     f"epoch {epoch}: unique_fraction={div['unique_fraction']:.4f} < {DIVERSITY_FLOOR}; "
                     f"val_loss={va_loss:.4f}; "
-                    f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%})\n")
+                    f"top={div['top_prediction']!r} ({div['top_prediction_freq']:.1%}); "
+                    f"forensic snapshot: {_cpath.name}\n")
                 raise SystemExit("COLLAPSE GATE FIRED -- stopped instead of burning more GPU. See COLLAPSED.txt.")
             # Best/patience transition BEFORE building the payload so the
             # saved recovery metadata reflects this epoch's outcome. The best
@@ -2268,7 +2428,11 @@ def main(argv=None) -> int:
             best, bad, improved, should_stop = update_best_state(
                 best, bad, va_loss, args.patience)
             payload = {"state_dict": model.state_dict(), "epoch": epoch, "val_loss": va_loss, "best": best,
-                       "bad": bad, "history": history,
+                       "bad": bad,
+                       # This history is visible only if the atomic checkpoint write succeeds.
+                       "history": [*history[:-1], {**history[-1], "checkpoint_written": True}],
+                       "initialization_config": initialization_config,
+                       "training_args": vars(args).copy(),
                        "model_config": ckpt_model_config,
                        "tokenizer_fingerprint": ckpt_tokenizer_fp,
                        "optimizer_state_dict": opt.state_dict(), "scheduler_state_dict": scheduler.state_dict(),
@@ -2278,6 +2442,9 @@ def main(argv=None) -> int:
                                         if torch.cuda.is_available() else None)}}
             t_ckpt = time.perf_counter()
             _atomic_torch_save(payload, rec_path)
+            history[-1]["checkpoint_written"] = True
+            _htmp.write_text(json.dumps(history, indent=1))
+            os.replace(_htmp, out / "training_history.json")
             log(f"  recovery checkpoint saved ({time.perf_counter() - t_ckpt:.1f}s)")
             if improved:
                 _atomic_torch_save(payload, best_path)
@@ -2305,7 +2472,9 @@ def main(argv=None) -> int:
                          "rows_evaluated": {"test": len(df_te)}, "rows_available": _rows_available}
     if "evaluate" in stages:
         model = build_model()
-        model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
+        checkpoint = torch.load(best_path, map_location=device, weights_only=False)
+        check_checkpoint_not_collapsed(checkpoint, best_path)
+        model.load_state_dict(checkpoint["state_dict"])
         test_loader = make_loader(df_te, False, token_ids=None if args.smoke else split_tokens["test"])
         refs, hyps, confs = batch_greedy(model, test_loader, sp, device)
         test_metrics = compute_metrics(refs, hyps)
@@ -2329,13 +2498,16 @@ def main(argv=None) -> int:
     # ---- export ----
     if "export" in stages:
         model = build_model()
-        model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["state_dict"])
+        checkpoint = torch.load(best_path, map_location=device, weights_only=False)
+        check_checkpoint_not_collapsed(checkpoint, best_path)
+        model.load_state_dict(checkpoint["state_dict"])
         is_pilot = bool(args.subset and args.subset > 0)
         train_cfg = {"architecture": {"d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS,
                                       "ff": FF, "dropout": DROPOUT, "norm_first": NORM_FIRST},
                      "label_smoothing": LABEL_SMOOTHING, "peak_lr": args.lr,
                      "batch": args.batch, "seed": args.seed, "history": history,
                      "decoder_input_dropout": args.decoder_input_dropout,
+                     "initialization_config": checkpoint.get("initialization_config"),
                      "is_pilot": is_pilot, "is_smoke": bool(args.smoke),
                      "data_counts": {"scope": _scope, "usable_rows": _usable_rows,
                                      "rows_available": _rows_available,
