@@ -43,12 +43,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research.experiments.train_sign_to_text as T
 
 
+ap = argparse.ArgumentParser(description="Bounded Kaggle diagnostic run")
+ap.add_argument("--input-root", default="/kaggle/input")
+ap.add_argument("--out", default="/kaggle/working/s2t_diag1")
+ap.add_argument("--timeout-seconds", type=int, default=1440)
+ap.add_argument("--expected-tokenizer-fingerprint", default="2d88a5de48318cb9")
+ap.add_argument("--resume", action="store_true",
+                help="ignored by the diagnostic runner (fresh run only); "
+                     "kept for CLI parity with train_sign_to_text.py")
+ap.add_argument("--embed-init", choices=("scaled", "legacy"), default="scaled",
+                help="decoder token-embedding init (scaled default); "
+                     "kept for CLI parity with train_sign_to_text.py")
+ap.add_argument("--stages", default=None,
+                help="ignored by the diagnostic runner (runs overfit,train); "
+                     "kept for CLI parity with train_sign_to_text.py")
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Bounded Kaggle diagnostic run")
-    ap.add_argument("--input-root", default="/kaggle/input")
-    ap.add_argument("--out", default="/kaggle/working/s2t_diag1")
-    ap.add_argument("--timeout-seconds", type=int, default=1440)
-    ap.add_argument("--expected-tokenizer-fingerprint", default="2d88a5de48318cb9")
     args = ap.parse_args(argv)
 
     out = Path(args.out)
@@ -129,15 +140,23 @@ def main(argv=None):
 
     log_path = out / "subprocess_stdout_stderr.log"
     with log_path.open("w") as log:
-        result = subprocess.run(
-            cmd,
-            cwd=str(Path(__file__).resolve().parents[3]),
-            stdout=log, stderr=subprocess.STDOUT,
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=str(Path(__file__).resolve().parents[3]),
+                stdout=log, stderr=subprocess.STDOUT,
+                timeout=args.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            print("Exit: TIMEOUT | log:", log_path)
+            raise SystemExit(
+                f"Diagnostic subprocess exceeded {args.timeout_seconds}s and was killed. "
+                f"Preserve outputs under {out}; do not retry automatically."
+            ) from exc
     print("Exit:", result.returncode, "| log:", log_path)
     if result.returncode != 0:
         raise SystemExit(
-            "Diagnostic failed or timed out. Preserve outputs; do not retry automatically. "
+            "Diagnostic failed. Preserve outputs; do not retry automatically. "
             "Exit 124 typically means timeout; 137 can mean forced termination."
         )
     history = json.loads((out / "training_history.json").read_text())
