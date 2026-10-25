@@ -18,6 +18,8 @@ frontend/out/
 # Large datasets and caches (never commit)
 results.zip
 results(1).zip
+results-v4.zip
+kaggle_input_v4/
 staging_kaggle_results/
 
 # OS
