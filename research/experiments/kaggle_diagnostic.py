@@ -50,6 +50,134 @@ if str(REPO_ROOT) not in sys.path:
 import research.experiments.train_sign_to_text as T
 
 
+MANIFEST_REL = "s2t_small6/pose_cache/manifest.json"
+CSV_REL = "isign/iSign_v1.1.csv"
+EXPECTED_CACHE_N = 7500
+
+
+def discover_input_root(input_root: str | Path) -> Path:
+    """Find the unique attached input root holding the Version 4 assets.
+
+    Kaggle mounts attached datasets under /kaggle/input/<slug>/, so the assets
+    may live one level below the nominal input root. Search the given root, its
+    immediate dataset subdirectories, and a local mirror (kaggle_input_v4) used
+    for off-Kaggle checks. Require exactly one root containing both the
+    pose-cache manifest and the iSign CSV. Never fabricates or substitutes inputs.
+    """
+    root = Path(input_root)
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    def consider(p: Path) -> None:
+        try:
+            p = p.resolve()
+            if p in seen or not p.is_dir():
+                return
+            has_manifest = (p / MANIFEST_REL).is_file()
+            has_csv = (p / CSV_REL).is_file()
+        except OSError:
+            return
+        seen.add(p)
+        if has_manifest and has_csv:
+            candidates.append(p)
+
+    consider(root)
+    if root.is_dir():
+        try:
+            children = sorted(root.iterdir())
+        except OSError:
+            children = []
+        for child in children:
+            try:
+                if child.is_dir():
+                    consider(child)
+            except OSError:
+                continue
+    for cand in (Path("kaggle_input_v4"), Path.cwd() / "kaggle_input_v4", root / "kaggle_input_v4"):
+        consider(cand)
+
+    if not candidates:
+        searched = [str(root)]
+        if root.is_dir():
+            searched += [str(c) for c in sorted(root.iterdir()) if c.is_dir()]
+        raise SystemExit(
+            "No input root contains both "
+            f"{MANIFEST_REL} and {CSV_REL}. Searched: {searched}. Attach the Version 4 "
+            "input dataset (or pass --input-root pointing at it) and re-run."
+        )
+    if len(candidates) > 1:
+        raise SystemExit(f"Ambiguous input roots contain the required data: {candidates}")
+    return candidates[0]
+
+
+def validate_input(root: Path, expected_tokenizer_fingerprint: str) -> dict:
+    """Validate all required inputs under root (read-only; never copies shards).
+
+    Returns the loaded manifest plus paths to the CSV, pose-cache dir, tokenizer
+    dir, auto_subset.json and feasibility.json. Raises SystemExit with a clear
+    message listing missing files when anything is absent or invalid.
+    """
+    manifest_path = root / MANIFEST_REL
+    csv_path = root / CSV_REL
+    cache_dir = root / "s2t_small6" / "pose_cache"
+    tok_dir = root / "s2t_small6" / "tokenizer"
+
+    required_small = {
+        "manifest.json": manifest_path,
+        "iSign_v1.1.csv": csv_path,
+        "auto_subset.json": root / "s2t_small6" / "auto_subset.json",
+        "feasibility.json": root / "s2t_small6" / "feasibility.json",
+        "signsage_en_sp.model": tok_dir / "signsage_en_sp.model",
+        "signsage_en_sp.vocab": tok_dir / "signsage_en_sp.vocab",
+        "tokens.npz": tok_dir / "tokens.npz",
+        "tokens_meta.json": tok_dir / "tokens_meta.json",
+    }
+    missing = [name for name, p in required_small.items() if not p.is_file()]
+    if missing:
+        raise SystemExit(f"Required inputs missing under {root}: {missing}")
+
+    manifest = T.load_strict_manifest(manifest_path)
+    uid_to_shard = manifest.get("uid_to_shard", {})
+    shards = {p.name for p in cache_dir.glob("shard-*.zip")}
+    missing_shards = [s for s in uid_to_shard.values() if s not in shards]
+    if manifest.get("version") != T.POSE_CACHE_VERSION:
+        raise SystemExit(
+            f"Unsupported pose cache version {manifest.get('version')!r} "
+            f"(expected {T.POSE_CACHE_VERSION})"
+        )
+    if manifest.get("complete") is not True or manifest.get("n") != EXPECTED_CACHE_N:
+        raise SystemExit(
+            f"Manifest incomplete/mis-sized: complete={manifest.get('complete')!r}, "
+            f"n={manifest.get('n')!r} (expected complete=True, n={EXPECTED_CACHE_N})"
+        )
+    if missing_shards:
+        raise SystemExit(
+            f"Manifest references missing shard files under {cache_dir}: {missing_shards[:5]}"
+        )
+
+    tok_model_path = tok_dir / "signsage_en_sp.model"
+    sp = spm.SentencePieceProcessor(model_file=str(tok_model_path))
+    fp = T._sp_fingerprint(sp, tok_model_path)
+    if fp != expected_tokenizer_fingerprint:
+        raise SystemExit(
+            f"Tokenizer fingerprint mismatch: {fp} != expected {expected_tokenizer_fingerprint}"
+        )
+    if (sp.pad_id(), sp.unk_id(), sp.bos_id(), sp.eos_id()) != (0, 1, 2, 3):
+        raise SystemExit(
+            f"Unexpected tokenizer special ids: "
+            f"{(sp.pad_id(), sp.unk_id(), sp.bos_id(), sp.eos_id())} != (0, 1, 2, 3)"
+        )
+
+    return {
+        "manifest": manifest,
+        "csv_path": csv_path,
+        "cache_dir": cache_dir,
+        "tok_dir": tok_dir,
+        "auto_subset": root / "s2t_small6" / "auto_subset.json",
+        "feasibility": root / "s2t_small6" / "feasibility.json",
+    }
+
+
 ap = argparse.ArgumentParser(description="Bounded Kaggle diagnostic run")
 ap.add_argument("--input-root", default="/kaggle/input")
 ap.add_argument("--out", default="/kaggle/working/s2t_diag1")
@@ -75,17 +203,14 @@ def main(argv=None):
     out.mkdir(parents=True)
     (out / "tokenizer").mkdir()
 
-    # Find mounted Version 4 artifacts (not nested results.zip).
-    input_root = Path(args.input_root)
-    manifests = sorted(input_root.glob("**/s2t_small6/pose_cache/manifest.json"))
-    csvs = sorted(input_root.glob("**/iSign_v1.1.csv"))
-    if len(manifests) != 1:
-        raise SystemExit(f"Expected exactly one s2t_small6/pose_cache/manifest.json; found: {manifests}")
-    if len(csvs) != 1:
-        raise SystemExit(f"Expected exactly one iSign_v1.1.csv; found: {csvs}")
-    cache_dir = manifests[0].parent
-    csv_path = csvs[0]
-    manifest = T.load_strict_manifest(manifests[0])
+    # Discover the attached Version 4 input root (Kaggle mounts datasets under
+    # /kaggle/input/<slug>/; never assume a fixed staging directory).
+    input_root = discover_input_root(args.input_root)
+    _paths = validate_input(input_root, args.expected_tokenizer_fingerprint)
+    manifest = _paths["manifest"]
+    csv_path = _paths["csv_path"]
+    cache_dir = _paths["cache_dir"]
+    tok_dir = _paths["tok_dir"]
 
     # Validate archive identity (read-only; no payload extraction).
     cleaned, cleaning = T.clean_dataframe(pd.read_csv(csv_path))
@@ -98,15 +223,6 @@ def main(argv=None):
     assert set(manifest.get("uid_to_shard", {}).keys()) == expected_uids
     assert T.check_cache_identity(manifest["uid_to_shard"], expected_uids) == ([], [])
 
-    # Tokenizer fingerprint.
-    tok_dir = cache_dir.parent / "tokenizer"
-    tok_model_path = tok_dir / "signsage_en_sp.model"
-    assert tok_model_path.is_file(), f"tokenizer model missing: {tok_model_path}"
-    sp = spm.SentencePieceProcessor(model_file=str(tok_model_path))
-    fp = T._sp_fingerprint(sp, tok_model_path)
-    assert fp == args.expected_tokenizer_fingerprint, f"tokenizer fingerprint mismatch: {fp}"
-    assert (sp.pad_id(), sp.unk_id(), sp.bos_id(), sp.eos_id()) == (0, 1, 2, 3)
-
     # Copy tokenizer artifacts to fresh out (read-only source preserved).
     for fname in ("signsage_en_sp.model", "signsage_en_sp.vocab",
                   "tokens.npz", "tokens_meta.json", "train_text.txt"):
@@ -114,8 +230,8 @@ def main(argv=None):
         if src.is_file():
             shutil.copy2(src, out / "tokenizer" / fname)
     # Copy subset/scope metadata for provenance (not a new feasibility measurement).
-    shutil.copy2(cache_dir.parent / "auto_subset.json", out / "auto_subset.json")
-    shutil.copy2(cache_dir.parent / "feasibility.json", out / "source_feasibility_v4.json")
+    shutil.copy2(_paths["auto_subset"], out / "auto_subset.json")
+    shutil.copy2(_paths["feasibility"], out / "source_feasibility_v4.json")
 
     # Initial preflight uses the first training UID; main switches to full cache.
     probe_uid = str(parts[0]["uid"].iloc[0])
@@ -123,8 +239,9 @@ def main(argv=None):
     assert (cache_dir / shard_name).is_file()
 
     # Fresh diagnostic command (no resume; bounded; fresh out; no evaluation/export).
-    cmd = [
-        sys.executable, "-u", str(T.__file__),
+    # `run_args` is built once and used for both the flag-parity check and the
+    # subprocess command, so there is no off-by-one slice between them.
+    run_args = [
         "--csv", str(csv_path),
         "--pose-source", str(cache_dir / shard_name),
         "--pose-cache", str(cache_dir),
@@ -141,7 +258,8 @@ def main(argv=None):
         "--max-hours", "0.4",
         "--embed-init", "scaled",
     ]
-    args_parsed = T.parse_args(cmd[4:])
+    cmd = [sys.executable, "-u", str(T.__file__)] + run_args
+    args_parsed = T.parse_args(run_args)
     assert not args_parsed.resume
     assert args_parsed.embed_init == "scaled"
 
