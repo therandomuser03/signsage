@@ -473,13 +473,14 @@ class RemotePoseSource(PoseSource):
 
 
 class ShardPoseSource(PoseSource):
-    """Local disk cache of verbatim `.pose` member bytes in sharded ZIPs.
+    """Local disk cache of verbatim `.pose` member bytes in sharded ZIPs or extracted directories.
 
     Created once by materialize_pose_cache() from any other PoseSource
     (normally remote). Reads are plain local-disk random access -- no HTTP.
-    Each shard is a ZIP_STORED archive of `<uid>.pose` members, so a shard
-    is readable by the existing ZipPoseSource with zero new decode code.
-    Shard files are opened lazily (per process), hence DataLoader-fork-safe.
+    Each shard is either a ZIP_STORED archive of `<uid>.pose` members or an
+    extracted directory containing `<uid>.pose` files. The reader detects the
+    format automatically. Shard stores are opened lazily (per process),
+    hence DataLoader-fork-safe.
     """
 
     def __init__(self, cache_dir: str, max_open: int = 8):
@@ -493,10 +494,28 @@ class ShardPoseSource(PoseSource):
         self._open: OrderedDict = OrderedDict()
         self._max_open = max(1, int(max_open))
 
-    def _shard_store(self, shard: str) -> ZipPoseSource:
+    def _resolve_shard_path(self, shard_name: str) -> Path:
+        """Resolve a manifest shard name to its actual path (ZIP or extracted dir)."""
+        archive = self.cache_dir / shard_name
+        if archive.is_file():
+            return archive
+        if shard_name.endswith(".zip"):
+            extracted = self.cache_dir / shard_name[:-4]
+            if extracted.is_dir():
+                return extracted
+        raise FileNotFoundError(
+            f"Manifest shard {shard_name!r} has neither an archive "
+            f"nor a matching extracted directory under {self.cache_dir}"
+        )
+
+    def _shard_store(self, shard: str) -> PoseSource:
         store = self._open.get(shard)
         if store is None:
-            store = ZipPoseSource(str(self.cache_dir / shard))
+            shard_path = self._resolve_shard_path(shard)
+            if shard_path.is_file():
+                store = ZipPoseSource(str(shard_path))
+            else:
+                store = DirPoseSource(str(shard_path))
             self._open[shard] = store
             while len(self._open) > self._max_open:
                 self._open.popitem(last=False)
@@ -532,8 +551,9 @@ def cache_coverage(cache_dir: Path, uids: list[str]) -> tuple[int, int]:
 
 
 def _scan_shard_members(cache_dir: Path) -> dict:
-    """Source of truth on resume: actual members present in shard files."""
+    """Source of truth on resume: actual members present in shard files or directories."""
     found: dict = {}
+    # Scan ZIP shards
     for shard_path in sorted(cache_dir.glob(f"{POSE_CACHE_SHARD_PREFIX}*{POSE_CACHE_SHARD_SUFFIX}")):
         try:
             with zipfile.ZipFile(shard_path, mode="r", allowZip64=True) as zf:
@@ -542,6 +562,11 @@ def _scan_shard_members(cache_dir: Path) -> dict:
                         found[name[:-len(".pose")]] = shard_path.name
         except zipfile.BadZipFile:
             log(f"cache: ignoring corrupt partial shard {shard_path.name} (will be rebuilt)")
+    # Scan extracted shard directories (manifest names without .zip suffix)
+    for shard_dir in sorted(cache_dir.glob(f"{POSE_CACHE_SHARD_PREFIX}*")):
+        if shard_dir.is_dir() and not shard_dir.name.endswith(".zip"):
+            for pose_file in shard_dir.glob("*.pose"):
+                found[pose_file.stem] = shard_dir.name
     return found
 
 

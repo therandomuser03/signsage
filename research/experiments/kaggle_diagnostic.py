@@ -55,6 +55,21 @@ CSV_REL = "isign/iSign_v1.1.csv"
 EXPECTED_CACHE_N = 7500
 
 
+def resolve_pose_shard(cache_dir: Path, shard_name: str) -> Path:
+    """Resolve a manifest shard to either its ZIP or extracted directory."""
+    archive = cache_dir / shard_name
+    if archive.is_file():
+        return archive
+    if shard_name.endswith(".zip"):
+        extracted = cache_dir / shard_name[:-4]
+        if extracted.is_dir():
+            return extracted
+    raise FileNotFoundError(
+        f"Manifest shard {shard_name!r} has neither an archive "
+        f"nor a matching extracted directory under {cache_dir}"
+    )
+
+
 def discover_input_root(input_root: str | Path) -> Path:
     """Find the unique attached input root holding the Version 4 assets.
 
@@ -139,7 +154,13 @@ def validate_input(root: Path, expected_tokenizer_fingerprint: str) -> dict:
     manifest = T.load_strict_manifest(manifest_path)
     uid_to_shard = manifest.get("uid_to_shard", {})
     shards = {p.name for p in cache_dir.glob("shard-*.zip")}
-    missing_shards = [s for s in uid_to_shard.values() if s not in shards]
+    uid_to_shard = manifest.get("uid_to_shard", {})
+    missing_shards = []
+    for shard_name in sorted(set(uid_to_shard.values())):
+        try:
+            resolve_pose_shard(cache_dir, shard_name)
+        except FileNotFoundError:
+            missing_shards.append(shard_name)
     if manifest.get("version") != T.POSE_CACHE_VERSION:
         raise SystemExit(
             f"Unsupported pose cache version {manifest.get('version')!r} "
@@ -236,14 +257,40 @@ def main(argv=None):
     # Initial preflight uses the first training UID; main switches to full cache.
     probe_uid = str(parts[0]["uid"].iloc[0])
     shard_name = manifest["uid_to_shard"][probe_uid]
-    assert (cache_dir / shard_name).is_file()
+    shard_path = resolve_pose_shard(cache_dir, shard_name)
+    assert shard_path.exists(), shard_path
+
+    # Verify the specific probe UID is readable through the actual storage
+    # representation (ZIP member or directory file), using the same code
+    # path as the training loader.
+    if shard_path.is_file():
+        # ZIP-backed: open archive and check member
+        import zipfile
+        with zipfile.ZipFile(str(shard_path), mode="r", allowZip64=True) as zf:
+            candidates = [
+                f"iSign-poses_v1.1/{probe_uid}.pose",
+                f"{probe_uid}.pose",
+                f"poses/{probe_uid}.pose",
+            ]
+            if not any(c in zf.namelist() for c in candidates):
+                raise SystemExit(
+                    f"Probe UID {probe_uid} not found in ZIP archive {shard_path}"
+                )
+    else:
+        # Directory-backed: check file exists in extracted directory
+        pose_path = shard_path / f"{probe_uid}.pose"
+        if not pose_path.is_file():
+            raise SystemExit(
+                f"Probe UID {probe_uid} not found in extracted shard {shard_path} "
+                f"(expected {pose_path})"
+            )
 
     # Fresh diagnostic command (no resume; bounded; fresh out; no evaluation/export).
     # `run_args` is built once and used for both the flag-parity check and the
     # subprocess command, so there is no off-by-one slice between them.
     run_args = [
         "--csv", str(csv_path),
-        "--pose-source", str(cache_dir / shard_name),
+        "--pose-source", str(shard_path),
         "--pose-cache", str(cache_dir),
         "--out", str(out),
         "--data-mode", "cache",
