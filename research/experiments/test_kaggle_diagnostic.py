@@ -5,6 +5,7 @@ No GPU, no dataset download, no optimizer steps, no full training.
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -46,6 +47,55 @@ def test_discover_input_root_finds_attached_mirror():
     # Discovery from the repo root should also locate the mirror as a subdir.
     repo_root = Path(__file__).resolve().parent.parent.parent
     assert kd.discover_input_root(str(repo_root)) == mirror.resolve()
+
+
+def test_discover_input_root_finds_kaggle_slug_layout(monkeypatch):
+    """Simulates Kaggle layout: /kaggle/input/<slug>/s2t_small6/... + isign/..."""
+    import kaggle_diagnostic as kd
+    root = Path(tempfile.mkdtemp())
+    monkeypatch.chdir(root)  # real Kaggle runs from /kaggle/working (no kaggle_input_v4)
+    slug = root / "signsage-24-oct"
+    (slug / "s2t_small6" / "pose_cache").mkdir(parents=True)
+    (slug / "isign").mkdir(parents=True)
+    (slug / "s2t_small6" / "pose_cache" / "manifest.json").write_text("{}")
+    (slug / "isign" / "iSign_v1.1.csv").write_text("uid,text\n")
+    found = kd.discover_input_root(str(root))
+    assert found == slug.resolve()
+
+
+def test_discover_input_root_rejects_incomplete_subset6_only(monkeypatch):
+    """Simulates signsage-subset6: only subset6.csv, no manifest/isign CSV -> not a candidate."""
+    import kaggle_diagnostic as kd
+    root = Path(tempfile.mkdtemp())
+    monkeypatch.chdir(root)
+    slug = root / "signsage-subset6"
+    (slug / "data").mkdir(parents=True)
+    (slug / "data" / "subset6.csv").write_text("uid,text\n")
+    try:
+        kd.discover_input_root(str(root))
+    except SystemExit as exc:
+        assert "No input root contains both" in str(exc)
+    else:
+        raise AssertionError("discover_input_root should fail on incomplete dataset")
+
+
+def test_discover_input_root_rejects_ambiguous_candidates(monkeypatch):
+    """Two slugs each with manifest+CSV -> ambiguous, fail closed."""
+    import kaggle_diagnostic as kd
+    root = Path(tempfile.mkdtemp())
+    monkeypatch.chdir(root)
+    for slug in ("signsage-24-oct", "signsage-other"):
+        d = root / slug
+        (d / "s2t_small6" / "pose_cache").mkdir(parents=True)
+        (d / "isign").mkdir(parents=True)
+        (d / "s2t_small6" / "pose_cache" / "manifest.json").write_text("{}")
+        (d / "isign" / "iSign_v1.1.csv").write_text("uid,text\n")
+    try:
+        kd.discover_input_root(str(root))
+    except SystemExit as exc:
+        assert "Ambiguous" in str(exc)
+    else:
+        raise AssertionError("discover_input_root should fail on ambiguous candidates")
 
 
 def test_validate_input_passes_on_attached_mirror():
