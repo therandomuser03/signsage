@@ -30,6 +30,77 @@ own Section 17 check). See
 `research/manifests/models/signsage-s2t_v352868924.yaml` and
 `docs/reference/end-to-end-contract.md` (§3, model input).
 
+## Isolated-word pilot
+
+`backend/scripts/train_isolated_words.py` trains a separate six-label
+classifier from accepted INCLUDE-source clips only. It uses the
+`(T, 543, 3)` frontend landmark contract, but only pose and hand landmarks
+enter its 225-feature sequence. It is isolated-word recognition, not
+continuous ISL-to-English translation.
+
+The current grouped-split run is **NO-GO**: 122 clips, 86/18/18
+train/validation/test, test accuracy 61.1%, macro recall 61.1%. The aggregate
+has no verified human signer IDs, so its recording-grouped split cannot prove
+signer-independent generalization. Do not promote or market this pilot.
+Before any release or language-capability claim, manually review
+representative outputs with qualified ISL reviewers.
+
+To reproduce outside the repository:
+
+```bash
+cd backend
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[isl-training,dev]'
+export SIGNSAGE_ISL_DATA_DIR=/data/signsage/isl-data
+export SIGNSAGE_ISL_BUNDLE_DIR=/data/signsage/isl-bundle
+python scripts/train_isolated_words.py --seed 42 --epochs 50
+python scripts/smoke_isolated_words.py \
+  --data-dir "$SIGNSAGE_ISL_DATA_DIR" \
+  --bundle "$SIGNSAGE_ISL_BUNDLE_DIR" --all-test \
+  --save-request /tmp/signsage-heldout-request.json
+```
+
+Training downloads only the 122 accepted INCLUDE clips from the pinned
+`vidit031/isl-isolated-40words` revision and the official MediaPipe pose/hand
+task assets. Dataset rows declare CC-BY-4.0; preserve attribution in the
+generated metadata. Clips and weights stay in the configured external
+artifact directory, not Git.
+
+For local API testing only, set `SIGNSAGE_MODEL_KIND=isolated_words`,
+`SIGNSAGE_MODEL_BUNDLE_DIR` to that bundle,
+`SIGNSAGE_MODEL_PROMOTED=false`, `SIGNSAGE_ALLOW_UNPROMOTED_DEV=true`, and
+`SIGNSAGE_FALLBACK_ENABLED=false`. The existing REST response remains
+unchanged; `/api/v1/capabilities` reports `sign_to_text_source=isolated-word`.
+The confidence field is an uncalibrated softmax score. A low score returns an
+empty `text` with `accepted=false` and `reason=low_model_confidence`.
+
+Start the local development API and send the saved real held-out landmarks:
+
+```bash
+cd backend
+SIGNSAGE_MODEL_KIND=isolated_words \
+SIGNSAGE_MODEL_BUNDLE_DIR="$SIGNSAGE_ISL_BUNDLE_DIR" \
+SIGNSAGE_MODEL_PROMOTED=false \
+SIGNSAGE_ALLOW_UNPROMOTED_DEV=true \
+SIGNSAGE_FALLBACK_ENABLED=false \
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+In another terminal:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/translation/sign-to-text \
+  -H 'Content-Type: application/json' \
+  --data-binary @/tmp/signsage-heldout-request.json
+```
+
+Promotion requires a documented GO evaluation, passing tests, verified
+signer-independent data, test accuracy and macro recall of at least 0.80,
+per-class recall of at least 0.60, matching artifact metadata, and a successful
+inference self-test. The current bundle fails those checks; keep the production
+gate closed.
+
 With `SIGNSAGE_MODEL_PROMOTED=false` (the default), `/ws/translate`
 and `POST /api/v1/translation/sign-to-text` will refuse to serve
 translations (`ModelNotPromotedError`) rather than silently returning

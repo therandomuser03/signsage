@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # available runs. Left unset by default -- resolve_bundle_dir() raises a
     # clear error rather than silently guessing a path.
     model_bundle_dir: Optional[str] = None
+    model_kind: Literal["sign_to_text", "isolated_words"] = "sign_to_text"
 
     # Whether this checkpoint has passed the deployment gate and may be
     # served to real users. As of research run 352868924 (2026-09-26) this

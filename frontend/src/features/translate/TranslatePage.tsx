@@ -95,6 +95,10 @@ export default function TranslatePage() {
   const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
   const [mirrorPreview] = useState(() => loadPrefs().mirrorPreview);
   const mirrorClass = mirrorPreview ? "-scale-x-100" : "";
+  const isolatedWordModel = capabilities?.sign_to_text_source === "isolated-word";
+  const scoreLabel = capabilities?.sign_to_text_source === "heuristic-fallback"
+    ? "frame agreement"
+    : "uncalibrated model score";
 
   const setPhase = (p: Phase) => {
     phaseRef.current = p;
@@ -420,6 +424,17 @@ export default function TranslatePage() {
         </div>
       )}
 
+      {isolatedWordModel && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium">Limited isolated-word ISL pilot</p>
+          <p className="mt-0.5 text-xs text-foreground/60">
+            Recognizes a small vocabulary of isolated words; it does not
+            translate continuous signing or sentences. Model score is
+            uncalibrated and may be wrong.
+          </p>
+        </div>
+      )}
+
       {/* Workspace: camera + live translation panel */}
       <div className="grid items-stretch gap-4 lg:grid-cols-3">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-foreground/10 bg-black lg:col-span-2">
@@ -554,7 +569,7 @@ export default function TranslatePage() {
                   <p className="mt-2 text-xs text-foreground/55">
                     {showingPartial
                       ? "Partial result from the live window — keep signing; press Stop to finalize."
-                      : `accepted · ${display.result_type} · ${Math.round(display.confidence * 100)}% confidence`}
+                      : `accepted · ${display.result_type} · ${scoreLabel} ${display.confidence.toFixed(2)}`}
                   </p>
                 </>
               ) : (
@@ -563,7 +578,7 @@ export default function TranslatePage() {
                     Not confidently recognized
                   </p>
                   <p className="mt-2 text-xs text-foreground/55">
-                    {display.reason} · no text returned — keep signing or
+                    {display.reason} · {scoreLabel} {display.confidence.toFixed(2)} · no text returned — keep signing or
                     reposition your hands in frame.
                   </p>
                 </>
@@ -712,7 +727,7 @@ export default function TranslatePage() {
                 </p>
                 <p className="mt-0.5 text-xs text-foreground/50">
                   {r.accepted ? "accepted" : r.reason} · {r.result_type} ·{" "}
-                  {Math.round(r.confidence * 100)}% confidence
+                  {scoreLabel} {r.confidence.toFixed(2)}
                 </p>
               </li>
             ))}

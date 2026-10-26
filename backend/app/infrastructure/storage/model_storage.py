@@ -29,7 +29,10 @@ def resolve_bundle_dir(settings: Settings) -> Path:
     bundle_dir = Path(settings.model_bundle_dir)
     if not bundle_dir.is_dir():
         raise ModelBundleNotFoundError(f"Model bundle directory not found: {bundle_dir}")
-    required = ["checkpoint", "tokenizer", "landmark_contract.json", "sign_to_text_deployment.json"]
+    if settings.model_kind == "isolated_words":
+        required = ["model.pt", "metadata.json", "labels.json", "evaluation_results.json"]
+    else:
+        required = ["checkpoint", "tokenizer", "landmark_contract.json", "sign_to_text_deployment.json"]
     missing = [name for name in required if not (bundle_dir / name).exists()]
     if missing:
         raise ModelBundleNotFoundError(

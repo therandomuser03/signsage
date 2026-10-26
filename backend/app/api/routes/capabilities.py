@@ -21,7 +21,10 @@ from app.services.history_service import build_history_service
 
 router = APIRouter(tags=["capabilities"])
 
-_REPORTED_METRICS = ("wer", "bleu", "rouge_l", "output_diversity_fraction", "top_prediction_freq")
+_REPORTED_METRICS = (
+    "wer", "bleu", "rouge_l", "output_diversity_fraction", "top_prediction_freq",
+    "accuracy", "macro_recall",
+)
 
 
 def _bundle_found(settings: Settings) -> bool:
@@ -43,7 +46,7 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
     elif not _bundle_found(settings):
         reason = "model_bundle_missing"
     else:
-        source = "transformer"
+        source = "isolated-word" if settings.model_kind == "isolated_words" else "transformer"
     fallback_vocab = list(FALLBACK_VOCABULARY) if settings.fallback_enabled else []
     if reason is not None and fallback_vocab:
         # Transformer correctly gated, but the checkpoint-free heuristic
@@ -74,8 +77,9 @@ def models(settings: Settings = Depends(get_settings)) -> ModelsResponse:
     try:
         with open(resolve_bundle_dir(settings) / "evaluation_results.json", "r", encoding="utf-8") as f:
             evaluation = json.load(f)
-        status = evaluation.get("phase_0_status")
-        metrics = {k: float(evaluation[k]) for k in _REPORTED_METRICS if isinstance(evaluation.get(k), (int, float))}
+        status = evaluation.get("status", evaluation.get("phase_0_status"))
+        values = evaluation.get("test", evaluation)
+        metrics = {k: float(values[k]) for k in _REPORTED_METRICS if isinstance(values.get(k), (int, float))}
     except (ModelBundleNotConfiguredError, ModelBundleNotFoundError, OSError, ValueError):
         pass
     return ModelsResponse(models=[ModelInfo(

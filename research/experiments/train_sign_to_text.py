@@ -266,10 +266,19 @@ class PoseSource:
 
 class DirPoseSource(PoseSource):
     def __init__(self, root: str):
-        self.root = Path(root)
+        self.root = Path(root).resolve()
 
     def read_member_bytes(self, uid: str) -> bytes:
-        path = self.root / f"{uid}.pose"
+        # Prevent directory traversal: resolve the final path and verify it
+        # remains inside the root directory.
+        path = (self.root / f"{uid}.pose").resolve()
+        try:
+            path.relative_to(self.root)
+        except ValueError:
+            raise FileNotFoundError(
+                f"UID path traversal blocked: {uid!r} resolves to {path}, "
+                f"which is outside the pose directory {self.root}."
+            )
         if not path.is_file():
             raise FileNotFoundError(f"UID not found in pose dir: {uid}")
         return path.read_bytes()
@@ -497,12 +506,22 @@ class ShardPoseSource(PoseSource):
     def _resolve_shard_path(self, shard_name: str) -> Path:
         """Resolve a manifest shard name to its actual path (ZIP or extracted dir)."""
         archive = self.cache_dir / shard_name
-        if archive.is_file():
+        try:
+            archive.resolve().relative_to(self.cache_dir.resolve())
+        except ValueError:
+            raise FileNotFoundError(
+                f"Manifest shard {shard_name!r} attempts directory traversal outside {self.cache_dir}"
+            )
+        if archive.is_file() or archive.is_dir():
             return archive
         if shard_name.endswith(".zip"):
             extracted = self.cache_dir / shard_name[:-4]
-            if extracted.is_dir():
+            if extracted.is_dir() or extracted.is_file():
                 return extracted
+        else:
+            cand = self.cache_dir / f"{shard_name}.zip"
+            if cand.is_file() or cand.is_dir():
+                return cand
         raise FileNotFoundError(
             f"Manifest shard {shard_name!r} has neither an archive "
             f"nor a matching extracted directory under {self.cache_dir}"
@@ -1911,12 +1930,14 @@ def main(argv=None) -> int:
                 )
             log("remote pose authentication verified: HF_TOKEN is configured (redacted)")
             store_spec = ("remote", token)
+        elif args.pose_source and (Path(args.pose_source) / POSE_CACHE_MANIFEST).is_file():
+            store_spec = ("shards", args.pose_source)
         elif args.pose_source and zipfile.is_zipfile(args.pose_source):
             store_spec = ("zip", args.pose_source)
         elif args.pose_source:
             store_spec = ("dir", args.pose_source)
         else:
-            raise SystemExit("--pose-source is required (dir | zip | remote)")
+            raise SystemExit("--pose-source is required (dir | zip | shards | remote)")
         store = _open_pose_store(*store_spec)
         # Cheap preflight BEFORE any expensive stage: proves the pose source
         # can seek/read and decode ONE real member. Writes pose_preflight.json.
