@@ -17,6 +17,7 @@ from app.core.errors import ModelNotPromotedError, ModelUnavailableError
 from app.infrastructure.storage.model_storage import resolve_bundle_dir
 from app.infrastructure.storage.model_storage import ModelBundleNotConfiguredError, ModelBundleNotFoundError
 from app.ml.adapters.sign_to_text_adapter import ModelLoadError, SignToTextAdapter
+from app.ml.continuous_sign import ContinuousSignPipeline
 from app.ml.isolated_words import IsolatedWordAdapter
 from app.ml.contracts.inference_contract import InferenceContractError
 from app.ml.contracts.landmark_contract import LandmarkContractError
@@ -25,13 +26,13 @@ from app.ml.contracts.model_contract import ModelContractError
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_pipeline: SignToTextAdapter | IsolatedWordAdapter | None = None
+_pipeline: SignToTextAdapter | IsolatedWordAdapter | ContinuousSignPipeline | None = None
 _pipeline_key: tuple[str, str | None, str] | None = None
 
 
 def get_sign_to_text_pipeline(
     settings: Optional[Settings] = None, allow_unpromoted: bool = False
-) -> SignToTextAdapter | IsolatedWordAdapter:
+) -> SignToTextAdapter | IsolatedWordAdapter | ContinuousSignPipeline:
     """Return the process-wide SignToTextAdapter, loading it on first use.
 
     Raises ModelNotPromotedError if settings.model_promoted is False and
@@ -58,6 +59,9 @@ def get_sign_to_text_pipeline(
                 logger.info("Loading Sign->Text pipeline from %s", bundle_dir)
                 if settings.model_kind == "isolated_words":
                     adapter = IsolatedWordAdapter.load(bundle_dir, device=settings.device)
+                elif settings.model_kind == "continuous_sign":
+                    adapter = IsolatedWordAdapter.load(bundle_dir, device=settings.device)
+                    adapter = ContinuousSignPipeline(adapter)
                 else:
                     adapter = SignToTextAdapter.load(bundle_dir, device=settings.device)
             except (
@@ -88,6 +92,17 @@ def get_sign_to_text_pipeline(
             raise ModelNotPromotedError(
                 "The isolated-word bundle is missing documented signer-independent evaluation, "
                 "passing tests, or a GO status; promotion is refused."
+            )
+        if (
+            settings.model_kind == "continuous_sign"
+            and settings.model_promoted
+            and isinstance(_pipeline, ContinuousSignPipeline)
+            and not _pipeline.adapter.promotion_eligible()
+        ):
+            raise ModelNotPromotedError(
+                "The continuous-sign bundle's underlying isolated-word model is missing "
+                "documented signer-independent evaluation, passing tests, or a GO status; "
+                "promotion is refused."
             )
         return _pipeline
 

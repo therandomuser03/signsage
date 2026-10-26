@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # available runs. Left unset by default -- resolve_bundle_dir() raises a
     # clear error rather than silently guessing a path.
     model_bundle_dir: Optional[str] = None
-    model_kind: Literal["sign_to_text", "isolated_words"] = "sign_to_text"
+    model_kind: Literal["sign_to_text", "isolated_words", "continuous_sign"] = "sign_to_text"
 
     # Whether this checkpoint has passed the deployment gate and may be
     # served to real users. As of research run 352868924 (2026-09-26) this
@@ -59,6 +59,19 @@ class Settings(BaseSettings):
     # ml/inference/heuristic_signs.py). Always reported as
     # "heuristic-fallback" via /capabilities, never as the transformer model.
     fallback_enabled: bool = True
+
+    # --- Continuous sign-sequence handling ------------------------------------
+    # When True, the WebSocket path feeds frames incrementally through
+    # ContinuousSignPipeline (sliding-window inference, sign boundary
+    # detection, repeat suppression) instead of batch inference on
+    # sentence.boundary. Recognizes individual isolated signs in order from a
+    # continuous camera stream. Does NOT perform sentence-level translation.
+    continuous_sign_enabled: bool = False
+    # Sliding window size (frames) for inference. Must match the adapter's
+    # expected frame count (64 for the isolated-word model).
+    continuous_sign_window_frames: int = 64
+    # Stride between consecutive inference windows.
+    continuous_sign_stride_frames: int = 32
 
     # Upper bound for one synchronous model inference (REST or WebSocket
     # final). Inference runs in a worker thread that torch cannot cancel, so

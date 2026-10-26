@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 
 import numpy as np
 import torch
 
 from app.ml.isolated_words import FEATURE_DIM, FEATURE_VERSION, IsolatedWordNet
+
+
+REAL_BUNDLE = os.environ.get("SIGNSAGE_REAL_ISL_BUNDLE",
+                             "/mnt/D/Codes/signsage/backend/models/isl_bundle")
 
 
 def _bundle(path):
@@ -84,3 +89,36 @@ def test_isolated_bundle_cannot_be_promoted_with_no_go_evaluation(make_client, t
     response = client.post("/api/v1/translation/sign-to-text", json=_payload())
     assert response.status_code == 503
     assert response.json()["code"] == "MODEL_NOT_PROMOTED"
+
+
+def test_real_trained_bundle_loads_and_rejects_unknown_signs(make_client, tmp_path):
+    """End-to-end contract test against the real trained INCLUDE bundle.
+
+    Verifies the API accepts the real bundle, reports isolated-word source,
+    and rejects unknown (random) landmarks with low confidence -- never
+    fabricating a sign word for input the model doesn't recognize.
+    Skipped when the real bundle is not present (e.g. fresh checkout).
+    """
+    import os.path
+    real = REAL_BUNDLE
+    if not os.path.isdir(real):
+        pytest.skip(f"real ISL bundle not found at {real}")
+    client = make_client(
+        bundle=real,
+        model_kind="isolated_words",
+        fallback_enabled="false",
+        allow_unpromoted_dev="true",
+    )
+    # Capabilities must report the isolated-word source.
+    caps = client.get("/api/v1/capabilities").json()
+    assert caps["sign_to_text_source"] == "isolated-word"
+    assert caps["sign_to_text_available"] is True
+    # REST inference on random/unknown landmarks must be rejected.
+    response = client.post("/api/v1/translation/sign-to-text", json=_payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accepted"] is False
+    assert body["text"] == ""
+    assert body["reason"] in {"low_model_confidence", "insufficient_motion", "empty_output"}
+    assert body["result_type"] == "failed"
+    assert 0.0 <= body["confidence"] <= 1.0

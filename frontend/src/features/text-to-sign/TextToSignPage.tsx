@@ -49,7 +49,8 @@ export default function TextToSignPage() {
   const [sequence, setSequence] = useState<GlossSequence | null>(null);
   const [working, setWorking] = useState(false);
   const [glossError, setGlossError] = useState<string | null>(null);
-  const speech = useSpeechInput();
+  const speech = useSpeechInput({ lang: "en-IN" });
+  const [interimText, setInterimText] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -67,6 +68,12 @@ export default function TextToSignPage() {
       live = false;
     };
   }, []);
+
+  // Clear the live interim preview whenever a recognition session ends
+  // (stop pressed, final committed, or session ended without a result).
+  useEffect(() => {
+    if (!speech.listening) setInterimText("");
+  }, [speech.listening]);
 
   const { perform, stop, replay, state } = useSignAnimation(
     avatarRef,
@@ -109,7 +116,9 @@ export default function TextToSignPage() {
 
   const clear = () => {
     stop();
+    speech.stop();
     setText("");
+    setInterimText("");
     setSequence(null);
     setGlossError(null);
   };
@@ -202,10 +211,14 @@ export default function TextToSignPage() {
                           onClick={() =>
                             speech.listening
                               ? speech.stop()
-                              : speech.start((t) =>
-                                  setText((prev) =>
-                                    (prev ? `${prev} ${t}` : t).slice(0, MAX_CHARS)
-                                  )
+                              : speech.start(
+                                  (final) => {
+                                    setInterimText("");
+                                    setText((prev) =>
+                                      (prev ? `${prev} ${final}` : final).slice(0, MAX_CHARS)
+                                    );
+                                  },
+                                  (interim) => setInterimText(interim)
                                 )
                           }
                           aria-label={speech.listening ? "Stop listening" : "Dictate with microphone"}
@@ -226,6 +239,12 @@ export default function TextToSignPage() {
               </div>
               {speech.error && (
                 <p className="text-xs text-destructive">{speech.error}</p>
+              )}
+              {speech.listening && interimText && (
+                <p className="text-xs text-foreground/50">
+                  <span className="font-medium">Listening:</span>{" "}
+                  {interimText}
+                </p>
               )}
               <p className="text-xs text-foreground/50">
                 {mode === "dictionary"
@@ -268,7 +287,10 @@ export default function TextToSignPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={stop}
+                onClick={() => {
+                  speech.stop();
+                  setInterimText("");
+                }}
                 disabled={!state.isPlaying}
                 className="flex-1"
               >

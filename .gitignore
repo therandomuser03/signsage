@@ -40,6 +40,8 @@ backend/backend.egg-info/
 # Model checkpoints (large binaries not tracked)
 models/checkpoints/*.pt
 models/iSign_t5_small_motion/**/*.pt
+models/isl_bundle/
+backend/data/isl/
 
 # Research outputs
 research/results/

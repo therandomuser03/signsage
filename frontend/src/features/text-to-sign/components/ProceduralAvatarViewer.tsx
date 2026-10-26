@@ -7,7 +7,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
-import { motionFor, poseAt, type Pose } from "../services/proceduralSigns";
+import { motionFor, poseAt, type Pose, PROCEDURAL_SIGNS } from "../services/proceduralSigns";
 
 export interface ProceduralAvatarHandle {
   playSequence: (glossIds: string[], onStep?: (id: string, index: number) => void) => Promise<void>;
@@ -23,6 +23,29 @@ const SKIN = new THREE.Color("#e8b88a");
 const SHIRT = new THREE.Color("#2f6df6");
 const PANTS = new THREE.Color("#232a35");
 const DARK = new THREE.Color("#1c1c1e");
+
+/** Position a perspective camera so `box` fits fully with padding, then look at its center. */
+function fitCameraToBox(camera: THREE.PerspectiveCamera, box: THREE.Box3, padding = 1.35) {
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const fovRad = (camera.fov * Math.PI) / 180;
+  const halfFov = Math.tan(fovRad / 2);
+  const aspect = camera.aspect;
+
+  // Distance required to cover the height at this FOV.
+  let distance = size.y / (2 * halfFov);
+  // Make sure the width fits too (visible width = distance * 2 * tan(fov/2) * aspect).
+  if (distance * 2 * halfFov * aspect < size.x) {
+    distance = size.x / (2 * halfFov * aspect);
+  }
+  distance *= padding;
+
+  camera.position.set(center.x, center.y + size.y * 0.12, center.z + distance);
+  camera.lookAt(center);
+  camera.near = 0.1;
+  camera.far = Math.max(20, distance * 4);
+  camera.updateProjectionMatrix();
+}
 
 function limb(
   r: number,
@@ -197,11 +220,28 @@ export const ProceduralAvatarViewer = forwardRef<ProceduralAvatarHandle, Props>(
       scene.add(root);
       applyPose(rig, restPose());
 
+      // Frame from bounds sampled across rest and every key pose so animated
+      // arms/head stay in frame, not just the rest pose.
+      const box = new THREE.Box3();
+      const samplePoses: Pose[] = [restPose()];
+      for (const motion of Object.values(PROCEDURAL_SIGNS)) {
+        for (const key of motion.keys) {
+          samplePoses.push(poseAt(motion, key.at));
+        }
+      }
+      for (const p of samplePoses) {
+        applyPose(rig, p);
+        box.expandByObject(root);
+      }
+      applyPose(rig, restPose());
+      fitCameraToBox(camera, box);
+
       const resize = () => {
         const w = canvas.clientWidth || 640;
         const h = canvas.clientHeight || 360;
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
+        fitCameraToBox(camera, box);
         camera.updateProjectionMatrix();
       };
       resize();

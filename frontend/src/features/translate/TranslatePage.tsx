@@ -14,6 +14,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { config } from "@/app/config";
 import { apiClient } from "@/services/api/instance";
@@ -97,6 +98,11 @@ export default function TranslatePage() {
   const [framesSent, setFramesSent] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
+  /** Ordered sequence of accepted sign words from finalized results.
+   * Built only from `final:true + accepted` messages; the backend's
+   * repeat-agreement stabilization already prevents flooding from a held
+   * gesture, so each entry here is a deliberate finalized sign. */
+  const [acceptedSigns, setAcceptedSigns] = useState<string[]>([]);
   const [mirrorPreview] = useState(() => loadPrefs().mirrorPreview);
   const mirrorClass = mirrorPreview ? "-scale-x-100" : "";
   const isolatedWordModel = capabilities?.sign_to_text_source === "isolated-word";
@@ -222,6 +228,9 @@ export default function TranslatePage() {
         if (msg.final) {
           setPartial(null);
           setResults((prev) => [msg, ...prev]);
+          if (msg.accepted && msg.text) {
+            setAcceptedSigns((prev) => [...prev, msg.text]);
+          }
         } else {
           setPartial(msg);
         }
@@ -332,8 +341,13 @@ export default function TranslatePage() {
   const clearResults = useCallback(() => {
     setResults([]);
     setPartial(null);
+    setAcceptedSigns([]);
     framesSentRef.current = 0;
     setFramesSent(0);
+  }, []);
+
+  const undoLastSign = useCallback(() => {
+    setAcceptedSigns((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
   }, []);
 
   const terminalUnavailable = modelError !== null;
@@ -729,13 +743,41 @@ export default function TranslatePage() {
             variant="ghost"
             size="sm"
             onClick={clearResults}
-            disabled={results.length === 0 && framesSent === 0}
+            disabled={results.length === 0 && framesSent === 0 && acceptedSigns.length === 0}
           >
             <Eraser aria-hidden="true" />
             Clear
           </Button>
         </span>
       </div>
+
+      {acceptedSigns.length > 0 && (
+        <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-xs">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-2">
+            Accepted signs
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {acceptedSigns.map((sign, i) => (
+              <Badge key={i} variant="secondary" className="px-3 py-1.5 text-sm">
+                {sign}
+              </Badge>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={undoLastSign}
+              disabled={acceptedSigns.length === 0}
+              title="Remove the last accepted sign"
+            >
+              Undo last
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-foreground/50">
+            Built from finalized recognition results. Ordered left to right.
+            Clear removes the whole sequence.
+          </p>
+        </div>
+      )}
 
       {results.length > 1 && (
         <div>

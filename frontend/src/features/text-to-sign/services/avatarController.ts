@@ -71,7 +71,33 @@ export class AvatarController {
     this.vrm = vrm;
     this.mixer = new THREE.AnimationMixer(vrm.scene);
     this.scene.add(vrm.scene);
+
+    // Frame the loaded avatar from its actual bounds so the full character
+    // stays in view regardless of the VRM's scale or pose.
+    this.fitCameraToAvatar();
+
     this.startLoop();
+  }
+
+  /** Fit the camera to the loaded avatar's bounding box so the full character is in frame. */
+  private fitCameraToAvatar() {
+    if (!this.vrm) return;
+    const box = new THREE.Box3().setFromObject(this.vrm.scene);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const fovRad = (this.camera.fov * Math.PI) / 180;
+    const halfFov = Math.tan(fovRad / 2);
+    const aspect = this.camera.aspect;
+    let distance = size.y / (2 * halfFov);
+    if (distance * 2 * halfFov * aspect < size.x) {
+      distance = size.x / (2 * halfFov * aspect);
+    }
+    distance *= 1.35;
+    this.camera.position.set(center.x, center.y + size.y * 0.12, center.z + distance);
+    this.camera.lookAt(center);
+    this.camera.near = 0.1;
+    this.camera.far = Math.max(20, distance * 4);
+    this.camera.updateProjectionMatrix();
   }
 
   /** Fetch (and cache) the AnimationClip for a gloss ID's GLB file. */

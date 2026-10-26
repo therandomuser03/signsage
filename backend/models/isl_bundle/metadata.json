@@ -1,0 +1,100 @@
+{
+  "format": "signsage_isolated_words_v1",
+  "model_scope": "isolated_word_pilot",
+  "dataset": "https://huggingface.co/datasets/vidit031/isl-isolated-40words",
+  "dataset_revision": "255ce7fd10da5d05bc30d59668ba256e5f02531c",
+  "dataset_license": "CC-BY-4.0 (INCLUDE-only accepted rows; attribution required)",
+  "source_repository": "https://github.com/AI4Bharat/INCLUDE",
+  "source_record": "https://zenodo.org/records/4010759",
+  "labels": [
+    "friend",
+    "hello",
+    "hospital",
+    "market",
+    "school",
+    "thank you"
+  ],
+  "feature_dim": 225,
+  "frame_count": 64,
+  "feature_version": "pose_hands_root_scale_v1",
+  "checkpoint_sha256": "9cf6e83f30bab604f2624a2449647b8f769e86ae1a746e51f0e38022ef60859d",
+  "confidence_threshold": 0.5,
+  "promotion_eligible": false,
+  "split_seed": 42,
+  "split_policy": "per-class shuffled clips; no human-signer identity in source metadata",
+  "evaluation": {
+    "status": "NO-GO",
+    "test": {
+      "accuracy": 0.6111111044883728,
+      "macro_recall": 0.611111119389534,
+      "per_class_recall": {
+        "friend": 0.0,
+        "hello": 1.0,
+        "hospital": 0.6666666865348816,
+        "market": 1.0,
+        "school": 0.3333333432674408,
+        "thank you": 0.6666666865348816
+      },
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          0,
+          1,
+          2,
+          0
+        ],
+        [
+          0,
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          2,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          3,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          0,
+          2
+        ]
+      ]
+    },
+    "validation_accuracy": 0.8888888955116272,
+    "split_counts": {
+      "train": 86,
+      "validation": 18,
+      "test": 18
+    },
+    "signer_independent": false,
+    "tests_passed": false,
+    "promotion_eligible": false,
+    "promotion_blocker": "No verified human-signer identities or signer-independent split."
+  }
+}

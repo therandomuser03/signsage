@@ -1,0 +1,618 @@
+{
+  "train": [
+    {
+      "video_path": "hello/hello__INCLUDE__00586__MVI_9984.mp4",
+      "label": "hello",
+      "sha256": "53d5f670b880c91c3e769aea21ea762dbb8986ed580619d56c85e87d81167db5"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00625__MVI_9984.mp4",
+      "label": "thank you",
+      "sha256": "9d52dbba749fced415fed53fc6e4686921b73c727a82b6b2379c05f1bdd0df12"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00495__MVI_3457.mp4",
+      "label": "school",
+      "sha256": "1377ea5135f0ade070442e3d85db211721e1006d71f12d07fb4ec68b23b9bf61"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00571__MVI_0038.mp4",
+      "label": "hello",
+      "sha256": "47b0b4fd074099c78afa77cc5d847317ae2cc39331883865dd54f4dd704a9bb4"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00558__MVI_4999.mp4",
+      "label": "friend",
+      "sha256": "69df38f204131c015b3fb5cd050f0880f0d64b8dd8553090a3772f438872cb71"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00622__MVI_9949.mp4",
+      "label": "thank you",
+      "sha256": "eb6aff345f7cbad5ceb4d9ab2f58ae36d23685e7f9ec80212d2fab1e4d416500"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00570__MVI_0037.mp4",
+      "label": "hello",
+      "sha256": "a8d390d875c6ec837e4180fae8210268a8ca5da3c5b57e91d0f9dc6d962f97d6"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00516__MVI_3482.mp4",
+      "label": "hospital",
+      "sha256": "8346531524427c50564047d0657d986b7394eba05243a07c6ba8ad5e28ad2043"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00576__MVI_9914.mp4",
+      "label": "hello",
+      "sha256": "8c3bf055f6c7994ef306cf7248f60ab9d9c4a5df5b6c8b2e88e39e12fc5601e6"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00574__MVI_0090.mp4",
+      "label": "hello",
+      "sha256": "4eac54cdcd41f1cfbd5513c42cc7c68916991ef30a432a0bb7cfc850badb468e"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00562__MVI_5299.mp4",
+      "label": "friend",
+      "sha256": "acc64698a229582407c441c8010c0726a325bc4b698b92b80d2f984e80505710"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00533__MVI_3408.mp4",
+      "label": "market",
+      "sha256": "eec344d17defcb208d505dc67116ef6354857e043b83fdfb5c9e1a7841d49493"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00578__MVI_9916.mp4",
+      "label": "hello",
+      "sha256": "05034a8a015178239fdec5cfe2eaef1d9812f982333369442d94ccc99e6c2a94"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00518__MVI_3560.mp4",
+      "label": "hospital",
+      "sha256": "dfd807fff6a1985ec3ee44d5230758bbf479d9dfa32d7533790d8dcdbc5cd25b"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00502__MVI_3614.mp4",
+      "label": "school",
+      "sha256": "5f12a24fc5571f541cfbaa8950df771057368e2749d5a8bd0a83bdbc8c0e360c"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00548__MVI_3828.mp4",
+      "label": "friend",
+      "sha256": "c8d38ad603732338f357ca4ca9dcaa6b9ea4bb4ce9dfcdb6605011ef1254e553"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00579__MVI_9917.mp4",
+      "label": "hello",
+      "sha256": "e9ce04cfc3845b45614d0fd6845772dd91bf0a7939bf0d29b15491d38f2f7e40"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00564__MVI_5301.mp4",
+      "label": "friend",
+      "sha256": "c6522b1ed6ade6f5c5ddfdf255736978ac03af90354289c28da8545734426f28"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00537__MVI_3491.mp4",
+      "label": "market",
+      "sha256": "00c6b86a8fc5994b965b32ed15977b6226d164be195e792aa2ae53fdfca9440f"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00616__MVI_0062.mp4",
+      "label": "thank you",
+      "sha256": "b533ac35d5a0711f9663c098d51bcf65e1c4388b9572eff7c21ea32ca2afb87b"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00494__MVI_3456.mp4",
+      "label": "school",
+      "sha256": "6e2be8863009046c3106bc4ac8aaad19a0314b5cdfffeb0f4d25d596b70a98ff"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00585__MVI_9983.mp4",
+      "label": "hello",
+      "sha256": "8bf4c9285836af12e75978a311bc87184611a95cebb3d8564218eac10a9f3d2c"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00581__MVI_9955.mp4",
+      "label": "hello",
+      "sha256": "0503ebd2f6f5ddde626a48c61f37612850928aa5db80e7493a3221f63cca2790"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00493__MVI_3374.mp4",
+      "label": "school",
+      "sha256": "f33c792fb421ef7bb450fdd9955cd8eead0ac7d1a69565d64f173f1ab1d03884"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00512__MVI_3399.mp4",
+      "label": "hospital",
+      "sha256": "6c94f3fc5a46eaf276da9a7751b6922da37acbfc97e4fb4ef72b9bd574532c44"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00628__MVI_9987.mp4",
+      "label": "thank you",
+      "sha256": "f2428d6a27bb1c48d4ac1dc8593ae0e95abcf4712f6efb78caaa2ae2528e56d1"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00507__MVI_3316.mp4",
+      "label": "hospital",
+      "sha256": "e641076d58ac04f6e23f2f74155d81d779e86a301d66c62e81734a9a163eb435"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00538__MVI_3569.mp4",
+      "label": "market",
+      "sha256": "ca2f4cf253399aab558e8bc370e71ea286dcd19b7293119c1f760b51b56c857f"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00527__MVI_3324.mp4",
+      "label": "market",
+      "sha256": "920d7c4a2594f12c502fe18beab7be278f7ad86ca8c7cb7250631e042f9fc94a"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00552__MVI_4122.mp4",
+      "label": "friend",
+      "sha256": "a491f16bda7e9a6a1120babc4ca123e985af494686a6b97cfeef6de0f0198818"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00553__MVI_4123.mp4",
+      "label": "friend",
+      "sha256": "1f56b9f458a49210d2fb49198ea5bccddd377546a11d025863bf4b690209e67d"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00546__MVI_3826.mp4",
+      "label": "friend",
+      "sha256": "66977ac713b9902dc8073b8c6ed0555bd11ae16c789379708d8b9c1aa674e7d7"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00524__MVI_3640.mp4",
+      "label": "hospital",
+      "sha256": "f880446bf725a4fd0b27ce6a4268173cf9c8fbc14ef4bd2aadffd4b7e5d528a0"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00541__MVI_3572.mp4",
+      "label": "market",
+      "sha256": "b87466069ebcff93ca9d5f42b5b923bea3f0be26a44f0519b129203e3296178d"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00508__MVI_3317.mp4",
+      "label": "hospital",
+      "sha256": "dfbed750a714460079ba925b6293aeb6300b69ee2f81d7aaa5a94fe72ec228ff"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00549__MVI_3975.mp4",
+      "label": "friend",
+      "sha256": "b9a5d61f2e7e7058e13143b76253fd3e20e8da9766d567c7d4acac03a596421f"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00551__MVI_3977.mp4",
+      "label": "friend",
+      "sha256": "ff72137bcc2f043e5ae989933732521de05a804d9b787be582465a3ab3c03fc1"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00509__MVI_3318.mp4",
+      "label": "hospital",
+      "sha256": "b7af840b99425ba856f6c0a65eeb8cf7cb4b67be6f7a0e3114f4b9c89ca63e27"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00526__MVI_3323.mp4",
+      "label": "market",
+      "sha256": "156ae8606e2c93c96413c42733e492aa5be9cf22bd9ba7b57f2225004cf2e9d9"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00510__MVI_3397.mp4",
+      "label": "hospital",
+      "sha256": "1fad0f31effc837bda2db44de1bd2f9af0d97a2c82d73df9e504c8cbbcb288fc"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00542__MVI_3647.mp4",
+      "label": "market",
+      "sha256": "e05190a3df25120b4fa7bb931b34d3da505caaf71f3875566ea900a6ad6682bc"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00504__MVI_3616.mp4",
+      "label": "school",
+      "sha256": "cabb9a4782d8423b0bfd6106441ae4b1ec28ae544ebbc84f5bd08bf0ea2983ff"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00535__MVI_3489.mp4",
+      "label": "market",
+      "sha256": "2f16494440b8ce919b0d8eb307a41da0fae61736c9525f9e5716d16396bfbddc"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00627__MVI_9986.mp4",
+      "label": "thank you",
+      "sha256": "f9e16cbd689829d301bc8c12ad210fb2bca8e1bf7564d9aceda475be6865caee"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00528__MVI_3325.mp4",
+      "label": "market",
+      "sha256": "bcc3b66a0ecbed3a288395e1e9f935ce87b71b8ea4ea0f0d18e3128e111a4578"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00488__MVI_3292.mp4",
+      "label": "school",
+      "sha256": "4c04b8efcb2db686e1c7efd00c7078e284603851d7dc52681371017c34dde60c"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00560__MVI_5146.mp4",
+      "label": "friend",
+      "sha256": "08f93a4552fb1771b18e931638f657e7d375e2e20c36355ff6f20441f11db5ec"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00522__MVI_3638.mp4",
+      "label": "hospital",
+      "sha256": "4b5b79f2acfc43deaa212abb5f4e6107c960ed7d1a276123f683883106230724"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00496__MVI_3458.mp4",
+      "label": "school",
+      "sha256": "56455ad67af774ea51257d1024e61bbd3ba19d073496da0cedb27ba032733b7f"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00573__MVI_0089.mp4",
+      "label": "hello",
+      "sha256": "7259eca5cbeb344183a22c09ec8640b8460439d0a9f637d4fa01862d23c844a3"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00501__MVI_3538.mp4",
+      "label": "school",
+      "sha256": "e5bd9cf51d4ecdd52b582c6caeab7f124ee5142034987f92f2151cd38833225e"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00554__MVI_4124.mp4",
+      "label": "friend",
+      "sha256": "39f54bd0d82d93eb61292cf15ed926b6d31817d082768fd1cbb5ca58364bf4c9"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00491__MVI_3372.mp4",
+      "label": "school",
+      "sha256": "ca6d72a7e5dbb513ac344eee85725bb7f0fa4e05afbddaf1ed1a131920fe286a"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00530__MVI_3405.mp4",
+      "label": "market",
+      "sha256": "b72972540a34b09aa4dec7e81d35c6505e52af6bfe4ec70fd1f8d8d3a980f0ec"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00531__MVI_3406.mp4",
+      "label": "market",
+      "sha256": "debfd1446c0e66e7bff6f4493ff9c447768b07126bcfaa4af38d23fed803c244"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00534__MVI_3488.mp4",
+      "label": "market",
+      "sha256": "f3895d75e0d3f91cdda3a2edee071ce637de8646a7a2ce2ab758d87aeb1d7c6a"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00609__MVI_0007.mp4",
+      "label": "thank you",
+      "sha256": "1f6a869d72a8a2f714dd87c8763850519b32f2acb5645b69608264ad99e993cb"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00618__MVI_0111.mp4",
+      "label": "thank you",
+      "sha256": "63311c1079c1a1dbacd421fda7dbfd64d79cd0737b0d53e13873efa61e13359a"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00568__MVI_0031.mp4",
+      "label": "hello",
+      "sha256": "7ba3673a03bafddf76490ff5cd5cc00a624e6056303d0c231c39a7f2ebc7832a"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00608__MVI_0006.mp4",
+      "label": "thank you",
+      "sha256": "4c46b72d1d2647723f00c384914ddd3c4c92671c295266d657ced66d3d8263dd"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00617__MVI_0063.mp4",
+      "label": "thank you",
+      "sha256": "82949bf667a70648e83e838ad6b497b922523a72bdfe6c329d1a52a1670b5e83"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00529__MVI_3326.mp4",
+      "label": "market",
+      "sha256": "e02c83b88de072c6a1ab00e7af75e30aea1a239099be96816f9f91fa9aead1d0"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00506__MVI_3315.mp4",
+      "label": "hospital",
+      "sha256": "40efe784ab77255d6bb0518c1f51cb67c808fa1c3c182ccaedfa7d035608653b"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00486__MVI_3290.mp4",
+      "label": "school",
+      "sha256": "6910baf201b551a3600e1070bd171eb645fc1a4e6065ab2a62ef18bf49f8d2b1"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00613__MVI_0060.mp4",
+      "label": "thank you",
+      "sha256": "633138c7197fdf1ba9abf2c91b77a22a4f81f88b4e64667368a315451bf3a05a"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00621__MVI_9948.mp4",
+      "label": "thank you",
+      "sha256": "8bb6556468df72d19d95ad377121934575b74f04d5a9f7d4d1df75be31ea2594"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00539__MVI_3570.mp4",
+      "label": "market",
+      "sha256": "b9d19a8e8beb76188b00e273af384dff9d9d5e8cd1073b02ecfb1a4d95810155"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00615__MVI_0061.mp4",
+      "label": "thank you",
+      "sha256": "23b58ecbae3500623dd49e9de990c58a4526e738995eb17754f00a7f1a6f7bea"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00575__MVI_0091.mp4",
+      "label": "hello",
+      "sha256": "b6e698d04af7f643226602ea5536f6af5ec00e89cdac8d5fe1cdc1d7601a2140"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00569__MVI_0032.mp4",
+      "label": "hello",
+      "sha256": "9a49b2b62cc3726dfa4c909a78cf9a4e52f1b229801f95a2a9149a3e5896071c"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00577__MVI_9915.mp4",
+      "label": "hello",
+      "sha256": "603ab0f6b43bc6f7925d0cc32cbcb13c8141d5fd9a0c98c8fff3382ee0d42276"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00511__MVI_3398.mp4",
+      "label": "hospital",
+      "sha256": "48a2ea34cb05049c7fe04baccdb02ad1fa66fc7026db4977edc556ba67ce377a"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00557__MVI_4998.mp4",
+      "label": "friend",
+      "sha256": "e9e219444a9ca7d5e8b6865998903f4d76e8fcf931bc570e1d369b6142ffe469"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00610__MVI_0008.mp4",
+      "label": "thank you",
+      "sha256": "06c8039cc2e73ec022ca6fb15b6941e1d72bc797b38cbba30389a9bf06cc2624"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00563__MVI_5300.mp4",
+      "label": "friend",
+      "sha256": "8e9e0e79fdb54d1b44fd991cff1e5905afc81a4a631cdfda90b48dee043ee835"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00550__MVI_3976.mp4",
+      "label": "friend",
+      "sha256": "a71b831176acb03c6926d11f2ca2c52404558e84867e4e850e316b6afda208ed"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00515__MVI_3481.mp4",
+      "label": "hospital",
+      "sha256": "462dbc32ab5a3d6787629ef40bc7976a543bcce0f61555d78bb2b9ea78d970fe"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00513__MVI_3400.mp4",
+      "label": "hospital",
+      "sha256": "06da02c7256d352a2d83593fa471781b39c62bd4155f2086e11f6277c9e44a6f"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00614__MVI_0060_.mp4",
+      "label": "thank you",
+      "sha256": "ba06a6d1a44a0f715384df6623a1faddf4a667afaf983e826d41c59b9b668a7c"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00490__MVI_3371.mp4",
+      "label": "school",
+      "sha256": "2c30703788d44e7fc6e55be6902923aaaec8a0f8223acc404afa4459ec912831"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00497__MVI_3459.mp4",
+      "label": "school",
+      "sha256": "7aa382617343e2420b977febc4374e86a89817c82996fd366a8d38eb2a8786b4"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00572__MVI_0039.mp4",
+      "label": "hello",
+      "sha256": "300a9e6e69bc7131cc99354c1b6000a56a9441b4a0978d10dd61a8cb167cd7c9"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00499__MVI_3536.mp4",
+      "label": "school",
+      "sha256": "94c082d27b45b3d1ba2e303e59f63d23987fa374a80b7261f553fe724d56b816"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00624__MVI_9951.mp4",
+      "label": "thank you",
+      "sha256": "06f431fe2d48a4432bf6b0baf609c8322a6fff77816c7fa6e7d7e5d407efdb07"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00503__MVI_3615.mp4",
+      "label": "school",
+      "sha256": "33c9f65aef21415644ef733c2eabe725ba9fd7abc010e5de710fda56ec111b6a"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00517__MVI_3483.mp4",
+      "label": "hospital",
+      "sha256": "e0987b9f3f1e877f4de436d1e9d27968c3d12f3c0a16e6553b9134e9d8df48e9"
+    }
+  ],
+  "validation": [
+    {
+      "video_path": "hello/hello__INCLUDE__00583__MVI_9957.mp4",
+      "label": "hello",
+      "sha256": "a62a9d7561809e5f64deb9e8dbc8d206e1d4feae874516cbc5e29974b9ce5702"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00547__MVI_3827.mp4",
+      "label": "friend",
+      "sha256": "2da23e780cd36436c7d34eb0cbec0938ddc3286fa70acd0910140564b17573e7"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00582__MVI_9956.mp4",
+      "label": "hello",
+      "sha256": "4aeba419d74d84dd5e0fb14d752718454acfd4aa504322b5f071a79814e6e622"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00536__MVI_3490.mp4",
+      "label": "market",
+      "sha256": "980c62237f2a8c2edd44bf482925a2d41748d6dc7cb325ca782fb4ce978cf199"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00520__MVI_3562.mp4",
+      "label": "hospital",
+      "sha256": "81b17ddc8eaa215e2a7bbf93370096add7c69bb0ccac5616e5e1faf704fcbb4c"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00620__MVI_0113.mp4",
+      "label": "thank you",
+      "sha256": "4446819b4aeefa98745296ef23480750b5d008431486c580d58fdae6b0e6b32b"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00492__MVI_3373.mp4",
+      "label": "school",
+      "sha256": "7a1e9d31e1632d01e9647a43de4d3599057aa4d2f0af836794cc074735665c50"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00556__MVI_4997.mp4",
+      "label": "friend",
+      "sha256": "b3e5ba9c8b4853cae1711137fa1acaf733902485dab66abdec0e9c68d7d0d280"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00532__MVI_3407.mp4",
+      "label": "market",
+      "sha256": "c44887555c9457b8ee8cf1ff7afb6ec5f9e65bbff903a4c5146f9d9e9afd4c7a"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00519__MVI_3561.mp4",
+      "label": "hospital",
+      "sha256": "3de2cc7e248cabbd463d01f4237946dcbb1abf888f2a8372ba506575dd467a71"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00498__MVI_3535.mp4",
+      "label": "school",
+      "sha256": "1ba04f0de83b4fa9c0fec7aacc3a2ed2778250487bcc4c3551631e2798e05217"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00612__MVI_0059.mp4",
+      "label": "thank you",
+      "sha256": "99b92906ead8080a47486873766c7543dd06dd60ecb686631ec84389c6435d65"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00543__MVI_3648.mp4",
+      "label": "market",
+      "sha256": "beebe88a37455c65538de46b20abe773433cba3fbc87f55612a45cde4880f028"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00626__MVI_9985.mp4",
+      "label": "thank you",
+      "sha256": "7fe836a63490a820f58c304c1a700dcb77f8dc55f74493c8d82ad5496119679b"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00555__MVI_4246.mp4",
+      "label": "friend",
+      "sha256": "3d3b6d67a0fd52f6b207f42464b55be5dfa38257c3108adff989fe0bb879cc8f"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00514__MVI_3480.mp4",
+      "label": "hospital",
+      "sha256": "14b3e4edc9b7505d6dd1f90762bbf32c70b07505d40bd47b3b23c63d9226b3f2"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00500__MVI_3537.mp4",
+      "label": "school",
+      "sha256": "fd0d84becf8d476c485aadce5f25fc0d9446b43b60fcef354b6d9d561c7bd463"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00567__MVI_0030.mp4",
+      "label": "hello",
+      "sha256": "2ed2c61719766b52446bcd48bdf3c8975d9012967738b38378d954dc3f0f0086"
+    }
+  ],
+  "test": [
+    {
+      "video_path": "hello/hello__INCLUDE__00566__MVI_0029.mp4",
+      "label": "hello",
+      "sha256": "2d514421e048da47b8a8b743c63ae8970e273bb0ef3e4a66fd050e99ec0a8188"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00487__MVI_3291.mp4",
+      "label": "school",
+      "sha256": "66978e2e5262028a4667525e22a21c39e9dcef61dc5f1cb9166781773fd671d2"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00565__MVI_8648.mp4",
+      "label": "friend",
+      "sha256": "e6fc84aad70a633fb1bf9a827045ee9843faddf77f8643950439fb128127c1f9"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00525__MVI_3641.mp4",
+      "label": "hospital",
+      "sha256": "6fce465c52ac06db1603a692cec4592cad001cc151ba3e5583750566cd9e7bff"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00545__MVI_3650.mp4",
+      "label": "market",
+      "sha256": "5e59aa44e635fac9a9a00553013476b3baa4db978722a57a9475236457392732"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00584__MVI_9982.mp4",
+      "label": "hello",
+      "sha256": "2e99985f66c072210b69b2ae3d6f7c0c3b6bf6fcf4ee8ac822d49ed3acc83c2b"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00611__MVI_0058.mp4",
+      "label": "thank you",
+      "sha256": "2acd0d912ed6b19d265ae0414ce52a5573a76fca42475a4a6f57c58c9af84093"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00559__MVI_5145.mp4",
+      "label": "friend",
+      "sha256": "bd399b1f6c0b6360907ac0012d3d2f1334047d5aaf5521719314bf3cea0c77ca"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00523__MVI_3639.mp4",
+      "label": "hospital",
+      "sha256": "910877534b01aa2f8a4bb19e57660cbfa6293afde4b6113b4da366112c1785cc"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00544__MVI_3649.mp4",
+      "label": "market",
+      "sha256": "534520101efec72f67893a8eb3344484396506bc6ffcc2e1034f16d583f8be7a"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00505__MVI_3617.mp4",
+      "label": "school",
+      "sha256": "9ab21e2bf71096acd388fafc07c2b93029416f53e242e28e34e4ac1477f03a63"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00623__MVI_9950.mp4",
+      "label": "thank you",
+      "sha256": "683933eeb27518135267c6930c0ddf431d7da8730d16160797fb9faad96ec5f7"
+    },
+    {
+      "video_path": "market/market__INCLUDE__00540__MVI_3571.mp4",
+      "label": "market",
+      "sha256": "f9e37fc755f001986405e463628860db8040dbe84de40278e819333cc495fcbb"
+    },
+    {
+      "video_path": "friend/friend__INCLUDE__00561__MVI_5147.mp4",
+      "label": "friend",
+      "sha256": "b0f24f93f1d58b7ba8aef75150fc403d3526febf5fa410d2728b823b0a3df801"
+    },
+    {
+      "video_path": "thank_you/thank_you__INCLUDE__00619__MVI_0112.mp4",
+      "label": "thank you",
+      "sha256": "bccb83f4a4cacb7e68e3461d15ab51986ad0561ef234ffc2879041e359319fd1"
+    },
+    {
+      "video_path": "hospital/hospital__INCLUDE__00521__MVI_3563.mp4",
+      "label": "hospital",
+      "sha256": "dceb21f42521f7182c01bbb2b943e083ae4eadad12ac4f62ca5a1c85eaafa7c9"
+    },
+    {
+      "video_path": "hello/hello__INCLUDE__00580__MVI_9954.mp4",
+      "label": "hello",
+      "sha256": "495feded7769783f13377fa9b496bbde19aa388d33ff7df47ab1fb866139d698"
+    },
+    {
+      "video_path": "school/school__INCLUDE__00489__MVI_3293.mp4",
+      "label": "school",
+      "sha256": "3cb12a5c58db3e5c4712194e621702cfa185a190baeca3a4125afe7b90ce00e9"
+    }
+  ]
+}

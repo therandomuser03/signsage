@@ -17,8 +17,8 @@ Status date of record: 2026-10-02; validation run: 2026-10-05.)
 |---|---|
 | Frontend, MediaPipe, WebSocket, backend, auth, history, capabilities, English→gloss | Implemented (WS verified) |
 | Text→pose UI | Infrastructure implemented; quality experimental |
-| Sign→Text model | Experimental, NOT promoted (mode collapse on record) |
-| General ISL accuracy | Unverified — no evidence supports a broad claim |
+| Sign→Text model | Experimental pilot: isolated-word recognizer (6 INCLUDE words, 61% test accuracy), NOT promoted; original transformer (352868924) remains NO-GO |
+| General ISL accuracy | Limited to 6 ISL words (friend, hello, hospital, market, school, thank you); no evidence supports broader claims |
 | End-to-end latency | Partially verified (model-only; no target-device benchmark) |
 | Two-device relay | Deferred (single-device scope) |
 | High-stakes use | Out of scope (not a certified replacement) |
@@ -79,8 +79,13 @@ training export, calibrated threshold, T5-rejection path.
 
 ## 4. Production blockers (ordered; B1 is the blocker)
 
-- **B1. No promotable model.** Fix = train V2 → beat trivial + diversity_ok →
-  export → verify → promote. No code change promotes a bad model.
+- **B1. No promotable model.** The isolated-word pilot (61% test accuracy, zeros in
+  per-class recall, not signer-independent) does not meet the promotion bar
+  (80% accuracy / 80% macro recall / 60% per-class recall). The original
+  352868924 transformer remains NO-GO (WER 1.0046, EM 0.0) and cannot be
+  recovered for ISL recognition — it was trained on synthetic iSign
+  text→pose data, not real ISL video. Fix = train on more real ISL data →
+  beat thresholds → export → verify → promote.
 - **B2. Landmark order trusted, never verified.** Fix = compare
   order/range values at bundle load + swapped-order rejection test.
 - **B3. Confidence gate ships OFF.** Fix with any promotion = calibrate on
@@ -93,15 +98,13 @@ training export, calibrated threshold, T5-rejection path.
   never claim it works.
 
 Working today: capture → MediaPipe 543×3 → overlay → throttled WS → validation →
-windowing → preprocessing → contract-checked adapter → greedy decode → verdict
-rendering; honest `MODEL_UNAVAILABLE`; capabilities/health; avatar-gloss with
-constrained fallback; green suite. Broken: Sign→Text itself — no promotable
-weights exist (gate doing its job). Smallest viable path forward: keep the
-architecture; add (1) V2 training run, (2) B2 order check, (3) B3 threshold,
-(4) B4 golden test. Implementation order: B4+B2 first → V2 training →
-evaluate vs NO-GO bar → B3 calibration → promote (`BUNDLE_DIR` + `PROMOTED=true`
-+ SHA, verify via `ws_diagnostic` + capabilities) → then B6. T5 stays
-research-only unless SignTransformer plateaus.
+windowing → preprocessing → contract-checked adapter → isolated-word inference →
+verdict rendering; honest `MODEL_UNAVAILABLE` when gated; isolated-word pilot
+servable via `SIGNSAGE_ALLOW_UNPROMOTED_DEV=true` (6 ISL words, 61% accuracy,
+NOT promoted); capabilities/health; avatar-gloss with constrained fallback;
+green suite (235 tests). Broken: no promotable ISL recognition weights exist
+(gate doing its job). Path to restricted-vocabulary functional: train on more
+real ISL data → beat promotion thresholds (80/80/60) → export → promote.
 
 ## 5. End-to-end validation (2026-10-05, no code changed)
 

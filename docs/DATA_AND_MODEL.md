@@ -45,24 +45,46 @@ logs, evaluations as versioned JSON with wer/em/diversity/samples).
 - **Never promote checkpoint 352868924** (verified NO-GO: WER 1.0046, EM 0.0,
   diversity 0.99%).
 
-## 4. Supported vocabulary: NONE (evidence-bound)
+## 4. Supported vocabulary: evidence-bound (isolated-word pilot)
 
 Rule: SUPPORTED requires present-in-training-data + present-in-evaluation +
-recognized end-to-end. **Supported recognition vocabulary = ∅ (empty set).**
+recognized end-to-end. The isolated-word pilot bundle
+(`backend/models/isl_bundle/`, trained on the INCLUDE subset of
+vidit031/isl-isolated-40words, revision `255ce7fd`) has measured held-out
+results and is servable in dev mode via `SIGNSAGE_ALLOW_UNPROMOTED_DEV=true`,
+but does NOT meet the promotion bar (80% accuracy / 80% macro recall /
+60% per-class recall) and is not signer-independent.
+
+**Supported recognition vocabulary (pilot, not promoted):** friend, hello,
+hospital, market, school, thank you — 6 ISL words from real video data.
+
+Measured pilot evaluation (test split, 18 samples):
+- Accuracy: 61.1%, macro recall: 61.1%
+- Per-class recall: friend 0.0%, hello 100%, hospital 66.7%, market 100%,
+  school 33.3%, thank you 66.7%
+- Status: NO-GO, promotion_eligible: false, signer_independent: false
+- Inference latency: ~2 ms/sample on CPU
+
+The original transformer checkpoint 352868924 remains NO-GO (WER 1.0046,
+EM 0.0, diversity 0.99%) and cannot be recovered for ISL recognition — it
+was trained on synthetic iSign text→pose data (news headlines mapped to
+generated poses), not real ISL video.
 
 - 352868924 eval: EM 0.0 — no training-domain phrase recognized. T5 POC: no
   weights. ISLRTC PDF + alphabet chart: learning references, never labels —
   do not enumerate them as capabilities. The 14 avatar IDs are the wrong
   direction (generation, not recognition). Inputs are always dynamic sequences
-  (`(T,543,3)`, T≥2); no static-sign classifier exists.
-- UI honesty: no "supported signs" language, no "try signing X" prompts, no
-  alphabet chart in the recognition flow until a SUPPORTED row gains evidence.
+  (`(T,543,3)`, T≥2); no static-sign classifier exists for recognition.
+- UI honesty: no "supported signs" language beyond the pilot vocabulary above,
+  no "try signing X" prompts, no alphabet chart in the recognition flow until
+  a SUPPORTED row gains evidence.
 
 ## 5. Model readiness: can anything serve? No.
 
 | Checkpoint | Measured | Verdict |
 |---|---|---|
-| 352868924 `signsage_transformer_full.pt` | WER 1.0046, BLEU 0.24, ROUGE-L 0.089, EM 0.0, diversity 0.99%, top-pred 44.8% (`research/evaluation/reports/352868924/`, `research/manifests/models/signsage-s2t_v352868924.yaml`) | BROKEN translator / WORKING negative reference. Loads, deterministically reproduces collapse ("the police said that"). Stays unpromoted. |
+| 352868924 `signsage_transformer_full.pt` | WER 1.0046, BLEU 0.24, ROUGE-L 0.089, EM 0.0, diversity 0.99%, top-pred 44.8% (`research/evaluation/reports/352868924/`, `research/manifests/models/signsage-s2t_v352868924.yaml`) | BROKEN translator / WORKING negative reference. Loads, deterministically reproduces collapse ("the police said that"). Stays unpromoted. Cannot be recovered for ISL recognition — trained on synthetic iSign text→pose data, not real ISL video. |
+| Isolated-word pilot (`backend/models/isl_bundle/`) | INCLUDE 6 words, 122 samples; test accuracy 61.1%, macro recall 61.1%, per-class recall: friend 0.0%, hello 100%, hospital 66.7%, market 100%, school 33.3%, thank you 66.7%; inference ~2 ms/sample CPU | EXPERIMENTAL PILOT. Servable in dev via `SIGNSAGE_ALLOW_UNPROMOTED_DEV=true`. NOT promoted — below 80/80/60 thresholds, not signer-independent. |
 | SignTransformer V2 (planned) | No training yet (`research/training/READINESS.md`: pre-norm d256/4L, SP-16k, ≤12ep) | EXPERIMENTAL |
 | T5-small POC (61,605,888 params) | Synthetic-gate EM 0.0→0.094 vs 0.5 → `WIRING-FAIL` (`research/evaluation/t5_poc_gate/gate_report.json`); unloadable via `SignToTextAdapter` (32k vs 16k vocab) | EXPERIMENTAL, research-only |
 | External `t5-small-motion` | 0/1887 EM (see `EXTERNAL_EVALUATION.md`) | NO-GO, never promoted |
