@@ -32,6 +32,7 @@ import {
   transportLabel,
 } from "./sessionStatus";
 import { HolisticExtractor, type HolisticFrame } from "./landmarks";
+import { BrowseSignsSheet } from "./gestureCatalog";
 import { loadPrefs } from "@/features/settings/preferences";
 
 type Phase =
@@ -43,6 +44,7 @@ type Phase =
   | "error";
 
 const SEND_INTERVAL_MS = 100; // ~10 landmark frames per second
+const DETECT_INTERVAL_MS = 80; // MediaPipe runs far faster than the backend can use; keep preview responsive without re-running all models every animation frame.
 
 function drawOverlay(
   canvas: HTMLCanvasElement,
@@ -73,6 +75,7 @@ export default function TranslatePage() {
   const socketRef = useRef<TranslationSocket | null>(null);
   const rafRef = useRef(0);
   const lastSendRef = useRef(0);
+  const lastDetectRef = useRef(0);
   const framesSentRef = useRef(0);
   const phaseRef = useRef<Phase>("idle");
   const everOpenRef = useRef(false);
@@ -90,6 +93,7 @@ export default function TranslatePage() {
   const [modelError, setModelError] = useState<string | null>(null);
   const [results, setResults] = useState<TranslationTextMessage[]>([]);
   const [partial, setPartial] = useState<TranslationTextMessage | null>(null);
+  const [browseOpen, setBrowseOpen] = useState(false);
   const [framesSent, setFramesSent] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
@@ -159,9 +163,18 @@ export default function TranslatePage() {
       canvas.height = video.clientHeight;
     }
 
-    const frame = extractor.detect(video, performance.now());
+    const now = performance.now();
+    const shouldDetect = now - lastDetectRef.current >= DETECT_INTERVAL_MS;
+    let frame: HolisticFrame | null = null;
+    if (shouldDetect) {
+      frame = extractor.detect(video, now);
+      if (frame) {
+        lastDetectRef.current = now;
+        drawOverlay(canvas, frame, "#22c55e");
+      }
+    }
+
     if (!frame) return;
-    drawOverlay(canvas, frame, "#22c55e");
 
     if (phaseRef.current !== "live") return;
     if (frame.detected) setLastSeenAt(Date.now());
@@ -172,8 +185,8 @@ export default function TranslatePage() {
     // saves ~30KB JSON per frame with zero information loss. Low-motion but
     // detected frames are still sent; the backend motion gate owns those.
     if (!frame.detected) return;
-    if (performance.now() - lastSendRef.current < SEND_INTERVAL_MS) return;
-    lastSendRef.current = performance.now();
+    if (now - lastSendRef.current < SEND_INTERVAL_MS) return;
+    lastSendRef.current = now;
     try {
       if (socket.sendFrame(frame.landmarks)) {
         framesSentRef.current += 1;
@@ -285,6 +298,7 @@ export default function TranslatePage() {
     setModelError(null);
     setElapsed(0);
     lastSendRef.current = 0;
+    lastDetectRef.current = 0;
     connectSocket();
     setPhase("live");
     rafRef.current = requestAnimationFrame(loop);
@@ -311,6 +325,7 @@ export default function TranslatePage() {
     stopTracks();
     setPartial(null);
     setElapsed(0);
+    lastDetectRef.current = 0;
     setPhase("idle");
   }, [stopTracks]);
 
@@ -357,7 +372,17 @@ export default function TranslatePage() {
             Sign naturally. Your movements appear as English in real time.
           </p>
         </div>
-        <div className="space-y-0.5 text-right text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full px-4"
+            onClick={() => setBrowseOpen(true)}
+          >
+            Browse Signs
+          </Button>
+          <div className="space-y-0.5 text-right text-xs">
           <p className="flex items-center justify-end gap-1.5 font-medium">
             <span
               aria-hidden="true"
@@ -372,20 +397,21 @@ export default function TranslatePage() {
             {modelLabel(modelState)}
           </p>
           {showTransport && (
-          <p className="flex items-center justify-end gap-1.5 text-foreground/60">
-            <span
-              aria-hidden="true"
-              className={
-                socketStatus === "open"
-                  ? "inline-block h-2 w-2 rounded-full bg-green-500"
-                  : socketStatus === "connecting"
-                    ? "inline-block h-2 w-2 rounded-full bg-yellow-500 motion-safe:animate-pulse"
-                    : "inline-block h-2 w-2 rounded-full bg-foreground/30"
-              }
-            />
-            {transportText}
-          </p>
+            <p className="flex items-center justify-end gap-1.5 text-foreground/60">
+              <span
+                aria-hidden="true"
+                className={
+                  socketStatus === "open"
+                    ? "inline-block h-2 w-2 rounded-full bg-green-500"
+                    : socketStatus === "connecting"
+                      ? "inline-block h-2 w-2 rounded-full bg-yellow-500 motion-safe:animate-pulse"
+                      : "inline-block h-2 w-2 rounded-full bg-foreground/30"
+                }
+              />
+              {transportText}
+            </p>
           )}
+          </div>
         </div>
       </div>
 
@@ -734,6 +760,8 @@ export default function TranslatePage() {
           </ul>
         </div>
       )}
+
+      <BrowseSignsSheet open={browseOpen} onOpenChange={setBrowseOpen} />
     </div>
   );
 }

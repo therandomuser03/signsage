@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsx --test src/services/websocket/connection.test.ts src/services/websocket/client.test.ts src/features/translate/sessionStatus.test.ts src/features/text-to-sign/services/proceduralSigns.test.ts",
+    "test": "tsx --test src/services/websocket/connection.test.ts src/services/websocket/client.test.ts src/features/translate/sessionStatus.test.ts src/features/translate/gestureCatalog.test.ts src/features/text-to-sign/services/proceduralSigns.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
