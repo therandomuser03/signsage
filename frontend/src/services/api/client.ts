@@ -1,7 +1,7 @@
 import type {
   AvatarGlossRequest, AvatarGlossResponse, AvatarVocabularyResponse, CapabilitiesResponse,
-  DeletedResponse, HealthResponse, HistoryListResponse, MeResponse, ModelsResponse,
-  SignToTextRequest, SignToTextResponse,
+  DeletedResponse, HealthResponse, HistoryListResponse, ImageClassifyRequest, ImageClassifyResponse,
+  MeResponse, ModelsResponse, SignToTextRequest, SignToTextResponse, VideoTranslationResponse,
 } from "../../types/api";
 import { endpoints } from "./endpoints";
 import { ApiError, NetworkError } from "./errors";
@@ -51,6 +51,24 @@ export class ApiClient {
   avatarGloss = (req: AvatarGlossRequest) => this.request<AvatarGlossResponse>("POST", endpoints.avatarGloss, req);
   avatarVocabulary = () => this.request<AvatarVocabularyResponse>("GET", endpoints.avatarVocabulary);
   signToText = (req: SignToTextRequest) => this.request<SignToTextResponse>("POST", endpoints.signToText, req);
+
+  classifyImage = (req: ImageClassifyRequest) =>
+    this.request<ImageClassifyResponse>("POST", endpoints.classifyImage, req);
+
+  uploadVideo = async (file: File): Promise<VideoTranslationResponse> => {
+    const form = new FormData();
+    form.append("file", file);
+    const token = this.getAccessToken ? await this.getAccessToken() : null;
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await this.fetchImpl(this.baseUrl + endpoints.videoUpload, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    if (!res.ok) throw await ApiError.fromResponse(res);
+    return (await res.json()) as VideoTranslationResponse;
+  };
 
   listHistory = (limit = 20, offset = 0) =>
     this.request<HistoryListResponse>("GET", `${endpoints.history}?limit=${limit}&offset=${offset}`);

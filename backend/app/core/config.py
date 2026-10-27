@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     model_bundle_dir: Optional[str] = None
     model_kind: Literal["sign_to_text", "isolated_words", "continuous_sign"] = "sign_to_text"
 
+    # --- Static image classification bundles -------------------------------
+    # Bundles produced by research/image_classification/train.py:
+    #   model.pt + labels.json  (one per task: alphabet, word)
+    # Left unset by default; the image-classification endpoints report the
+    # bundle as missing until these point at real artifact directories.
+    image_alphabet_bundle_dir: Optional[str] = None
+    image_word_bundle_dir: Optional[str] = None
+
     # Whether this checkpoint has passed the deployment gate and may be
     # served to real users. As of research run 352868924 (2026-09-26) this
     # is NO-GO (WER 1.0046, 0.99% output diversity, top prediction covers

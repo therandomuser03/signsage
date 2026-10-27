@@ -22,7 +22,11 @@ import { getAccessToken } from "@/services/supabase/auth";
 import { TranslationSocket } from "@/services/websocket/client";
 import type { ConnectionStatus } from "@/services/websocket/connection";
 import type { TranslationTextMessage } from "@/services/websocket/protocol";
-import type { CapabilitiesResponse } from "@/types/api";
+import type {
+  CapabilitiesResponse,
+  ImageClassifyResponse,
+  VideoTranslationResponse,
+} from "@/types/api";
 import {
   activityLabel,
   modelLabel,
@@ -109,6 +113,21 @@ export default function TranslatePage() {
   const scoreLabel = capabilities?.sign_to_text_source === "heuristic-fallback"
     ? "frame agreement"
     : "uncalibrated model score";
+
+  // --- Static image classification (REST, alphabet / word) ---
+  const [imageClassifyMode, setImageClassifyMode] = useState(false);
+  const [imageResult, setImageResult] = useState<ImageClassifyResponse | null>(null);
+  const [imageClassifying, setImageClassifying] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const imageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastClassifyRef = useRef(0);
+  const IMAGE_CLASSIFY_INTERVAL_MS = 1500; // classify at most ~1.5s apart
+
+  // --- Video upload for isolated-word recognition ---
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUploadLoading, setVideoUploadLoading] = useState(false);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+  const [videoUploadResult, setVideoUploadResult] = useState<VideoTranslationResponse | null>(null);
 
   const setPhase = (p: Phase) => {
     phaseRef.current = p;
@@ -202,6 +221,61 @@ export default function TranslatePage() {
       // Shape guard failed — never send a malformed frame.
     }
   }, []);
+
+  // --- Static image classification: capture a video frame and classify it ---
+  const classifyCurrentFrame = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) return;
+    setImageClassifying(true);
+    setImageError(null);
+    try {
+      // Draw the current video frame to an offscreen canvas, then base64-encode it.
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Cannot get canvas context");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+      const result = await apiClient.classifyImage({
+        image: dataUrl,
+        task: "alphabet",
+        min_confidence: 0.5,
+      });
+      setImageResult(result);
+    } catch (err: any) {
+      setImageError(err?.message ?? "Image classification failed.");
+      setImageResult(null);
+    } finally {
+      setImageClassifying(false);
+    }
+  }, [apiClient]);
+
+  // Periodically classify frames while image classification mode is active and
+  // the camera is live. Stopped automatically when the mode is toggled off.
+  useEffect(() => {
+    if (!imageClassifyMode || phaseRef.current !== "live") {
+      if (imageIntervalRef.current) {
+        clearInterval(imageIntervalRef.current);
+        imageIntervalRef.current = null;
+      }
+      return;
+    }
+    imageIntervalRef.current = setInterval(() => {
+      const now = Date.now();
+      if (now - lastClassifyRef.current >= IMAGE_CLASSIFY_INTERVAL_MS) {
+        lastClassifyRef.current = now;
+        void classifyCurrentFrame();
+      }
+    }, IMAGE_CLASSIFY_INTERVAL_MS);
+    return () => {
+      if (imageIntervalRef.current) {
+        clearInterval(imageIntervalRef.current);
+        imageIntervalRef.current = null;
+      }
+    };
+  }, [imageClassifyMode, classifyCurrentFrame, phaseRef.current]);
 
   const connectSocket = useCallback(() => {
     socketRef.current?.close();
@@ -396,6 +470,26 @@ export default function TranslatePage() {
           >
             Browse Signs
           </Button>
+          <Button
+            type="button"
+            variant={imageClassifyMode ? "default" : "outline"}
+            size="sm"
+            className="rounded-full px-4"
+            onClick={() => {
+              setImageClassifyMode((prev) => {
+                const next = !prev;
+                if (!next) {
+                  setImageResult(null);
+                  setImageError(null);
+                }
+                return next;
+              });
+            }}
+            disabled={!backendOnline}
+          >
+            {imageClassifyMode ? <Square size={14} /> : <Camera size={14} />}
+            {imageClassifyMode ? " Image" : " Image classify"}
+          </Button>
           <div className="space-y-0.5 text-right text-xs">
           <p className="flex items-center justify-end gap-1.5 font-medium">
             <span
@@ -474,6 +568,101 @@ export default function TranslatePage() {
           </p>
         </div>
       )}
+
+      {imageClassifyMode && (
+        <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-2">
+            Image classification (alphabet)
+          </p>
+          {imageError && (
+            <div className="text-destructive text-xs mb-2">{imageError}</div>
+          )}
+          {imageClassifying ? (
+            <div className="flex items-center gap-3 text-xs text-foreground/60">
+              <Spinner className="h-4 w-4" />
+              <span>Classifying…</span>
+            </div>
+          ) : imageResult ? (
+            <div className="flex items-center justify-between">
+              <span className={imageResult.accepted ? "font-mono text-2xl font-bold text-foreground" : "font-mono text-2xl font-bold text-foreground/40"}>
+                {imageResult.label || "—"}
+              </span>
+              <div className="text-right text-xs">
+                <p className="font-medium">
+                  {imageResult.accepted ? "accepted" : imageResult.reason}
+                </p>
+                <p className="text-foreground/50">
+                  confidence {imageResult.confidence.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-foreground/50">
+              Position your hand in frame and hold the sign steady.
+            </p>
+          )}
+          <p className="mt-2 text-xs text-foreground/50">
+            Static ISL letters (A–Z) only — not continuous signing or sentences.
+          </p>
+        </div>
+      )}
+
+      {/* Video upload for isolated-word recognition */}
+      <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-2">
+          Video upload (isolated-word pilot)
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="file"
+            accept=".mp4,.mov,.avi,.mkv,.webm"
+            id="video-upload"
+            className="text-xs"
+            onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!videoFile || videoUploadLoading}
+            onClick={async () => {
+              if (!videoFile) return;
+              setVideoUploadLoading(true);
+              setVideoUploadError(null);
+              try {
+                const result = await apiClient.uploadVideo(videoFile);
+                setVideoUploadResult(result);
+              } catch (err: any) {
+                setVideoUploadError(err?.message ?? "Video upload failed.");
+              } finally {
+                setVideoUploadLoading(false);
+              }
+            }}
+          >
+            {videoUploadLoading ? <Spinner className="h-3 w-3 mr-1" /> : null}
+            Process video
+          </Button>
+        </div>
+        {videoUploadError && (
+          <p className="mt-2 text-xs text-destructive">{videoUploadError}</p>
+        )}
+        {videoUploadResult && (
+          <div className="mt-2 rounded-md bg-foreground/5 px-3 py-2">
+            <p className="text-sm font-medium">
+              {videoUploadResult.accepted ? videoUploadResult.text : "Not confidently recognized"}
+            </p>
+            <p className="mt-1 text-xs text-foreground/60">
+              {videoUploadResult.accepted ? "accepted" : videoUploadResult.reason} ·
+              confidence {videoUploadResult.confidence.toFixed(2)} ·
+              frames {videoUploadResult.frames_processed} ·
+              {videoUploadResult.feature_version} ·
+              {videoUploadResult.result_type}
+            </p>
+          </div>
+        )}
+        <p className="mt-2 text-[10px] text-foreground/40">
+          Experimental six-word vocabulary (friend, hello, hospital, market, school, thank you). Uncalibrated scores. Uploads are not retained.
+        </p>
+      </div>
 
       {/* Workspace: camera + live translation panel */}
       <div className="grid items-stretch gap-4 lg:grid-cols-3">

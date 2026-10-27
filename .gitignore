@@ -21,6 +21,9 @@ results(1).zip
 results-v4.zip
 kaggle_input_v4/
 staging_kaggle_results/
+Indian sign Language-Real-life Words.zip
+Indian-Sign-Language-dataset-main.zip
+RealSign-Indian-Sign-Language-Dataset-main.zip
 
 # OS
 .DS_Store
@@ -54,3 +57,6 @@ frontend/.next/
 
 # TOON/cache
 graphify-out/
+# Large local SignSage training artifacts
+/research/image_classification/artifacts/words/train.npz
+/research/image_classification/artifacts/alphabet/train.npz

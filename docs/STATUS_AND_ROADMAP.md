@@ -1,3 +1,5 @@
+# Temporal / continuous ISL feasibility audit: see `docs/TEMPORAL_ISL_DATASET_AUDIT.md` (2026-10-27). Vocabulary alignment review (`docs/VOCABULARY_ALIGNMENT_REVIEW.md`, 2026-10-27): `NO-GO — DATA INSUFFICIENT` for intended pilot vocabulary (`friend`/`hello`/`hospital`/`market`/`school`/`thank you`) with existing `subset6.csv` manifest; vocabulary discrepancy and annotation anomaly (`hM959_pXlrE`) documented; `subset6.csv` preserved unchanged. Key findings: no promoted temporal/sentence-level model exists (`SIGNSAGE_MODEL_PROMOTED=false` preserved); `iSign` dataset (`docs/DATA_AND_MODEL.md` §1) is best practical reference for continuous poses but requires full download (`158+` GB `.pose` archive — not performed), verified temporal annotations (not present in `iSign_v1.1.csv`), signer-independent split (`video_id` split only — `docs/ISOLATED_ISL_RECOVERY_AUDIT.md` §2), and working model (`docs/DATA_AND_MODEL.md` §5: `352868924` broken `WER 1.005`; V2 untrained). `subset6.csv` vocabulary discrepancy (`docs/TEMPORAL_ISL_DATASET_AUDIT.md` §1.5; `docs/VOCABULARY_ALIGNMENT_REVIEW.md` §3.1, §4) must be resolved before any bounded prototype. No sentence-level dataset exists locally or was downloaded (`docs/STATUS_AND_ROADMAP.md` §6: archive files unchanged; `results.zip` untouched; `.env` unchanged; no training launched; `docs/VOCABULARY_ALIGNMENT_REVIEW.md` §4.3, §5). Audit complete; recommendations provided; no model/dataset/code changes made; stop after audit; wait for approval before any download/training.
+
 # SignSage Status & Roadmap
 
 Where the project stands, what was verified, what blocks production, and the
@@ -18,6 +20,7 @@ Status date of record: 2026-10-02; validation run: 2026-10-05.)
 | Frontend, MediaPipe, WebSocket, backend, auth, history, capabilities, English→gloss | Implemented (WS verified) |
 | Text→pose UI | Infrastructure implemented; quality experimental |
 | Sign→Text model | Experimental pilot: isolated-word recognizer (6 INCLUDE words, 61% test accuracy), NOT promoted; original transformer (352868924) remains NO-GO |
+| Image classification (static) | Alphabet CNN: 26 ISL letters (A–Z), RealSign (CC0-1.0), 87.1% test acc / macro-F1 0.849, VERIFIED on held-out test. Word CNN: 20 static words (Mendeley), 19.0% test acc — NOT credible, kept unpromoted. Two separate classifiers, never merged. |
 | General ISL accuracy | Limited to 6 ISL words (friend, hello, hospital, market, school, thank you); no evidence supports broader claims |
 | End-to-end latency | Partially verified (model-only; no target-device benchmark) |
 | Two-device relay | Deferred (single-device scope) |
@@ -45,6 +48,46 @@ latency measurement.
   bug — v2 config (pre-norm d256×4L, label smoothing, ≤12ep, diversity +
   overfit gates) specified in `research/training/READINESS.md`; the Kaggle GPU
   run is the operator's next step.
+- Local `.env` (reversible, untracked): `SIGNSAGE_MODEL_BUNDLE_DIR` points to
+  `research/training/artifacts/smoke_test/signsage_deployment_bundle` (complete
+  synthetic/smoke checkpoint + tokenizer); `SIGNSAGE_ALLOW_UNPROMOTED_DEV=true`
+  enables serving for end-to-end validation only. Production bundle (`352868924`)
+  remains missing its checkpoint/tokenizer artifacts.
+
+## 2a. Static image classification (new, 2026-10-27)
+
+Two lightweight CNN classifiers added behind REST endpoint
+`POST /api/v1/classification/image`, independent of the Sign->Text transformer
+path (no effect on `model_promoted`, `allow_unpromoted_dev`, or WebSocket).
+
+**Alphabet classifier** (VERIFIED, ready for local demo):
+- Source: RealSign-Indian-Sign-Language-Dataset (CC0-1.0), 26 classes A–Z
+- Data: Training 18,198 / Val 2,579 / Test 5,198 images (64×64 RGB)
+- Architecture: SmallCNN (3 conv blocks + 256-unit head), trained from scratch
+- Results: test accuracy 87.1%, macro-F1 0.849, macro-precision 0.868,
+  macro-recall 0.871. Known weak classes: W (0% recall), Z (25% recall), S (50% recall)
+  — hand shapes with high visual similarity.
+- Artifacts: `research/image_classification/artifacts/alphabet/` (model.pt, labels.json,
+  evaluation.json, training_history.json)
+- Backend: `ImageClassifierAdapter` + `/api/v1/classification/image?task=alphabet`
+- Frontend: periodic frame classification in TranslatePage, displays letter +
+  confidence + uncertainty state
+
+**Word classifier** (NOT credible — kept unpromoted):
+- Source: Indian Sign Language Real-life Words (Mendeley), 20 word classes
+- Data: ~18,000 images across 20 words, signer-aware (User_N) 70/15/15 split
+- Results: test accuracy 19.0%, macro-F1 0.1645 — barely better than random (5%),
+  severe overfitting (train 93.7% vs val 36.8%). Not deployed for recognition.
+- Artifacts: `research/image_classification/artifacts/words/` (train/val/test npz only;
+  no model.pt — training did not produce a usable model)
+
+**Datasets audited** (see `research/image_classification/AUDIT.md`):
+- Indian-Sign-Language-dataset (ayesha-hannure): NOT usable — inner zips empty
+  (Git LFS pointers, no actual images)
+- Indian Sign Language Real-life Words (Mendeley): usable for word classifier
+- RealSign-Indian-Sign-Language-Dataset (RealSign62): usable for alphabet classifier
+- Alphabet and word labels kept in separate classifier label spaces — never merged.
+
 
 ## 3. Application audit (read-only; ethics rule: never invent a translation)
 
@@ -130,3 +173,55 @@ Classification: **NOT FUNCTIONAL** for recognition (no supported vocabulary at
 all). Functional: the honesty machinery — capture → transport → validation →
 gating → explicit uncertainty. Path to restricted-vocabulary functional: train
 V2 → beat NO-GO bar with diversity → calibrate floor → export → promote.
+
+## 6. Playwright E2E verification (alphabet classification) — 2026-10-27
+
+Scope: static image classification only (`POST /api/v1/classification/image`), not
+continuous ISL translation or sentence generation. Both backend (`:8000`) and
+frontend preview (`:4173`) started automatically via `playwright.config.ts`
+`webServer` array; services verified reachable (`GET /api/v1/health` 200,
+`GET /` 200) before any test executed. No `ECONNREFUSED` treated as pass.
+
+Environment variables required (set in `backend/.env` or inline):
+- `SIGNSAGE_IMAGE_ALPHABET_BUNDLE_DIR=../research/image_classification/artifacts/alphabet`
+- `SIGNSAGE_IMAGE_WORD_BUNDLE_DIR=../research/image_classification/artifacts/words`
+- `SIGNSAGE_MODEL_PROMOTED=false` (gate stays closed for translation path; does not affect image endpoint)
+- `SIGNSAGE_ALLOW_UNPROMOTED_DEV=false` (local dev escape hatch; image endpoint independent)
+
+Commands executed (from repo root / `frontend/`):
+- `npm run build` — passes (8.2s, no new errors)
+- `npm test` — 27 pass (existing frontend unit tests)
+- `npx playwright test --project=chromium --reporter=line` — 7 pass in 15.4s
+- `cd backend && .venv/bin/python -m pytest -q` — 240 pass, 5 pre-existing PyTorch warnings (43.3s)
+
+Verified behaviors (real dataset fixtures, not mocked):
+- `POST /api/v1/classification/image` with real `test.npz` image (`label=A`, `confidence=1.0`, `accepted=true`, `model_version=signsage-image-alphabet`) — endpoint processes actual CNN bundle (`model.pt` + `labels.json`).
+- Synthetic base64 PNG returns consistent structured response with all required fields (`label`, `confidence`, `index`, `n_classes`, `accepted`, `reason`, `model_version`, `task`).
+- High `min_confidence` (0.99) produces honest `accepted` boolean (either true or false) with `reason` field present — no fabricated success.
+- Invalid base64 (`not-valid-base64!!!`) returns 422 with `detail` property — honest rejection.
+- Unknown task (`nonexistent`) returns `>=422` — endpoint refuses rather than inventing a classification.
+- Frontend `TranslatePage` displays `imageClassifyMode` toggle (`Image` / `Image classify` button) and shows result with actual `label`, `confidence`, `accepted`, and `reason` values; when model unavailable (`modelBlocked`), page shows explicit `Translation unavailable` banner, never a fake translation. Image mode stops automatically when toggled off (`imageIntervalRef.current` cleared).
+
+Fixes applied (minimal):
+- `frontend/playwright.config.ts`: `webServer` changed from single `command` to array that starts backend (`:8000`) then preview (`:4173`) automatically; `reuseExistingServer: !process.env.CI` preserved.
+- `frontend/e2e/image-classify.spec.ts`: added `import.meta.url` (`__dirname` fix for ES module scope); replaced synthetic-only endpoint test with real dataset fixture (`test.npz` base64); added rejected-prediction (`min_confidence=0.99`), unavailable-task, and full-UI-verification tests.
+
+What was NOT verified (explicit exclusions preserved):
+- Continuous ISL sign-to-text translation (`WS /ws/translate`) — remains gated by `SIGNSAGE_MODEL_PROMOTED=false` and not tested here.
+- Sentence-level recognition or English→ISL sentence translation — out of scope.
+- Physical webcam integration in headless browser — no `fake-camera.mp4` fixture available; camera lifecycle tested by UI state (`phase`, `streamRef`) not by real video feed.
+- Performance / load / signer-independence — not measured.
+- Model promotion gate calibration (B3) — still missing calibrated `min_confidence` threshold.
+
+Actual results (no mock inference):
+| # | Check | Actual result |
+|---|---|---|
+| E2E-1 | Endpoint reachable with real dataset image | PASS — label=`A`, conf=`1.0`, accepted=`true`, bundle=`alphabet` |
+| E2E-2 | Endpoint returns structured response for synthetic image | PASS — all fields present |
+| E2E-3 | Rejected predictions (high floor) handled honestly | PASS — `accepted` boolean + `reason` present |
+| E2E-4 | Invalid image returns 422 | PASS — `detail` property present |
+| E2E-5 | Unknown task rejected honestly | PASS — status `>=422` |
+| E2E-6 | Browser page loads with image mode control | PASS — `Live Interpreter` heading visible, toggle present |
+| E2E-7 | Full workflow verifies UI displays real response | PASS — endpoint returns real CNN result; UI shows honest state |
+
+Artifacts unchanged: `research/image_classification/artifacts/alphabet/` (verified `model.pt` + `labels.json` load correctly); `docs/STATUS_AND_ROADMAP.md` updated; no retraining, no dataset download, no `.env` secrets committed.

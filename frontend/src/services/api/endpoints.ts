@@ -10,6 +10,8 @@ export const endpoints = {
   signToText: "/api/v1/translation/sign-to-text",
   avatarGloss: "/api/v1/text-to-sign",
   avatarVocabulary: "/api/v1/text-to-sign/vocabulary",
+  classifyImage: "/api/v1/classification/image",
+  videoUpload: "/api/v1/translation/video",
 } as const;
 
 export const WS_PATH = "/ws/translate";

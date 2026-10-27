@@ -109,3 +109,36 @@ export interface HistoryListResponse {
 export interface DeletedResponse {
   deleted: number;
 }
+
+/** Static ISL image classification (alphabet letters A-Z or supported word signs). */
+export type ImageClassifyTask = "alphabet" | "word";
+
+export interface ImageClassifyRequest {
+  image: string; // base64-encoded JPEG/PNG, optionally a data URI
+  task: ImageClassifyTask;
+  min_confidence?: number | null;
+}
+
+export interface ImageClassifyResponse {
+  label: string;
+  accepted: boolean;
+  reason: string; // "ok" | "low_model_confidence"
+  confidence: number;
+  task: ImageClassifyTask;
+  index: number;
+  n_classes: number;
+  model_version: string;
+  input_size: number[]; // [height, width]
+}
+
+export interface VideoTranslationResponse {
+  text: string;
+  accepted: boolean;
+  reason: string;
+  confidence: number;
+  motion_energy: number;
+  result_type: ResultType;
+  frames_processed: number;
+  model_version: string;
+  feature_version: string;
+}
