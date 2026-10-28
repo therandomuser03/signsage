@@ -8,6 +8,11 @@ Interfaces, deployment, security, testing, and the developer workflow.
 ```bash
 cd backend && python3 -m venv .venv && source .venv/bin/activate \
   && pip install -r requirements.txt && cp .env.example .env
+```
+
+Dependencies include `Pillow`, `mediapipe`, `opencv-python` (runtime for image/video adapters). `video_translation.py` uses a lazy import so the health endpoint responds promptly even before those packages are installed.
+
+```bash
 uvicorn app.main:app --reload          # :8000, Swagger at /docs
 pytest                                  # full suite from backend/ (uses .venv)
 ```
@@ -61,7 +66,8 @@ Topology: browser (React/Vite + MediaPipe) → WS/HTTPS → FastAPI
   0.0.0.0 --port $PORT`; health `/api/v1/health`). Weights are NOT baked in:
   `fetch_bundle.sh` downloads `SIGNSAGE_BUNDLE_URL` into `/models/...` (2GB
   disk), verifies optional SHA256 and the `checkpoint/ + tokenizer/ +
-  landmark_contract.json + sign_to_text_deployment.json` entries; no URL → still
+  landmark_contract.json + sign_to_text_deployment.json` entries; download
+  uses a 300-second timeout to prevent indefinite startup hangs; no URL → still
   starts, `/health` reports `model_bundle_found:false`, translation refuses
   `MODEL_UNAVAILABLE`. `SIGNSAGE_ALLOW_UNPROMOTED_DEV` is absent from Render.
 - Free/small instances may not suit PyTorch/checkpoint/WS workloads — starting
