@@ -54,7 +54,15 @@ expected_sha = os.environ.get("SIGNSAGE_BUNDLE_SHA256", "").strip().lower()
 tmp = os.path.join(dest, "bundle.download")
 
 print(f"[MODEL] downloading bundle ...", flush=True)
-urllib.request.urlretrieve(url, tmp)
+# shortcut: 5-minute timeout; upgrade to a streaming download with progress
+# reporting if bundles grow larger.
+with urllib.request.urlopen(url, timeout=300) as response:
+    with open(tmp, "wb") as out_file:
+        while True:
+            chunk = response.read(1 << 20)
+            if not chunk:
+                break
+            out_file.write(chunk)
 
 if expected_sha:
     digest = hashlib.sha256()

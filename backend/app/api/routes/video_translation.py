@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.errors import ModelNotPromotedError, ModelUnavailableError, InvalidLandmarksError
 from app.ml.models.registry import get_sign_to_text_pipeline
-from app.services.video_processing.video_service import predict_from_video, VideoProcessingError
 
 router = APIRouter(prefix="/translation", tags=["translation"])
 
@@ -58,6 +57,7 @@ async def translate_video_upload(file: UploadFile = File(...)):
 
     try:
         adapter = get_sign_to_text_pipeline(settings, allow_unpromoted=settings.allow_unpromoted_dev)
+        from app.services.video_processing.video_service import predict_from_video, VideoProcessingError
         result = predict_from_video(
             tmp_path,
             adapter=adapter,
