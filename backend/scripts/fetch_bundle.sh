@@ -45,24 +45,86 @@ python3 - "$DEST" <<'EOF'
 import hashlib
 import os
 import sys
+from urllib.parse import urlparse
+import urllib.error
 import urllib.request
 import zipfile
 
 dest = sys.argv[1]
 url = os.environ["SIGNSAGE_BUNDLE_URL"]
 expected_sha = os.environ.get("SIGNSAGE_BUNDLE_SHA256", "").strip().lower()
+# Hugging Face token for private repositories: SIGNSAGE_HF_TOKEN takes
+# precedence, HF_TOKEN is the fallback. Never logged or printed.
+token = os.environ.get("SIGNSAGE_HF_TOKEN") or os.environ.get("HF_TOKEN", "")
 tmp = os.path.join(dest, "bundle.download")
+
+
+def download_failed(message):
+    # Clean up any partial download so a later retry starts fresh.
+    try:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    except OSError:
+        pass
+    raise SystemExit(f"[MODEL] {message}")
+
 
 print(f"[MODEL] downloading bundle ...", flush=True)
 # shortcut: 5-minute timeout; upgrade to a streaming download with progress
 # reporting if bundles grow larger.
-with urllib.request.urlopen(url, timeout=300) as response:
-    with open(tmp, "wb") as out_file:
-        while True:
-            chunk = response.read(1 << 20)
-            if not chunk:
-                break
-            out_file.write(chunk)
+# Only attach credentials to the intended Hugging Face host over HTTPS.
+# Credentials are never forwarded across a redirect to another host.
+parsed_url = urlparse(url)
+send_token = bool(token) and parsed_url.scheme == "https" and (
+    parsed_url.hostname is not None
+    and parsed_url.hostname.lower() == "huggingface.co"
+)
+headers = {}
+if send_token:
+    headers["Authorization"] = f"Bearer {token}"
+
+
+class _NoCredentialCrossHostRedirect(urllib.request.HTTPRedirectHandler):
+    """Strip Authorization on redirects that change the hostname.
+
+    Prevents credentials (e.g. a Hugging Face bearer token) from being
+    forwarded to a CDN or any other redirect target, even one whose name
+    looks related to Hugging Face.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_request = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_request is None:
+            return None
+        old_host = urlparse(req.full_url).hostname
+        new_host = urlparse(newurl).hostname
+        if old_host is not None and new_host is not None and (
+            old_host.lower() != new_host.lower()
+        ):
+            if "Authorization" in new_request.headers:
+                del new_request.headers["Authorization"]
+        return new_request
+
+
+request = urllib.request.Request(url, headers=headers)
+opener = urllib.request.build_opener(_NoCredentialCrossHostRedirect())
+try:
+    with opener.open(request, timeout=300) as response:
+        with open(tmp, "wb") as out_file:
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                out_file.write(chunk)
+except urllib.error.HTTPError as exc:
+    if exc.code in (401, 403) and not token:
+        download_failed(
+            f"authentication required for private bundle repository ({exc.code}) "
+            f"but no HF token was configured. Set SIGNSAGE_HF_TOKEN (or HF_TOKEN)."
+        )
+    download_failed(f"bundle download failed ({exc.code}): {exc.reason}")
+except (urllib.error.URLError, OSError) as exc:
+    download_failed(f"bundle download failed: {exc}")
 
 if expected_sha:
     digest = hashlib.sha256()
