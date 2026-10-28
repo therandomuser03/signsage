@@ -72,6 +72,36 @@ def test_video_pipeline_respects_max_frames_limit():
     assert len(result) <= 64
 
 
+def test_video_pipeline_uses_video_mode_for_landmarker():
+    """The pipeline must initialize Pose/Hand landmarkers with VIDEO mode
+    (RunningMode.VIDEO) and use detect_for_video with a timestamp,
+    matching the training script (train_isolated_words.py:168-177, 111-112)."""
+    import inspect
+    from app.services.video_processing import video_pipeline
+    source = inspect.getsource(video_pipeline.process_video_file)
+    assert "RunningMode.VIDEO" in source
+    assert "detect_for_video" in source
+
+
+@pytest.mark.skipif(
+    not REAL_VIDEO_DIR.exists(),
+    reason="Real video clips not available",
+)
+def test_video_pipeline_video_mode_produces_finite_features():
+    """After switching to VIDEO mode, output must still be (T, 543, 3) float32,
+    all finite, with T >= 2."""
+    video_path = REAL_VIDEO_DIR / "hello" / "hello__INCLUDE__00586__MVI_9984.mp4"
+    if not video_path.is_file():
+        pytest.skip("Sample video missing")
+    result = process_video_file(str(video_path), max_frames=64)
+    assert isinstance(result, np.ndarray)
+    assert result.ndim == 3
+    assert result.shape[1:] == (543, 3)
+    assert result.dtype == np.float32
+    assert np.isfinite(result).all()
+    assert len(result) >= 2
+
+
 @pytest.mark.skipif(
     not REAL_VIDEO_DIR.exists(),
     reason="Real video clips not available",

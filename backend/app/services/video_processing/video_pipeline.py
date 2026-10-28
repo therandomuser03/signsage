@@ -38,14 +38,14 @@ def process_video_file(video_path: str | Path, max_frames: int = MAX_FRAMES) -> 
         base_options=python.BaseOptions(
             model_asset_path=str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "isl" / "mediapipe" / "pose_landmarker_lite.task")
         ),
-        running_mode=RunningMode.IMAGE,
+        running_mode=RunningMode.VIDEO,
         num_poses=1,
     )
     hand_options = HandLandmarkerOptions(
         base_options=python.BaseOptions(
             model_asset_path=str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "isl" / "mediapipe" / "hand_landmarker.task")
         ),
-        running_mode=RunningMode.IMAGE,
+        running_mode=RunningMode.VIDEO,
         num_hands=2,
     )
 
@@ -55,6 +55,7 @@ def process_video_file(video_path: str | Path, max_frames: int = MAX_FRAMES) -> 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     stride = max(1, round(fps / 15))
     frame_index = 0
+    previous_timestamp_ms = 0
     frames_543: list[np.ndarray] = []
     try:
         while cap.isOpened() and len(frames_543) < max_frames:
@@ -65,10 +66,13 @@ def process_video_file(video_path: str | Path, max_frames: int = MAX_FRAMES) -> 
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = Image(image_format=ImageFormat.SRGB, data=rgb_frame)
 
+                previous_timestamp_ms = max(previous_timestamp_ms + 1, round(frame_index * 1000 / fps))
+                timestamp_ms = previous_timestamp_ms
+
                 frame_543 = np.zeros((543, 3), dtype=np.float32)
 
-                # Pose
-                pose_result = pose_landmarker.detect(mp_image)
+                # Pose — VIDEO mode for temporal continuity (matches training)
+                pose_result = pose_landmarker.detect_for_video(mp_image, timestamp_ms)
                 if pose_result.pose_landmarks:
                     pose_points = np.array(
                         [[lm.x, lm.y, lm.z] for lm in pose_result.pose_landmarks[0]],
@@ -77,8 +81,8 @@ def process_video_file(video_path: str | Path, max_frames: int = MAX_FRAMES) -> 
                     n_points = min(len(pose_points), 33)
                     frame_543[0:n_points, :] = pose_points[:n_points, :]
 
-                # Hands — align with training convention: Left -> 501, else 522
-                hand_result = hand_landmarker.detect(mp_image)
+                # Hands — VIDEO mode, label-based assignment, no overwrite
+                hand_result = hand_landmarker.detect_for_video(mp_image, timestamp_ms)
                 if hand_result.hand_landmarks:
                     for index, hand_landmarks in enumerate(hand_result.hand_landmarks or []):
                         hand_points = np.array(
