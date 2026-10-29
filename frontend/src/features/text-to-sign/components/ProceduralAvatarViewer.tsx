@@ -222,6 +222,15 @@ export const ProceduralAvatarViewer = forwardRef<ProceduralAvatarHandle, Props>(
 
       // Frame from bounds sampled across rest and every key pose so animated
       // arms/head stay in frame, not just the rest pose.
+      //
+      // Signing happens in the upper body (torso, head, arms, hands). Framing
+      // the full figure (hips down to feet) made the signing-relevant parts
+      // appear small/compact, so we frame the upper body only: torso + every
+      // descendant (head, shoulders, arms, hands). Legs and shoes are excluded
+      // from the framing box so hands and face fill the viewport instead of
+      // sharing it with the legs. The rig's `torso` group carries all of the
+      // upper body, so expanding by it (not `root`) keeps signing visible and
+      // readably large without clipping raised arms.
       const box = new THREE.Box3();
       const samplePoses: Pose[] = [restPose()];
       for (const motion of Object.values(PROCEDURAL_SIGNS)) {
@@ -231,7 +240,7 @@ export const ProceduralAvatarViewer = forwardRef<ProceduralAvatarHandle, Props>(
       }
       for (const p of samplePoses) {
         applyPose(rig, p);
-        box.expandByObject(root);
+        box.expandByObject(rig.torso);
       }
       applyPose(rig, restPose());
       fitCameraToBox(camera, box);

@@ -79,10 +79,20 @@ export class AvatarController {
     this.startLoop();
   }
 
-  /** Fit the camera to the loaded avatar's bounding box so the full character is in frame. */
+  /** Fit the camera to the avatar so the upper body (torso, head, hands)
+   * fills the frame. Framing the full figure (hips down to feet) made the
+   * signing-relevant parts appear small/compact, so we exclude the lower
+   * portion (feet/lower legs) from the distance calculation. This keeps hands
+   * and face readably large without clipping raised arms, and matches the
+   * framing used by the procedural avatar fallback. */
   private fitCameraToAvatar() {
     if (!this.vrm) return;
     const box = new THREE.Box3().setFromObject(this.vrm.scene);
+    // Exclude the bottom ~28% (feet/lower legs) so the camera frames the upper
+    // body rather than the full figure. Hands at rest sit around hip level,
+    // which stays inside the retained range.
+    const trim = 0.28;
+    box.min.y = box.min.y + (box.max.y - box.min.y) * trim;
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const fovRad = (this.camera.fov * Math.PI) / 180;
