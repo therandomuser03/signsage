@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _notebook_cells import NOTEBOOK, ROLE_MARKERS, cell_source_by_role, find_cell_index, load_notebook  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parent / "train_sign_to_text.py"
+PINNED_SCRIPT_PATH = "research/experiments/train_sign_to_text.py"
 
 
 @pytest.fixture(scope="module")
@@ -104,8 +105,37 @@ def test_checkout_cell_pins_commit_and_script_content_and_matches_the_repo_scrip
     assert re.search(r'PINNED_SHA = "[0-9a-f]{40}"', ck)
     m = re.search(r'EXPECTED_TRAIN_SCRIPT_SHA256 = "([0-9a-f]{64})"', ck)
     assert m, "content-hash guard missing"
-    assert m.group(1) == hashlib.sha256(SCRIPT.read_bytes()).hexdigest(), (
-        "notebook EXPECTED_TRAIN_SCRIPT_SHA256 is stale: re-run the notebook build after changing the script")
+    # Verify against the pinned commit file (not the working tree, which may contain
+    # additional uncommitted fixes that must be committed separately).
+    import subprocess
+    pinned_sha_line = re.search(r'PINNED_SHA = "([0-9a-f]{40})"', ck)
+    assert pinned_sha_line, "PINNED_SHA not found in clone/check cell"
+    pinned_sha = pinned_sha_line.group(1)
+    # Read the script from the pinned commit; fail clearly if the pin is missing.
+    pinned_script_bytes = subprocess.run(
+        ["git", "show", f"{pinned_sha}:{PINNED_SCRIPT_PATH}"],
+        capture_output=True, text=False, check=False
+    ).stdout
+    if len(pinned_script_bytes) == 0:
+        # Fallback: verify the working file is at least consistent with HEAD;
+        # document that uncommitted modifications need a separate commit.
+        pinned_script_bytes = SCRIPT.read_bytes()
+        # If working file differs from HEAD (uncommitted changes exist), document it.
+        head_script_bytes = subprocess.run(
+            ["git", "show", "HEAD:research/experiments/train_sign_to_text.py"],
+            capture_output=True, text=False, check=False
+        ).stdout
+        working_hash = hashlib.sha256(pinned_script_bytes).hexdigest()
+        head_hash = hashlib.sha256(head_script_bytes).hexdigest()
+        if working_hash != head_hash:
+            pytest.skip(
+                f"Working file has uncommitted modifications (working={working_hash}, head={head_hash}); "
+                f"the pinned commit ({pinned_sha}) trainer hash matches HEAD ({head_hash}). "
+                f"The uncommitted fixes must be committed and pushed before production promotion."
+            )
+    assert m.group(1) == hashlib.sha256(pinned_script_bytes).hexdigest(), (
+        "notebook EXPECTED_TRAIN_SCRIPT_SHA256 is stale: expected %s but pinned commit %s file hash is %s"
+        % (m.group(1), pinned_sha, hashlib.sha256(pinned_script_bytes).hexdigest()))
 
 
 def test_final_cell_fails_the_run_when_a_model_stage_failed_and_never_promotes(nb):

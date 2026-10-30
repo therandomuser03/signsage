@@ -159,3 +159,62 @@ def test_runner_train_args_parse_without_interpreter_prefix():
         pass
     else:
         raise AssertionError("cmd[4:]-style args (bare leading path) must be rejected by argparse")
+
+
+def test_diagnostic_run_args_include_tokenizer_stage():
+    # Regression: the diagnostic must request the tokenizer stage so the
+    # SentencePiece model file is created before the overfit gate. Without it,
+    # train_sign_to_text reuses out/tokenizer/signsage_en_sp.model and raises
+    # RuntimeError NOT_FOUND when the artifact is absent (the defect this
+    # runner hit twice).
+    import tempfile
+    import train_sign_to_text as T
+
+    csv_path = str(Path(tempfile.mktemp(suffix=".csv")))
+    Path(csv_path).write_text("uid,text\nv1,hello world\n")
+
+    run_args = [
+        "--csv", csv_path,
+        "--pose-source", "/tmp/ps", "--pose-cache", "/tmp/pc",
+        "--out", "/tmp/out",
+        "--data-mode", "cache", "--stages", "tokenizer,overfit,train",
+        "--subset", "2500", "--seed", "42", "--epochs", "8",
+        "--batch", "32", "--lr", "1e-4", "--patience", "2",
+        "--decoder-input-dropout", "0.2", "--max-hours", "0.4",
+        "--embed-init", "scaled",
+    ]
+    parsed = T.parse_args(run_args)
+    stages = set(parsed.stages.split(","))
+    assert "tokenizer" in stages, f"tokenizer stage missing: {parsed.stages!r}"
+    assert "overfit" in stages
+    assert "train" in stages
+    assert "evaluate" not in stages
+    assert "export" not in stages
+    assert not parsed.resume
+    assert parsed.embed_init == "scaled"
+
+
+def test_train_tokenizer_creates_model_from_scratch():
+    # Regression: a missing tokenizer artifact must be created fresh, never
+    # silently reused from a stale location. train_tokenizer must write
+    # signsage_en_sp.model into out_dir when it does not already exist.
+    import tempfile
+    import sentencepiece as spm
+    import train_sign_to_text as T
+
+    tmp = Path(tempfile.mkdtemp())
+    tok_dir = tmp / "tokenizer"
+    assert not tok_dir.exists()
+    texts = [
+        "hello world", "foo bar baz", "test sentence piece",
+        "the quick brown fox", "jumps over the lazy dog",
+    ]
+    sp = T.train_tokenizer(texts, tok_dir, vocab_size=40)
+    model = tok_dir / "signsage_en_sp.model"
+    assert model.is_file(), "train_tokenizer must create signsage_en_sp.model when missing"
+    loaded = spm.SentencePieceProcessor(model_file=str(model))
+    assert (loaded.pad_id(), loaded.unk_id(), loaded.bos_id(), loaded.eos_id()) == (0, 1, 2, 3)
+    assert loaded.get_piece_size() > 0
+    # Re-running train_tokenizer on an existing model must not retrain or fail.
+    sp2 = T.train_tokenizer(texts, tok_dir, vocab_size=40)
+    assert sp2.get_piece_size() == loaded.get_piece_size()

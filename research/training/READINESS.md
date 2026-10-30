@@ -1,7 +1,16 @@
-# SignSage Training Readiness Report — run v2 (post-352868924)
+# SignSage Training Readiness Report — v2 run (post-352868924, 2026-10-29 fix pass)
 
-Date: 2026-10-02. Status: READY TO RUN on Kaggle GPU. No full training has been
-started from this report; the expensive run is the operator's explicit next step.
+Date: 2026-10-29. Status: READY TO RUN on Kaggle GPU. The v2 script and backend adapter have been verified against the actual code; no full GPU training has been launched (requires user approval + dataset download + Kaggle GPU session).
+
+Key verification completed 2026-10-29:
+- `NORM_FIRST = True` (pre-norm) and `LABEL_SMOOTHING = 0.1` are defined as module-level constants in `train_sign_to_text.py` and wired through `build_model()`, `benchmark_training_throughput()`, `crit`, `ckpt_model_config`, and `train_cfg` — matching READINESS.md §2 v2 spec.
+- `--pre-norm` / `--post-norm` and `--label-smoothing` CLI flags added to `parse_args()`.
+- `norm_first` is configurable at training time (`args.pre_norm`) and preserved in exported `model_config` / `deployment_config` / `ckpt_model_config` (backend reads `norm_first` from manifest and applies it to `SignTransformer`).
+- The backend adapter (`app/ml/adapters/sign_to_text_adapter.py`) reads `norm_first` from `mc.get("norm_first", False)` and passes it to the `SignTransformer` constructor; older bundles with no key default to `False` (post-norm, 352868924 behavior preserved).
+- Label smoothing is applied to the `CrossEntropyLoss` (`label_smoothing=args.label_smoothing`); `ignore_index=PAD_IDX` (0 = `<pad>`) excludes padding targets from both the smoothed and un-smoothed loss components — the smoothing coefficient is only applied over valid (non-padding) target tokens because `CrossEntropyLoss` excludes `ignore_index` before smoothing.
+- `require_signer_independent(split_info)` added to `audit_dataset.py` (raises `SystemExit` with exact overlap pair names + shared signer IDs when `signer_column` exists and any overlap > 0); called from `main()` after `video_split()`.
+- `DIVERSITY_FLOOR = 0.05` (unique fraction < 0.05 after epoch 2) and `DIVERSITY_SAMPLE = 512` are module-level constants; the gate is enforced in the training loop (line 2452) with `SystemExit("COLLAPSE GATE FIRED...")`.
+- Tests: `test_collapse_fix.py` passes all 40 checks (pre-norm, CLI flags, label smoothing padding, diversity detection, collapse detection, signer independence enforcement, checkpoint preservation, resume).
 
 ## 1. What was wrong with 352868924?
 
@@ -51,8 +60,7 @@ by epoch 3 and the report says so — no sunk-cost full run.
 
 - iSign v1.1 `iSign_v1.1.csv` (HF `Exploration-Lab/iSign`, gated, HF_TOKEN) +
   4-part pose ZIP (158+ GiB, streamed, never fully downloaded).
-- Cleaning: malformed UID (2,291) + junk captions (1,167) removed; duplicates
-  refused; video-level 80/10/10 split. Audit: `audit_dataset.py`
+- Signer-independence: `audit_dataset.py` checks video-level `video_id` split disjointness (asserted) and reports signer overlap (`signer_column`, `signer_overlap` counts) when the CSV carries a signer identifier. `require_signer_independent()` added to `audit_dataset.py` raises `SystemExit` with exact overlap pair names and shared signer IDs when configured to enforce it; called from `main()` after the split. If the CSV has no signer column, independence is documented as not verifiable (video-level split only).
   (`--self-test` passes locally; full run on Kaggle writes the JSON report).
 - Representation: 543×3 raw → `pose_normalize_v1` → 160×1629 → model delta
   concat (3258). Identical code serving and training (backend import).

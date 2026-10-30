@@ -1,0 +1,28 @@
+[s2t-v2 20:13:45] run 20261029T201345Z on cpu; stages=['overfit', 'train']
+[s2t-v2 20:13:45] GPU: None detected (running on CPU; AMP disabled)
+[s2t-v2 20:13:45] decoder input dropout: 0.200 (exposure-bias mitigation; training only)
+[s2t-v2 20:13:48] SUBSET MODE: train capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:13:48] SUBSET MODE: val capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:13:48] SUBSET MODE: test capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:13:48] data: 123,779 usable; train=2,500 val=2,500 test=2,500
+[s2t-v2 20:13:48] pose preflight OK: 0 members; probe ee235596b76f-2: 871,899 bytes, frames=(160, 1629)
+[s2t-v2 20:13:48] data mode: cache (cache budget 10.0 GiB)
+[s2t-v2 20:13:48] pose cache: 7,500/7,500 samples cached (tensor equivalent ~7.3 GiB fp32 NOT written)
+[s2t-v2 20:13:48] pose preflight OK: 0 members; probe ee235596b76f-2: 871,899 bytes, frames=(160, 1629)
+[s2t-v2 20:13:48] training pose source: LOCAL CACHE (no remote HTTP during epochs)
+Traceback (most recent call last):
+  File "/mnt/D/Codes/signsage/research/experiments/train_sign_to_text.py", line 2739, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/mnt/D/Codes/signsage/research/experiments/train_sign_to_text.py", line 2104, in main
+    sp = spm.SentencePieceProcessor(model_file=str(tok_dir / "signsage_en_sp.model"))
+  File "/mnt/D/Codes/signsage/backend/.venv/lib/python3.13/site-packages/sentencepiece/__init__.py", line 163, in __init__
+    self.Load(model_file=model_file, model_proto=model_proto)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/D/Codes/signsage/backend/.venv/lib/python3.13/site-packages/sentencepiece/__init__.py", line 209, in Load
+    return self.LoadFromFile(model_file)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/mnt/D/Codes/signsage/backend/.venv/lib/python3.13/site-packages/sentencepiece/__init__.py", line 213, in LoadFromFile
+    return self._processor.LoadFromFile(filename)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+RuntimeError: NOT_FOUND: "results/diag_small6_20261030_014300/tokenizer/signsage_en_sp.model": No such file or directory Error #2

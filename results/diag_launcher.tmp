@@ -1,0 +1,9 @@
+[s2t-v2 20:12:34] SUBSET MODE: train capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:12:34] SUBSET MODE: val capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:12:34] SUBSET MODE: test capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:12:37] SUBSET MODE: train capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:12:37] SUBSET MODE: val capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+[s2t-v2 20:12:37] SUBSET MODE: test capped to 2500 rows via deterministic random sampling (pilot run only -- NOT the full V2 experiment; representation unchanged)
+Decoded 4 samples across 4 shards.
+Exit: 1 | log: results/diag_small6_20261030_014217/subprocess_stdout_stderr.log
+Diagnostic failed. Preserve outputs; do not retry automatically. Exit 124 typically means timeout; 137 can mean forced termination.

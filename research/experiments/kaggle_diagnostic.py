@@ -10,7 +10,8 @@ Usage (from a fresh Kaggle session with Version 4 output attached):
 
 This is NOT full training. It validates the cache/tokenizer/split identity,
 reuses the existing pose shards (read-only), starts fresh weights, runs only
---stages overfit,train, applies a bounded external timeout, and writes
+--stages tokenizer,overfit,train (the tokenizer stage creates the model file
+before the overfit gate), applies a bounded external timeout, and writes
 subprocess_stdout_stderr.log, pose_preflight.json, gate_report.json,
 training_history.json, and any checkpoint/recovery artifacts. It does NOT
 run evaluate/export or claim quality success.
@@ -622,7 +623,7 @@ def main(argv=None):
         "--pose-cache", str(cache_dir),
         "--out", str(out),
         "--data-mode", "cache",
-        "--stages", "overfit,train",
+        "--stages", "tokenizer,overfit,train",
         "--subset", str(_paths["subset_size"]),
         "--seed", str(_paths["subset_seed"]),
         "--epochs", "8",

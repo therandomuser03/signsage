@@ -1,0 +1,31 @@
+{
+ "quota_hours": 13.566666666666666,
+ "target_hours": 11.5,
+ "verdict": "PASS",
+ "projected_total_hours": 3.3048888631809676,
+ "breakdown_hours": {
+  "prepare": 0.0,
+  "tokenizer": 4.3428829166663896e-05,
+  "overfit_gate_ub": 0.2993742504838924,
+  "per_epoch": 0.023214363810985357,
+  "per_epoch_diversity": 0.16454142085666668,
+  "epochs": 8,
+  "eval": 1.0034249065266927,
+  "slack": 0.5
+ },
+ "measured_inputs": {
+  "fetch_prep_per_sample_s": 0.849433556120496,
+  "train_steps_per_sec": 4.456906882133051,
+  "decode_hyps_per_sec": 0.8643551361217011,
+  "data_mode": "cache",
+  "local_fetch_per_sample_s": 0.011987595968776077
+ },
+ "assumptions": [
+  "no data/compute overlap (conservative sum)",
+  "val forward-only = 3x train-step rate",
+  "gate upper bound: full GATE_STEPS checks, no early break; gate/diversity loaders memoize (64/512 fetches once total)",
+  "decode rate measured on random weights (optimistic for eval)",
+  "cache mode: remote fetch paid ONCE in prepare; post-prepare gate/train/val/diversity/eval read local shards at local_fetch_per_sample_s (probed, else conservative default)"
+ ],
+ "note": "recomputed after complete local cache: prepare cost sunk (0h); probed local cache 12.0 ms/sample (64 uids, pose_cache)"
+}

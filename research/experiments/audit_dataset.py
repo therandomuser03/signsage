@@ -151,6 +151,32 @@ def video_split(df: pd.DataFrame, seed: int = SEED) -> tuple[pd.DataFrame, pd.Da
     return tr, va, te, info
 
 
+def require_signer_independent(split_info: dict) -> None:
+    """Fail if the video-level split leaks signers across train/val/test.
+
+    Called when a signer column is present in the CSV. Reports overlap
+    and raises SystemExit if any signer appears in more than one split,
+    since signer leakage invalidates any signer-independent evaluation claim.
+    When no signer column exists, returns silently (signer independence
+    cannot be established from video-level split alone).
+    """
+    scol = split_info.get("signer_column")
+    if scol is None:
+        return
+    so = split_info.get("signer_overlap", {})
+    violations = []
+    for pair in ("train_val", "train_test", "val_test"):
+        count = so.get(f"{pair}_count", 0)
+        if count > 0:
+            examples = so.get(pair, [])[:5]
+            violations.append(f"{pair}: {count} shared signers (e.g. {examples})")
+    if violations:
+        raise SystemExit(
+            "SIGNER LEAKAGE across splits: " + "; ".join(violations) + ". "
+            "Signer-independence requirement violated: regenerate the split or "
+            "exclude leaked signers before training.")
+
+
 def pose_spot_check(uids: list[str], pose_source: str, sample: int, seed: int = SEED) -> dict:
     """Spot-check pose members: dims, frame counts, NaN rates, missing files.
 

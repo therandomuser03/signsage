@@ -338,3 +338,166 @@ def test_temporary_benchmark_preserves_rng_model_and_quality_stats_without_steps
     assert all(torch.equal(v, state[k]) for k, v in actual.state_dict().items())
     assert T.run_epoch.last_train_stats is sentinel and T.run_epoch._scaler is scaler
     assert not stubbed_main["epochs"]
+
+
+# --------------------------------------------------------------------------
+# Pre-norm configuration tests
+# --------------------------------------------------------------------------
+
+
+def test_sign_transformer_norm_first_is_explicit_constructor_arg():
+    """norm_first is stored on the model and reflected in encoder/decoder layers."""
+    m_pre = SignTransformer(32, 2000, 16, 16, pad_idx=0, d_model=16, nhead=4, layers=2, ff=64,
+                            dropout=0.0, norm_first=True)
+    assert m_pre.norm_first is True
+    assert m_pre.encoder.layers[0].norm_first is True
+    assert m_pre.decoder.layers[0].norm_first is True
+    m_post = SignTransformer(32, 2000, 16, 16, pad_idx=0, d_model=16, nhead=4, layers=2, ff=64,
+                             dropout=0.0, norm_first=False)
+    assert m_post.norm_first is False
+    assert m_post.encoder.layers[0].norm_first is False
+    assert m_post.decoder.layers[0].norm_first is False
+
+
+def test_cli_has_norm_first_and_label_smoothing_args():
+    """The training script wires norm_first and label_smoothing from CLI args into training."""
+    import inspect
+    src_main = inspect.getsource(T.main)
+    assert "args.pre_norm" in src_main
+    assert "args.label_smoothing" in src_main
+    src_parse = inspect.getsource(T.parse_args)
+    assert "pre-norm" in src_parse
+    assert "post-norm" in src_parse
+    assert "label-smoothing" in src_parse
+
+
+def test_module_constants_match_v2_config():
+    """Module-level constants match READINESS.md v2 configuration."""
+    assert T.NORM_FIRST is True
+    assert T.LABEL_SMOOTHING == 0.1
+    assert T.D_MODEL == 256
+    assert T.NLAYERS == 4
+    assert T.FF == 1024
+
+
+# --------------------------------------------------------------------------
+# Label smoothing tests
+# --------------------------------------------------------------------------
+
+
+def test_label_smoothing_ignores_padding_targets():
+    """CrossEntropyLoss with label_smoothing contributes zero loss for PAD (ignore_index) targets."""
+    V = 4
+    crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=0.1)
+    # logits: 2 samples, 4 classes. Sample 0 target=3 (correct logit).
+    # Sample 1 target=0 (PAD, ignored).
+    logits = torch.tensor([[10.0, 0.0, 0.0, 0.0],
+                           [0.0, 0.0, 0.0, 0.0]], dtype=torch.float32)
+    targets_with_pad = torch.tensor([3, 0])  # includes one PAD target
+    targets_no_pad = torch.tensor([3])  # same non-PAD target only
+    loss_with_pad = crit(logits[:1], targets_with_pad[:1])
+    loss_no_pad = crit(logits[:1], targets_no_pad)
+    # PAD target must be ignored: loss identical with or without it
+    assert loss_with_pad.item() == loss_no_pad.item()
+
+
+    V = 4
+    crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=0.1)
+    logits = torch.tensor([[10.0, 0.0, 0.0, 0.0],
+                           [0.0, 0.0, 0.0, 0.0]], dtype=torch.float32)
+    targets = torch.tensor([1, 3])  # both targets are wrong class
+    loss = crit(logits, targets)
+    assert loss.item() > 0.0
+
+
+# --------------------------------------------------------------------------
+# Collapse detection tests
+# --------------------------------------------------------------------------
+
+
+def test_diversity_metrics_detects_collapse_below_floor():
+    """diversity_metrics flags collapse when unique fraction < DIVERSITY_FLOOR (0.05)."""
+    hyps = ["hello world"] * 100  # all identical
+    div = T.diversity_metrics(hyps)
+    assert div["collapsed"] is True
+    assert div["unique_fraction"] == 0.01  # 1 unique / 100
+    assert div["top_prediction_freq"] == 1.0
+
+
+def test_diversity_metrics_passes_above_floor():
+    """diversity_metrics does not flag collapse when unique fraction >= 0.05."""
+    hyps = [f"sentence {i}" for i in range(100)]  # all different
+    div = T.diversity_metrics(hyps)
+    assert div["collapsed"] is False
+    assert div["unique_fraction"] == 1.0
+
+
+def test_diversity_metrics_at_floor_boundary():
+    """diversity_metrics is not collapsed when unique_fraction >= 0.05 AND no mode dominance."""
+    hyps = [f"sentence {i % 20}" for i in range(100)]  # 20 unique, each 5 times
+    div = T.diversity_metrics(hyps)
+    assert div["unique_fraction"] == 0.20  # 20 unique / 100
+    assert div["top_prediction_freq"] == 0.05  # each appears 5%
+    assert div["collapsed"] is False
+
+
+# --------------------------------------------------------------------------
+# Signer-independence audit tests
+# --------------------------------------------------------------------------
+
+
+def test_require_signer_independent_fails_on_overlap():
+    """require_signer_independent raises SystemExit when signer overlap exists across splits."""
+    split_info = {
+        "signer_column": "signer",
+        "signer_overlap": {
+            "train_val": ["alice", "bob"],
+            "train_test": [],
+            "val_test": [],
+            "train_val_count": 2,
+            "train_test_count": 0,
+            "val_test_count": 0,
+        },
+    }
+    with pytest.raises(SystemExit, match="SIGNER LEAKAGE"):
+        T.require_signer_independent(split_info)
+
+
+def test_require_signer_independent_fails_on_any_split_overlap():
+    """require_signer_independent fails on train_test or val_test overlap too."""
+    for pair in ("train_test", "val_test"):
+        split_info = {
+            "signer_column": "signer",
+            "signer_overlap": {
+                "train_val": [], "train_test": [], "val_test": [],
+                "train_val_count": 0, "train_test_count": 0, "val_test_count": 0,
+            },
+        }
+        split_info["signer_overlap"][pair] = ["carol"]
+        split_info["signer_overlap"][f"{pair}_count"] = 1
+        with pytest.raises(SystemExit, match="SIGNER LEAKAGE"):
+            T.require_signer_independent(split_info)
+
+
+def test_require_signer_independent_passes_no_overlap():
+    """require_signer_independent does not raise when no signer overlap exists."""
+    split_info = {
+        "signer_column": "signer",
+        "signer_overlap": {
+            "train_val": [], "train_test": [], "val_test": [],
+            "train_val_count": 0, "train_test_count": 0, "val_test_count": 0,
+        },
+    }
+    T.require_signer_independent(split_info)  # should not raise
+
+
+def test_require_signer_independent_no_column_does_not_fail():
+    """require_signer_independent returns silently when no signer column exists."""
+    split_info = {"signer_column": None}
+    T.require_signer_independent(split_info)  # should not raise
+
+
+def test_require_signer_independent_missing_overlap_key():
+    """require_signer_independent handles missing signer_overlap gracefully."""
+    split_info = {"signer_column": "signer"}
+    T.require_signer_independent(split_info)  # should not raise

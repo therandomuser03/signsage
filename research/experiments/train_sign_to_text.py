@@ -77,7 +77,7 @@ from app.ml.preprocessing.landmarks import (  # noqa: E402
 )
 from app.ml.preprocessing.normalization import normalize_pose_sequence  # noqa: E402
 from app.ml.preprocessing.sequence import resize_sequence  # noqa: E402
-from audit_dataset import clean_dataframe, normalize_text, video_split  # noqa: E402
+from audit_dataset import clean_dataframe, normalize_text, video_split, require_signer_independent  # noqa: E402
 
 SEED = 42
 MAX_FRAMES = 160
@@ -996,7 +996,9 @@ FEASIBILITY_REPORT = "feasibility.json"
 
 
 def benchmark_training_throughput(device, vocab_size: int, batch: int,
-                                  embed_init: str = "scaled") -> dict:
+                                  embed_init: str = "scaled",
+                                  norm_first: bool = NORM_FIRST,
+                                  label_smoothing: float = LABEL_SMOOTHING) -> dict:
     """Temporary real-config model; preserve training RNG and run_epoch quality stats."""
     devices = ([device.index if device.index is not None else torch.cuda.current_device()]
                if device.type == "cuda" else [])
@@ -1004,11 +1006,11 @@ def benchmark_training_throughput(device, vocab_size: int, batch: int,
         t0 = time.perf_counter()
         model = SignTransformer(MODEL_INPUT_DIM, vocab_size, MAX_FRAMES, MAX_TOKENS,
                                 pad_idx=0, d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
-                                ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST)
+                                ff=FF, dropout=DROPOUT, norm_first=norm_first)
         init_token_embedding(model, embed_init)
         model = model.to(device)
         opt = torch.optim.AdamW(model.parameters(), lr=PEAK_LR, weight_decay=WEIGHT_DECAY)
-        crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=LABEL_SMOOTHING)
+        crit = nn.CrossEntropyLoss(ignore_index=0, label_smoothing=label_smoothing)
         frames = torch.randn(batch, MAX_FRAMES, LANDMARK_DIM, device=device)
         lengths = torch.full((batch,), MAX_FRAMES, device=device, dtype=torch.long)
         tin = torch.randint(4, vocab_size, (batch, 32), device=device)
@@ -1704,7 +1706,7 @@ def export_bundle(model, sp, out_dir: Path, run_id: str, train_cfg: dict,
         "input_dim": MODEL_INPUT_DIM, "raw_feature_dim": LANDMARK_DIM,
         "vocab_size": sp.get_piece_size(),
         "d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS, "ff": FF,
-        "dropout": DROPOUT, "norm_first": NORM_FIRST,
+        "dropout": DROPOUT, "norm_first": args.pre_norm,
         "max_frames": MAX_FRAMES, "max_tokens": MAX_TOKENS,
     }
     if is_pilot:
@@ -1835,11 +1837,18 @@ def parse_args(argv=None):
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--lr", type=float, default=PEAK_LR)
+    ap.add_argument("--pre-norm", action="store_true", default=True,
+                    help="use pre-norm Transformer blocks (default True, v2 config; stable from step 0 on short budgets)")
+    ap.add_argument("--post-norm", action="store_false", dest="pre_norm",
+                    help="use post-norm Transformer blocks (legacy 352868924 behavior; not recommended for v2)")
+    ap.add_argument("--label-smoothing", type=float, default=LABEL_SMOOTHING,
+                    help=f"label smoothing for CrossEntropyLoss (default {LABEL_SMOOTHING}); "
+                         f"padding targets are ignored regardless of smoothing")
     ap.add_argument("--decoder-input-dropout", type=float, default=0.0,
                     help="Token-level dropout on decoder inputs during training: with this "
                          "probability, each non-BOS decoder input token is replaced by a "
                          "uniform random vocab id in [4, vocab_size). Experimental prefix "
-                         "perturbation, not a proven collapse fix. 0.0 disables (original behavior). "
+                         "perturbation, not a proven collapse fix. Default 0.0 disables (original behavior). "
                          "Validation and gate paths are unaffected.")
     ap.add_argument("--embed-init", choices=("scaled", "legacy"), default="scaled",
                     help="decoder token-embedding init. scaled (default): N(0, d_model**-0.5), matching "
@@ -1902,6 +1911,7 @@ def main(argv=None) -> int:
         if cleaning["duplicate_uid"]:
             raise SystemExit("duplicate UIDs after cleaning -- refusing.")
         df_tr_all, df_va_all, df_te_all, split = video_split(cleaned, args.seed)
+        require_signer_independent(split)
         df_tr, df_va, df_te = df_tr_all, df_va_all, df_te_all
         _rows_available = {"train": len(df_tr_all), "val": len(df_va_all), "test": len(df_te_all)}
         _usable_rows = int(cleaning["usable_rows"])
@@ -1969,7 +1979,9 @@ def main(argv=None) -> int:
             log(f"measure: tokenizer ready in {tok_h * 3600:.0f}s (reused by later stages)")
             # Compute benches on the real config/shapes (random weights noted).
             bench = benchmark_training_throughput(device, sp_m.get_piece_size(), args.batch,
-                                                               embed_init=args.embed_init)
+                                                               embed_init=args.embed_init,
+                                                               norm_first=args.pre_norm,
+                                                               label_smoothing=args.label_smoothing)
             t_ckpt = time.perf_counter()
             tmp_ckpt = out / "bench_ckpt.pt"
             torch.save({"probe": torch.randn(16)}, tmp_ckpt)
@@ -1988,7 +2000,7 @@ def main(argv=None) -> int:
             bmodel = SignTransformer(MODEL_INPUT_DIM, sp_m.get_piece_size(), MAX_FRAMES, MAX_TOKENS,
                                      pad_idx=sp_m.pad_id(), d_model=D_MODEL, nhead=NHEAD,
                                      layers=NLAYERS, ff=FF, dropout=DROPOUT,
-                                     norm_first=NORM_FIRST)
+                                     norm_first=args.pre_norm)
             init_token_embedding(bmodel, args.embed_init)
             bmodel = bmodel.to(device)
             btids = [np.asarray(encode_text(sp_m, t), dtype=np.int64) for t in bench_texts]
@@ -2126,7 +2138,7 @@ def main(argv=None) -> int:
     def build_model():
         _m = SignTransformer(MODEL_INPUT_DIM, sp.get_piece_size(), MAX_FRAMES, MAX_TOKENS,
                              pad_idx=sp.pad_id(), d_model=D_MODEL, nhead=NHEAD, layers=NLAYERS,
-                             ff=FF, dropout=DROPOUT, norm_first=NORM_FIRST)
+                             ff=FF, dropout=DROPOUT, norm_first=args.pre_norm)
         init_token_embedding(_m, args.embed_init)  # checkpoint loads below override initialization
         return _m.to(device)
 
@@ -2317,12 +2329,14 @@ def main(argv=None) -> int:
         opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=WEIGHT_DECAY)
         steps_per_epoch = math.ceil(len(train_loader))
         scheduler = build_schedule(opt, max(1, steps_per_epoch * args.epochs))
-        crit = nn.CrossEntropyLoss(ignore_index=sp.pad_id(), label_smoothing=LABEL_SMOOTHING)
+        crit = nn.CrossEntropyLoss(ignore_index=sp.pad_id(), label_smoothing=args.label_smoothing)
         if device.type == "cuda":
             log(f"pre-train GPU memory: alloc={torch.cuda.memory_allocated() / (1024**2):.1f}MB, "
                 f"res={torch.cuda.memory_reserved() / (1024**2):.1f}MB")
             bench = benchmark_training_throughput(device, sp.get_piece_size(), args.batch,
-                                                               embed_init=args.embed_init)
+                                                               embed_init=args.embed_init,
+                                                               norm_first=args.pre_norm,
+                                                               label_smoothing=args.label_smoothing)
             log(f"pre-train benchmark throughput: {bench['train_steps_per_sec']:.1f} steps/s "
                 f"(~{bench['train_steps_per_sec'] * args.batch:.1f} samples/s compute-only)")
         start_epoch, best, bad = 1, float("inf"), 0
@@ -2382,7 +2396,7 @@ def main(argv=None) -> int:
             "input_dim": MODEL_INPUT_DIM, "raw_feature_dim": LANDMARK_DIM,
             "vocab_size": sp.get_piece_size(),
             "d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS, "ff": FF,
-            "dropout": DROPOUT, "norm_first": NORM_FIRST,
+            "dropout": DROPOUT, "norm_first": args.pre_norm,
             "max_frames": MAX_FRAMES, "max_tokens": MAX_TOKENS,
         }
         try:
@@ -2549,8 +2563,8 @@ def main(argv=None) -> int:
         model.load_state_dict(checkpoint["state_dict"])
         is_pilot = bool(args.subset and args.subset > 0)
         train_cfg = {"architecture": {"d_model": D_MODEL, "nhead": NHEAD, "layers": NLAYERS,
-                                      "ff": FF, "dropout": DROPOUT, "norm_first": NORM_FIRST},
-                     "label_smoothing": LABEL_SMOOTHING, "peak_lr": args.lr,
+                                      "ff": FF, "dropout": DROPOUT, "norm_first": args.pre_norm},
+                     "label_smoothing": args.label_smoothing, "peak_lr": args.lr,
                      "batch": args.batch, "seed": args.seed, "history": history,
                      "decoder_input_dropout": args.decoder_input_dropout,
                      "initialization_config": checkpoint.get("initialization_config"),
