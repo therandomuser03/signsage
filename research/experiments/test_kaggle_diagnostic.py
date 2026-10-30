@@ -292,3 +292,96 @@ def test_diagnostic_subprocess_failure_preserves_log_tail_and_env(
     assert "log_tail" in report and "test simulated diagnostic failure" in report["log_tail"]
     assert "environment" in report
     assert "python" in report["environment"]
+
+
+def test_discover_input_root_finds_symlinked_kaggle_mount(tmp_path, monkeypatch):
+    # Regression: Kaggle may mount attached input datasets via symlinks/bind
+    # mounts. Path.glob does not traverse directory symlinks by default
+    # (recurse_symlinks=False), so a symlinked dataset root would be invisible
+    # without recurse_symlinks=True. Simulate: real data under tmp/data/, and
+    # /kaggle/input/signsage-diagnostic-input -> tmp/data/ (symlink).
+    import kaggle_diagnostic as kd
+
+    data = tmp_path / "data"
+    (data / "s2t_small6" / "pose_cache").mkdir(parents=True)
+    (data / "isign").mkdir(parents=True)
+    (data / "s2t_small6" / "pose_cache" / "manifest.json").write_text("{}")
+    (data / "isign" / "iSign_v1.1.csv").write_text("uid,text\n")
+
+    # Simulate Kaggle mount: /kaggle/input/signsage-diagnostic-input -> data/
+    kaggle_input = tmp_path / "kaggle_input"
+    kaggle_input.mkdir()
+    link = kaggle_input / "signsage-diagnostic-input"
+    try:
+        link.symlink_to(data, target_is_directory=True)
+    except OSError:
+        # Environment may not allow symlinks; skip if unsupported.
+        pytest.skip("symlinks not supported in this environment")
+
+    found = kd.discover_input_root(str(kaggle_input))
+    assert found == data.resolve(), f"expected {data.resolve()}, got {found}"
+
+
+def test_discover_input_root_finds_nested_datasets_layout(tmp_path):
+    # Regression: newer Kaggle sessions mount datasets under
+    # /kaggle/input/datasets/<owner>/<slug>/ instead of /kaggle/input/<slug>/.
+    # Recursive glob should still find the manifest at any depth.
+    import kaggle_diagnostic as kd
+
+    root = tmp_path / "kaggle_input"
+    root.mkdir()
+    slug = root / "datasets" / "therandomuser03" / "signsage-diagnostic-input"
+    (slug / "s2t_small6" / "pose_cache").mkdir(parents=True)
+    (slug / "isign").mkdir(parents=True)
+    (slug / "s2t_small6" / "pose_cache" / "manifest.json").write_text("{}")
+    (slug / "isign" / "iSign_v1.1.csv").write_text("uid,text\n")
+
+    found = kd.discover_input_root(str(root))
+    assert found == slug.resolve(), f"expected {slug.resolve()}, got {found}"
+
+
+def test_discover_input_root_rejects_subset6_standalone_csv(tmp_path, monkeypatch):
+    # Regression: the standalone signsage-subset6 input (subset6.csv only) must
+    # NOT be confused with the diagnostic dataset. It has no iSign_v1.1.csv and
+    # no pose_cache/manifest.json, so it cannot satisfy discover_input_root.
+    import kaggle_diagnostic as kd
+
+    root = tmp_path / "kaggle_input"
+    root.mkdir()
+    subset6 = root / "signsage-subset6"
+    (subset6 / "data").mkdir(parents=True)
+    (subset6 / "data" / "subset6.csv").write_text("uid,text\n")
+
+    try:
+        kd.discover_input_root(str(root))
+    except SystemExit as exc:
+        assert "No input root contains both" in str(exc)
+    else:
+        raise AssertionError("discover_input_root should fail on subset6-only input")
+
+
+def test_list_input_tree_prints_mount_tree(tmp_path):
+    import kaggle_diagnostic as kd
+
+    root = tmp_path / "kaggle_input"
+    root.mkdir()
+    slug = root / "signsage-diagnostic-input"
+    (slug / "s2t_small6" / "pose_cache").mkdir(parents=True)
+    (slug / "isign").mkdir(parents=True)
+    (slug / "s2t_small6" / "pose_cache" / "manifest.json").write_text("{}")
+    (slug / "isign" / "iSign_v1.1.csv").write_text("uid,text\n")
+
+    lines = kd.list_input_tree(str(root), max_depth=4)
+    text = "\n".join(lines)
+    assert "signsage-diagnostic-input" in text
+    assert "s2t_small6" in text
+    assert "pose_cache" in text
+    assert "manifest.json" in text
+    assert "isign" in text
+    assert "iSign_v1.1.csv" in text
+    # Depth limit respected: deeper entries omitted
+    deep = root / "a" / "b" / "c" / "d" / "e" / "f.txt"
+    deep.parent.mkdir(parents=True)
+    deep.write_text("x")
+    lines_deep = kd.list_input_tree(str(root), max_depth=3)
+    assert "f.txt" not in "\n".join(lines_deep)

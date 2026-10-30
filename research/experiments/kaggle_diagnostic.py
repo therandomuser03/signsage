@@ -101,7 +101,13 @@ def discover_input_root(input_root: str | Path) -> Path:
 
     candidates: list[Path] = []
     checked: list[str] = []
-    manifests = sorted(root.glob("**/pose_cache/manifest.json"))
+    # Kaggle mounts attached input datasets (potentially via symlinks/bind mounts
+    # under /kaggle/input/datasets/<owner>/<slug>/). Path.glob does not traverse
+    # directory symlinks by default, so pass recurse_symlinks=True to discover
+    # assets through Kaggle mounts regardless of mount depth or symlinking.
+    manifests = sorted(
+        root.glob("**/pose_cache/manifest.json", recurse_symlinks=True)
+    )
 
     for manifest_path in manifests:
         cache_dir = manifest_path.parent
@@ -119,7 +125,7 @@ def discover_input_root(input_root: str | Path) -> Path:
                 candidates.append(candidate)
 
     if not candidates:
-        csvs = sorted(root.glob("**/iSign_v1.1.csv"))
+        csvs = sorted(root.glob("**/iSign_v1.1.csv", recurse_symlinks=True))
         raise SystemExit(
             "No input root contains both "
             f"{MANIFEST_REL} and {CSV_REL} under the same root. "
@@ -136,6 +142,33 @@ def discover_input_root(input_root: str | Path) -> Path:
             f"Pass --input-root explicitly or ensure only one dataset is mounted."
         )
     return candidates[0]
+
+
+def list_input_tree(root: str | Path, max_depth: int = 5) -> list[str]:
+    """Diagnostic helper: print the directory tree under `root` up to `max_depth`.
+
+    Intended for a Kaggle preflight cell to inspect how attached input datasets
+    are mounted (e.g. /kaggle/input/signsage-diagnostic-input/ or
+    /kaggle/input/datasets/<owner>/signsage-diagnostic-input/). Does not read
+    file contents, so it is safe to run on large mounts.
+    """
+    root = Path(root).resolve()
+    lines: list[str] = []
+    if not root.is_dir():
+        lines.append(f"{root} (not a directory)")
+        return lines
+    for p in sorted(root.rglob("*", recurse_symlinks=True)):
+        try:
+            rel = p.relative_to(root)
+        except ValueError:
+            continue
+        depth = len(rel.parts)
+        if depth > max_depth:
+            continue
+        indent = "  " * (depth - 1)
+        marker = "/" if p.is_dir() else ""
+        lines.append(f"{indent}{p.name}{marker}")
+    return lines
 
 
 def validate_input(root: Path, expected_tokenizer_fingerprint: str) -> dict:
