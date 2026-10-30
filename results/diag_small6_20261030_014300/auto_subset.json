@@ -1,8 +1,0 @@
-{
- "subset": 2500,
- "projected_total_hours": 4.99,
- "prepare_hours": 0.44,
- "cache_gib_heuristic": 9.1,
- "target_hours": 11.5,
- "basis": "cache-mode measured/local rates, 1.5h margin, 10 GiB budget heuristic"
-}

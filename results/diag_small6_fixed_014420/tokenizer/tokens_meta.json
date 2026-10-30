@@ -1,1 +1,0 @@
-{"splits": {"train": {"sp": "9a342f6a9ecc36ae", "max_len": 96, "n": 2500, "uids": "ec955196b206afde", "texts": "f4015372df90aee3"}, "val": {"sp": "9a342f6a9ecc36ae", "max_len": 96, "n": 2500, "uids": "4f063a2ca3638b5f", "texts": "e21ab0bfd85711b5"}, "test": {"sp": "9a342f6a9ecc36ae", "max_len": 96, "n": 2500, "uids": "cc408ade0493822a", "texts": "baabfc09c1c5114d"}}}

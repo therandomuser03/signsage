@@ -9,7 +9,7 @@ Status: EXPERIMENTAL. Not production-ready. `SIGNSAGE_MODEL_PROMOTED=false` pres
 |---|---|---|---|---|
 | A (Isolated recognition) | CISLR / Amrita SLR / INCLUDE (if licensed) | `.npy`, `.npz`, `.pose`, raw `.mp4` | `path`, `label`, `video_id`, `signer` (optional `video_ref`) | `ISOLATED_DATA_ROOT` points at dataset folder |
 | B (Translation) | GloSL-ISL (`annotations.csv`) | `.pose` files in `poses/` | `pose_file`, `text`, `video_ref`, `split`, `signer` | `TRANSLATION_POSE_ROOT` points at dataset root |
-| B (Translation) | iSign (gated HF) | `.pose` named `<uid>.pose` | `uid`, `text` | `TRANSLATION_POSE_ROOT` points at pose dir; format=`isign` |
+| B (Translation) | iSign (gated HF) — prepared cache (`USE_PREPARED_ISIGN_CACHE=True`) | `isign/iSign_v1.1.csv` + `s2t_small6/pose_cache/` + tokenizer/token arrays | `TRANSLATION_FORMAT="prepared_cache"` with `USE_PREPARED_ISIGN_CACHE=True`; `TRANSLATION_MANIFEST` not required | `PREPARED_CACHE_ROOT` points at dataset root (e.g., `/kaggle/input/datasets/therandomuser03/signsage-diagnostic-input/` or local `kaggle_input_v4`) |
 | B (Translation) | ISL-CSLTR (Mendeley) | raw `.mp4` + sentence mapping | canonical: `pose_path`, `text`, `video_id`, `split`, `signer` | convert first via `convert_isl_csltr_to_canonical_manifest()` |
 
 No automated multi-GB downloads. Attach manually.
@@ -27,6 +27,34 @@ TRANSLATION_MANIFEST = None            # set to attached annotations CSV
 ```
 
 Invalid `TRAINING_MODE` now raises `ValueError` instead of silently falling through to unlimited.
+
+### iSign Prepared Cache Pilot (verified dataset: 7500 aligned samples)
+
+When working with the prepared `s2t_small6` dataset (verified at the repository's `kaggle_input_v4/` or at an attached Kaggle dataset path), set:
+
+```
+TRAIN_TRANSLATION = True
+TRAIN_RECOGNITION = False
+USE_PREPARED_ISIGN_CACHE = True
+PREPARED_CACHE_ROOT = Path("/kaggle/input/datasets/therandomuser03/signsage-diagnostic-input/")
+# Adjust PREPARED_CACHE_ROOT to the actual dataset attachment path.
+TRANSLATION_FORMAT = "prepared_cache"
+TRAINING_MODE = "pilot"
+CONFIRM_DATASET_RIGHTS = True
+```
+
+Verified dataset properties (actual files inspected):
+- CSV (`isign/iSign_v1.1.csv`): 127,237 total rows.
+- Manifest (`s2t_small6/pose_cache/manifest.json`): 7,500 UID-to-shard mappings.
+- `.pose` files: 7,500 (4 zip shards: 2000 + 2000 + 2000 + 1500).
+- Token arrays (`tokenizer/tokens.npz`): train (2500, 43), val (2500, 82), test (2500, 40).
+- Tokenizer (`tokenizer/signsage_en_sp.model`): vocab 16,000; special IDs 0/1/2/3.
+- Pose dimensions: `(frames, 1, 576, 3)` (includes 543 core + 33 world pose); first 543 landmarks match contract.
+- Split sizes preserved exactly: train=2500, val=2500, test=2500.
+- UID grouping (prefix `rsplit("-", 1)[0]`): 2,208 unique prefixes; 1,256 multi-sample (largest groups: 63, 56, 51, 49).
+- Split leakage (prefix grouping): overlap detected (1 shared prefix per split pair). Source-video independence NOT independently verified; report limitation clearly.
+
+Run `isign-prepared-cache` cell first (verifies manifest, CSV, pose files, tokenizer, arrays, dimensions). Then proceed to model pipeline.
 
 ## 3. Run independently
 
