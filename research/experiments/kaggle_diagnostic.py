@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import shutil
 import subprocess
 import sys
@@ -534,6 +535,42 @@ ap.add_argument("--stages", default=None,
                      "kept for CLI parity with train_sign_to_text.py")
 
 
+def collect_environment(out: Path) -> dict:
+    """Gather environment details for a failed diagnostic, written to
+    failure_report.json so the operator sees the real exception context
+    without manually retrieving /kaggle/working/s2t_diag1/
+    subprocess_stdout_stderr.log."""
+    report: dict = {
+        "python": sys.version,
+        "executable": sys.executable,
+        "cwd": str(Path.cwd()),
+    }
+    try:
+        import torch  # noqa: F401
+        report["torch"] = torch.__version__
+        report["cuda_available"] = bool(torch.cuda.is_available())
+        if torch.cuda.is_available():
+            try:
+                report["cuda_device"] = torch.cuda.get_device_name(0)
+                report["cuda_mem_gb"] = round(
+                    torch.cuda.get_device_properties(0).total_memory / (1024 ** 3), 2,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+    except ImportError:
+        report["torch"] = "not installed"
+    try:
+        free = shutil.disk_usage(out if out.exists() else out.parent).free
+        report["disk_free_gb"] = round(free / (1024 ** 3), 2)
+    except OSError:
+        report["disk_free_gb"] = "unavailable"
+    try:
+        report["platform"] = platform.platform()
+    except Exception:  # noqa: BLE001
+        pass
+    return report
+
+
 def main(argv=None):
     args = ap.parse_args(argv)
 
@@ -656,9 +693,31 @@ def main(argv=None):
             ) from exc
     print("Exit:", result.returncode, "| log:", log_path)
     if result.returncode != 0:
+        # Read the log tail so the actual subprocess exception reaches the
+        # operator without requiring manual log retrieval from Kaggle.
+        log_tail = ""
+        try:
+            lines = log_path.read_text(errors="replace").splitlines()
+            log_tail = "\n".join(lines[-40:]) if lines else ""
+        except OSError:
+            log_tail = "(could not read log file)"
+        env = collect_environment(out)
+        report = {
+            "exit_code": result.returncode,
+            "command": " ".join(str(c) for c in cmd),
+            "log_path": str(log_path),
+            "log_tail": log_tail,
+            "environment": env,
+        }
+        try:
+            (out / "failure_report.json").write_text(json.dumps(report, indent=1))
+        except OSError:
+            pass
         raise SystemExit(
             "Diagnostic failed. Preserve outputs; do not retry automatically. "
-            "Exit 124 typically means timeout; 137 can mean forced termination."
+            f"Exit {result.returncode}. Full subprocess output preserved in {log_path}. "
+            f"Environment and exception tail written to {out / 'failure_report.json'}. "
+            f"Last log lines:\n{log_tail}"
         )
     history = json.loads((out / "training_history.json").read_text())
     print("Completed epochs:", len(history))

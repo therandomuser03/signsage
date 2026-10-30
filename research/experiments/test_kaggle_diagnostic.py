@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -218,3 +219,76 @@ def test_train_tokenizer_creates_model_from_scratch():
     # Re-running train_tokenizer on an existing model must not retrain or fail.
     sp2 = T.train_tokenizer(texts, tok_dir, vocab_size=40)
     assert sp2.get_piece_size() == loaded.get_piece_size()
+
+
+def test_collect_environment_returns_expected_keys(tmp_path):
+    import kaggle_diagnostic as kd
+
+    env = kd.collect_environment(tmp_path)
+    assert isinstance(env, dict)
+    assert "python" in env and env["python"]
+    assert "executable" in env and env["executable"]
+    assert "cwd" in env
+    assert "disk_free_gb" in env
+    assert "platform" in env
+    # torch may or may not be installed; validate shape if present
+    if env.get("torch") != "not installed":
+        assert "cuda_available" in env
+
+
+def test_diagnostic_subprocess_failure_preserves_log_tail_and_env(
+    monkeypatch, tmp_path
+):
+    # Regression: when the training subprocess exits non-zero, the diagnostic
+    # must include the actual subprocess exception (from the log tail) and
+    # environment details in the SystemExit message and in failure_report.json,
+    # instead of a generic "Diagnostic failed" message. This is what lets the
+    # operator identify the real root cause without manually retrieving the
+    # Kaggle log.
+    import kaggle_diagnostic as kd
+
+    mirror = Path(__file__).resolve().parent.parent.parent / "kaggle_input_v4"
+    if not mirror.is_dir():
+        pytest.skip("local kaggle_input_v4 mirror needed for this check")
+
+    out = tmp_path / "diag_out"
+
+    class FakeCompletedProcess:
+        returncode = 1
+
+    def fake_run(cmd, **kwargs):
+        log_fh = kwargs.get("stdout")
+        if log_fh is not None:
+            log_fh.write(
+                "Traceback (most recent call last):\n"
+                '  File "/kaggle/working/train_sign_to_text.py", line 42, in <module>\n'
+                "    raise RuntimeError(test simulated diagnostic failure)\n"
+                "RuntimeError: test simulated diagnostic failure\n"
+            )
+            log_fh.flush()
+        return FakeCompletedProcess()
+
+    monkeypatch.setattr(kd.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit) as excinfo:
+        kd.main([
+            "--input-root", str(mirror),
+            "--out", str(out),
+            "--timeout-seconds", "60",
+            "--expected-tokenizer-fingerprint", "2d88a5de48318cb9",
+        ])
+
+    msg = str(excinfo.value)
+    assert "Exit 1" in msg, f"exit code not reported: {msg!r}"
+    assert "test simulated diagnostic failure" in msg, (
+        f"subprocess exception not included in error message: {msg!r}"
+    )
+    assert str(out / "failure_report.json") in msg, (
+        f"failure_report path not referenced: {msg!r}"
+    )
+    assert (out / "failure_report.json").is_file(), "failure_report.json not written"
+    report = json.loads((out / "failure_report.json").read_text())
+    assert report["exit_code"] == 1
+    assert "log_tail" in report and "test simulated diagnostic failure" in report["log_tail"]
+    assert "environment" in report
+    assert "python" in report["environment"]
