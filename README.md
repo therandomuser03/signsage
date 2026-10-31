@@ -3,7 +3,7 @@
 **Bidirectional Indian Sign Language (ISL) ↔ English — an M.Tech research prototype.**
 
 > Not a production accessibility product. Not certified for medical, legal, emergency, or
-> other high-stakes use. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) (§4) and
+> other high-stakes use. See [`docs/development/DEVELOPMENT.md`](docs/development/DEVELOPMENT.md) (§4) and
 > `frontend`'s Privacy page.
 
 This README was rewritten as part of a pre-demo audit/fix pass. If you read an older
@@ -29,7 +29,7 @@ Full numbers for the verified NO-GO run are recorded in
 [`research/evaluation/reports/352868924/evaluation_results.json`](research/evaluation/reports/352868924/evaluation_results.json)
 (run manifest
 [`research/manifests/models/signsage-s2t_v352868924.yaml`](research/manifests/models/signsage-s2t_v352868924.yaml);
-see also [`docs/DATA_AND_MODEL.md`](docs/DATA_AND_MODEL.md) (§5)).
+see also [`docs/architecture/DATA_AND_MODEL.md`](docs/architecture/DATA_AND_MODEL.md) (§5)).
 The historical path `research/outputs/phase0/RESULTS.md` referenced by older
 documentation is TBD/missing in this checkout and is not used here.
 The run label `20260916T144755Z` below is a historical reference (TBD mapping
@@ -97,9 +97,9 @@ Start with [`docs/MASTER.md`](docs/MASTER.md) (orientation + map), then the
 authoritative document for your question:
 
 - [`docs/STATUS_AND_ROADMAP.md`](docs/STATUS_AND_ROADMAP.md) — current state, audit evidence, blockers, validation, work order.
-- [`docs/DATA_AND_MODEL.md`](docs/DATA_AND_MODEL.md) — dataset facts, storage ops, vocabulary verdict, model readiness & gates.
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — setup, interfaces, deployment, security, testing.
-- [`docs/EXTERNAL_EVALUATION.md`](docs/EXTERNAL_EVALUATION.md) — external T5 candidate evidence.
+- [`docs/architecture/DATA_AND_MODEL.md`](docs/architecture/DATA_AND_MODEL.md) — dataset facts, storage ops, vocabulary verdict, model readiness & gates.
+- [`docs/development/DEVELOPMENT.md`](docs/development/DEVELOPMENT.md) — setup, interfaces, deployment, security, testing.
+- [`docs/evaluation/EXTERNAL_EVALUATION.md`](docs/evaluation/EXTERNAL_EVALUATION.md) — external T5 candidate evidence.
 - [`docs/AGENTS.md`](docs/AGENTS.md) — workflow and rules for AI coding agents.
 - [`docs/reference/`](docs/reference/) — exact-values pins (`end-to-end-contract.md`, `contract-verification.md`).
 

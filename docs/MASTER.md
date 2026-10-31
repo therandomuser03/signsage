@@ -10,11 +10,11 @@ documents below. Sections are condensed — details live where cited.
 |---|---|
 | `MASTER.md` (this file) | What is this, what is true, what was decided, what remains |
 | `STATUS_AND_ROADMAP.md` | Current state, audit evidence, blockers, validation, work order |
-| `DATA_AND_MODEL.md` | Dataset facts, storage ops, vocabulary verdict, model readiness & gates |
-| `DEVELOPMENT.md` | Setup, interfaces, deployment, security, testing, workflow |
-| `EXTERNAL_EVALUATION.md` | External T5 candidate: contract, adapter, load + quality evidence |
+| `architecture/DATA_AND_MODEL.md` | Dataset facts, storage ops, vocabulary verdict, model readiness & gates |
+| `development/DEVELOPMENT.md` | Setup, interfaces, deployment, security, testing, workflow |
+| `evaluation/EXTERNAL_EVALUATION.md` | External T5 candidate: contract, adapter, load + quality evidence |
 | `AGENTS.md` | Rules for AI coding agents |
-| `reference/` | Exact-values pins: `end-to-end-contract.md`, `contract-verification.md` |
+| `architecture/` | Exact-values pins: `end-to-end-contract.md`, `contract-verification.md` |
 
 ## 1. One-sentence definition
 
@@ -157,7 +157,7 @@ Ignored, never committed: `results.zip`, `staging_kaggle_results/`,
 ## 10. Documentation authority
 
 When documents conflict: (1) code + tests describe implementation;
-(2) `reference/end-to-end-contract.md` pins values; (3) `DEVELOPMENT.md`
+(2) `architecture/end-to-end-contract.md` pins values; (3) `development/DEVELOPMENT.md`
 describes intended interfaces; (4) `STATUS_AND_ROADMAP.md` describes current
 state; (5) recorded evaluations describe measured outcomes; (6) §7 explains
 why; (7) §5 describes intended scope, not implementation. Historical phase

@@ -1,0 +1,250 @@
+✅ Models loaded
+Loading test data...
+✅ Test data loaded: 57 samples, vocab: 32095
+── Running inference on 57 samples ──
+hide(ime())
+org.slt:d1819ee1: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+Compat change id reported: 247079863; UID 10387; state: ENABLED
+[1/57] 319ms
+  Ref: about how much more does the whale shark weigh
+  Pred: and the sprained roots
+  Match: ❌
+[2/57] 477ms
+  Ref: from ernakulam kerala a 1 0 year old girl named saanvi m prajit
+  Pred: in kerala s kolkata a deaf girl named vijay singh
+  Match: ❌
+[3/57] 186ms
+  Ref: as they had heard that the rulers of person had vast armies of foot soldiers chariots
+  Pred: and so on
+  Match: ❌
+[4/57] 421ms
+  Ref: they also said that the 1 3 0 0 year old necklace is highly expensive
+  Pred: the rover was about 1 2 0 0 years old and was not very sharp
+  Match: ❌
+[5/57] 443ms
+  Ref: in 2 0 1 2 ratan tata the chairman of tata group retired and cyrus mistry took his place
+  Pred: in 2 0 2 1 ronnie quit her role as the vice president of the tmc
+  Match: ❌
+[6/57] 197ms
+  Ref: and person were ultimately one each number
+  Pred: the person person
+  Match: ❌
+[7/57] 259ms
+  Ref: the cameras kept zooming into her
+  Pred: he took a picture of the person
+  Match: ❌
+[8/57] 284ms
+  Ref: some are in person person person person etc
+  Pred: the person person were able to enter person and person
+  Match: ❌
+[9/57] 365ms
+  Ref: people simply draped the fabrics around different parts of their body
+  Pred: he also said that the bjp has the power to do this exercise
+  Match: ❌
+[10/57] 313ms
+  Ref: in haryana s yamunanagar there is an association named wday
+  Pred: in haryana s unknown there is an association named unknown
+  Match: ❌
+[11/57] 312ms
+  Ref: many complained that ott platforms must be regulated because their vulgar content can influence the youth
+  Pred: the government is demanding person to be given a free person person
+  Match: ❌
+[12/57] 507ms
+  Ref: a vice president s new house a common central secretariat the area has been completely revamped
+  Pred: virat kohli s v p s has also started a new initiative to encourage the growth of the economy
+  Match: ❌
+[13/57] 392ms
+  Ref: two aircrafts of person have been grounded due to maintenance work and shortage of pilots
+  Pred: two pilots of the person person person and the person person were also working on the pilots
+  Match: ❌
+[14/57] 251ms
+  Ref: dealt with all kinds of subjects
+  Pred: and a jumbled bird
+  Match: ❌
+[15/57] 403ms
+  Ref: this is his eighth international honour
+  Pred: and the world cup s 8 medals have been won by the bjp
+  Match: ❌
+Waiting for a blocking GC NativeAlloc
+WaitForGcToComplete blocked NativeAlloc on NativeAlloc for 20.827ms
+[16/57] 280ms
+  Ref: priyanka person had lots of problems and ups and downs in life
+  Pred: he has a lot of experience in life
+  Match: ❌
+[17/57] 504ms
+  Ref: the education of all the graduates like doctors teachers engineers and others are useless
+  Pred: if you are a doctor or a doctor you will be able to study and you will be very well educated
+  Match: ❌
+[18/57] 230ms
+  Ref: from plastic toothbrush to person
+  Pred: and the leaves are left behind
+  Match: ❌
+[19/57] 390ms
+  Ref: once they reach a consensus the person person will move aside
+  Pred: if the government does not do anything they will be given the funds to the state government
+  Match: ❌
+[20/57] 215ms
+  Ref: she added a clause in her contract
+  Pred: according to the rules
+  Match: ❌
+[21/57] 458ms
+  Ref: the person have warned to take strict action against traders who hoard their stock
+  Pred: the government has said that if the laws are not enforced the government will make sure the situation is treated equally
+  Match: ❌
+[22/57] 395ms
+  Ref: what is this about ish team read the article and spoke to police officer person person
+  Pred: ish person had also conducted a research and contacted the person person person person person person
+  Match: ❌
+[23/57] 348ms
+  Ref: after shares of his bottled water company surged
+  Pred: now the world is battling the second wave of covid 1 9
+  Match: ❌
+[24/57] 304ms
+  Ref: this was to stop people moving on foot as the nails will not allow protestors to proceed
+  Pred: people use the power to walk and walk to the ground
+  Match: ❌
+[25/57] 396ms
+  Ref: her husband s name was amarjyoti dey and mother in law s name was shankari dey
+  Pred: ajay devgn s wife unknown devgn
+  Match: ❌
+[26/57] 342ms
+  Ref: that person will not surrender even an inch of its territory
+  Pred: china has helped person reach the border at one point of contact with person
+  Match: ❌
+Background young concurrent mark compact GC freed 2972KB AllocSpace bytes, 172(21MB) LOS objects, 99% free, 4906KB/512MB, paused 87us,7.262ms total 25.283ms
+[27/57] 455ms
+  Ref: steph person is from the usa and has acted on tv
+  Pred: samantha malik is a person actor in the tv series
+  Match: ❌
+[28/57] 276ms
+  Ref: we also call one tenth of a centimeter as
+  Pred: i cannot walk on a straight line
+  Match: ❌
+[29/57] 416ms
+  Ref: hands must be washed before after preparing food for the patient wash hands after serving the patient as well
+  Pred: the man was dragging the samosas and dragging them to the toilet
+  Match: ❌
+[30/57] 428ms
+  Ref: after the last rites some people even use salt to ward off the spirit of the deceased
+  Pred: if you are unable to make ends meet then you can even get a saree
+  Match: ❌
+[31/57] 356ms
+  Ref: in private college there is donation system which ranges form rs 8 5 lakhs to rs 1 crore
+  Pred: the amount will be rs 8 5 lakh to the person
+  Match: ❌
+[32/57] 485ms
+  Ref: a photo showing packed crowds at a person train station has gone viral
+  Pred: a picture of the incident went viral on social media and was seen at a person temple to be prepared for the attack
+  Match: ❌
+[33/57] 410ms
+  Ref: natasa was very happy and surprised person person songs were playing in the background
+  Pred: she was shocked and was enraged by the loud music and the music of person person
+  Match: ❌
+[34/57] 266ms
+  Ref: the bodies were encased in the tricolor and then flown to the person person in person
+  Pred: he then went to person person person
+  Match: ❌
+[35/57] 368ms
+  Ref: vignesh bought all the gold nayanthara wore during the wedding ceremony worth rs 2 5 to 3 crore
+  Pred: vimlesh was given a gift of rs 2 3 crore
+  Match: ❌
+[36/57] 423ms
+  Ref: the ats also said that they received funds from isi and foreign agencies to convert people to person
+  Pred: the bjp also said that person person has funds from person and person for religious reasons
+  Match: ❌
+[37/57] 314ms
+  Ref: however there maybe a 7 chance of hospitalization
+  Pred: 9 3 of the people tested positive for covid 1 9
+  Match: ❌
+[38/57] 297ms
+  Ref: if a lady frog hops past
+  Pred: the barber s shoulder is a unknown
+  Match: ❌
+[39/57] 354ms
+  Ref: which many foreigners take part in to climb person person
+  Pred: if person attacks person then they will not be able to attack person
+  Match: ❌
+[40/57] 515ms
+  Ref: he said you don t get 4 0 0 wickets by bowling poorly
+  Pred: he said that he was not a good player he was a good bowler and was a good bowler
+  Match: ❌
+[41/57] 411ms
+  Ref: a scientist say that this is terrible person is extremely reckless when it comes to managing space debris
+  Pred: a person user said that person is suffering from a lot of mental trauma
+  Match: ❌
+[42/57] 366ms
+  Ref: suyog said he is thankful for people who invested in th scheme
+  Pred: he was a very good doctor and was a good unknown in person
+  Match: ❌
+[43/57] 316ms
+  Ref: every bite of this soup packs so many flavours
+  Pred: now roast them in a bowl and blend them well
+  Match: ❌
+[44/57] 332ms
+  Ref: nato considers an attack against one or several of its members as an attack against all
+  Pred: nato has been blocked by the person person
+  Match: ❌
+[45/57] 379ms
+  Ref: the video is from spain where there is a boy s hostel adjacent to girl s hostel
+  Pred: the person person is a hotel in person and is located near the school grounds
+  Match: ❌
+[46/57] 388ms
+  Ref: alka person has been interpreting through itst so that person people can understand and benefit
+  Pred: the tst community will be able to help people with disabilities
+  Match: ❌
+[47/57] 711ms
+  Ref: after the 2 0th november 2 0 2 2 accident there was a traffic jam up to a few kilometres along the highway
+  Pred: on 2 1st november 2 0 2 2 the cctv footage captured a 3 0 metre long tussle between the two
+  Match: ❌
+Waiting for a blocking GC NativeAlloc
+WaitForGcToComplete blocked NativeAlloc on NativeAlloc for 80.847ms
+[48/57] 624ms
+  Ref: there was a 4 3 year old man named dhananjay bansode he was married and had two sons
+  Pred: a 4 3 year old man named dr bhatt is married and has two children
+  Match: ❌
+[49/57] 573ms
+  Ref: the phone was placed in a zip lock pouch and not a single drop of water had entered inside
+  Pred: in the end it is clear that the water in the water is not clean it is very clear that there is no water in it
+  Match: ❌
+[50/57] 506ms
+  Ref: baba person was blind person me tell you about her childhood
+  Pred: bhagwant person is a person person me tell you about it
+  Match: ❌
+[51/57] 403ms
+  Ref: indian bowler person person was chosen to bowl
+  Pred: this is because person was a very talented player
+  Match: ❌
+[52/57] 481ms
+  Ref: in a shocking incident on 8th june 2 0 2 2 a mob vandalized the temple
+  Pred: a huge crowd of supporters were gathered at the hospital on 8th june 2 0 2 2
+  Match: ❌
+[53/57] 356ms
+  Ref: here is the reason why karl s x2 visa was cancelled
+  Pred: he was questioned by two cji
+  Match: ❌
+[54/57] 580ms
+  Ref: on tv there are many advertisements about air conditioners mobiles
+  Pred: the channels are telecast telecast telecast telecast telecast telecast telecast
+  Match: ❌
+[55/57] 344ms
+  Ref: in a port in person person there was a huge explosion
+  Pred: in person there were many person in person who were very busy
+  Match: ❌
+[56/57] 382ms
+  Ref: akash person has studied person from person person usa
+  Pred: he was a native of the usa and studied in person person
+  Match: ❌
+[57/57] 391ms
+  Ref: the bridge was good enough for walking but shakes a bit when two wheelers ride on it
+  Pred: the person person was able to walk freely without any doubts
+  Match: ❌
+═══════════════════════════════════════
+Results (57 samples):
+  Average time: 384ms per sample
+  Total time: 21897ms
+  Token-match: 0/57 = 0.0%
+  PS-BLEU-1: 24.3
+  PS-BLEU-2: 13.81
+  PS-BLEU-3: 9.19
+  PS-BLEU-4: 6.77
+═══════════════════════════════════════
