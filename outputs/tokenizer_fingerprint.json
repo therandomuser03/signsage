@@ -1,0 +1,12 @@
+{
+  "fingerprint_sha256_first16": "e2964684c936ea49",
+  "vocab_size": 16000,
+  "special_token_ids": {
+    "pad": 0,
+    "unk": 1,
+    "bos": 2,
+    "eos": 3
+  },
+  "model_file": "tokenizer/signsage_en_sp.model",
+  "loaded_from_prepared_cache": true
+}

@@ -1,0 +1,51 @@
+{
+  "checkpoint_source": "results-v4.zip -> s2t_small6/checkpoints/signsage_transformer_full.pt",
+  "verified_checkpoint_path": "outputs/checkpoint_reload_verified/signsage_transformer_full_16k.pt",
+  "file_size_bytes": 203649677,
+  "model_class": "SignTransformer",
+  "model_config": {
+    "input_dim": 3258,
+    "raw_feature_dim": 1629,
+    "vocab_size": 16000,
+    "d_model": 256,
+    "nhead": 4,
+    "layers": 4,
+    "ff": 1024,
+    "dropout": 0.15,
+    "norm_first": true,
+    "max_frames": 160,
+    "max_tokens": 96
+  },
+  "tokenizer_fingerprint": "2d88a5de48318cb9",
+  "tokenizer_fingerprint_verified_match": true,
+  "data_fingerprint": null,
+  "optimizer_state_reloaded": true,
+  "scheduler_state_reloaded": true,
+  "epoch_state": 1,
+  "best_val_loss": 26.726601033271113,
+  "bad_count": 0,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 32.51239049887355,
+      "val_loss": 26.726601033271113,
+      "unique": 4,
+      "unique_fraction": 0.0078125,
+      "top_prediction": "this.",
+      "top_prediction_freq": 0.9921875,
+      "grad_norm_mean": 22.036056071897097,
+      "grad_norm_max": 49.047943115234375,
+      "grad_clip_frac": 1.0,
+      "param_norm": 2028.319580078125
+    }
+  ],
+  "forward_pass_finite": true,
+  "forward_output_shape": [
+    2,
+    12,
+    16000
+  ],
+  "resume_compatible": true,
+  "date_verified": "2026-10-31 16:50:19",
+  "note": "Full Model B (16k vocab, 256 d_model, 4 layers) checkpoint recovered from results-v4.zip archive, successfully reloaded strictly and verified with finite forward pass."
+}

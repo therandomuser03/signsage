@@ -1,0 +1,47 @@
+{
+  "dataset_name": "iSign (prepared cache s2t_small6)",
+  "license": "CC BY-NC-SA 4.0",
+  "dataset_root": "kaggle_input_v4",
+  "manifest_path": "s2t_small6/pose_cache/manifest.json",
+  "manifest_uid_count": 7500,
+  "pose_format_verified": true,
+  "core_landmark_contract": "(T, 543, 3)",
+  "full_pose_shape": "(frames, 1, 576, 3)",
+  "annotation_csv_path": "isign/iSign_v1.1.csv",
+  "annotation_csv_rows": 127237,
+  "manifest_uids_in_csv": 7500,
+  "tokenizer_vocabulary_size": 16000,
+  "token_array_shapes": {
+    "train_ids": [
+      2500,
+      43
+    ],
+    "val_ids": [
+      2500,
+      82
+    ],
+    "test_ids": [
+      2500,
+      40
+    ]
+  },
+  "split_policy": "approximate (manifest order); exact UID-to-token mapping NOT RECOVERED",
+  "split_sizes": {
+    "train": 2500,
+    "validation": 2500,
+    "test": 2500
+  },
+  "source_video_independence_verified": false,
+  "video_overlap_per_split_pair": 1,
+  "uid_prefix_total_unique": 2208,
+  "uid_prefix_multi_sample": 1256,
+  "uid_prefix_max_group_size": 63,
+  "preflight_status": "PASSED",
+  "data_integrity_notes": [
+    "iSign dataset is non-commercial (CC BY-NC-SA 4.0).",
+    "ALLOW_RESEARCH_ONLY_DATASETS must remain True for this pipeline.",
+    "Approximate split uses manifest order; split leakage detected (1 shared prefix per pair).",
+    "Exact token-to-UID mapping cannot be recovered from hashes alone."
+  ],
+  "date_inspected": "2025-10-30"
+}

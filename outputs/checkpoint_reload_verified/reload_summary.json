@@ -1,0 +1,29 @@
+{
+  "checkpoint_path": "/mnt/D/Codes/signsage/outputs/checkpoint_reload_verified/signsage_transformer_full.pt",
+  "source_checkpoint": "/mnt/D/Codes/signsage/research/training/artifacts/smoke_test/checkpoints/signsage_transformer_recovery.pt",
+  "model_config": {
+    "input_dim": 3258,
+    "raw_feature_dim": 1629,
+    "vocab_size": 22,
+    "d_model": 256,
+    "nhead": 1,
+    "layers": 4,
+    "ff": 1024,
+    "dropout": 0.15,
+    "norm_first": true,
+    "max_frames": 160,
+    "max_tokens": 96
+  },
+  "tokenizer_fingerprint": "d356a30d61005ad5",
+  "data_fingerprint": "smoke_synthetic",
+  "epoch": 1,
+  "best_val": Infinity,
+  "bad": 0,
+  "weights_loaded_strict": true,
+  "forward_pass_finite": true,
+  "output_shape": [
+    2,
+    4,
+    22
+  ]
+}

@@ -1,0 +1,20 @@
+Loading checkpoint: research/training/artifacts/smoke_test/checkpoints/signsage_transformer_full.pt
+Checkpoint keys: ['state_dict', 'epoch', 'val_loss', 'best', 'bad', 'history', 'optimizer_state_dict', 'scheduler_state_dict', 'rng']
+Initializing new SignTransformer instance (model config from checkpoint state shapes)
+Model weights loaded successfully.
+State dict entries: 135
+Optimizer state dict present: True
+Scheduler state dict present: True
+Epoch: 1
+Best val loss: inf
+Bad count: 0
+History length: 1
+Tokenizer fingerprint: d356a30d61005ad5
+Data fingerprint: NOT STORED IN SMOKE TEST CHECKPOINT (only in full pipeline)
+Forward pass output shape: torch.Size([2, 4, 22])
+Output mean: -1.4895087480545044
+Output std: 10.0363130569458
+All finite: True
+No NaN: True
+FORWARD PASS VERIFIED: FINITE OUTPUT
+Optimizer state loaded successfully.
