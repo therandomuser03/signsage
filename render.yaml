@@ -30,7 +30,7 @@ services:
         value: INFO
       # Production browser origin(s), JSON list. No wildcard (credentials on).
       - key: SIGNSAGE_CORS_ORIGINS
-        value: '["https://<your-vercel-app>.vercel.app"]'
+        value: '["https://signsage.vercel.app/"]'
       # Deployment-bundle download (set in dashboard; required for inference):
       - key: SIGNSAGE_BUNDLE_URL
         sync: false
