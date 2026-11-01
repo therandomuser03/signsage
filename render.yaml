@@ -36,6 +36,9 @@ services:
         sync: false
       - key: SIGNSAGE_BUNDLE_SHA256
         sync: false
+      # Required only when SIGNSAGE_BUNDLE_URL points to a private HF Hub repo.
+      - key: SIGNSAGE_HF_TOKEN
+        sync: false
       # Optional: Supabase (auth/history), Groq/Ollama (avatar gloss).
       - key: SIGNSAGE_SUPABASE_URL
         sync: false

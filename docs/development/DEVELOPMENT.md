@@ -70,6 +70,8 @@ Topology: browser (React/Vite + MediaPipe) → WS/HTTPS → FastAPI
   uses a 300-second timeout to prevent indefinite startup hangs; no URL → still
   starts, `/health` reports `model_bundle_found:false`, translation refuses
   `MODEL_UNAVAILABLE`. `SIGNSAGE_ALLOW_UNPROMOTED_DEV` is absent from Render.
+  For the full artifact packaging, storage, update, and verification steps,
+  see [`RENDER_MODEL_DEPLOYMENT.md`](RENDER_MODEL_DEPLOYMENT.md).
 - Free/small instances may not suit PyTorch/checkpoint/WS workloads — starting
   ≠ production-grade. Verified only after: frontend loads, auth works, health
   responds, WS connects, payloads accepted, errors surface, history isolated,

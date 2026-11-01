@@ -12,6 +12,7 @@ documents below. Sections are condensed — details live where cited.
 | `STATUS_AND_ROADMAP.md` | Current state, audit evidence, blockers, validation, work order |
 | `architecture/DATA_AND_MODEL.md` | Dataset facts, storage ops, vocabulary verdict, model readiness & gates |
 | `development/DEVELOPMENT.md` | Setup, interfaces, deployment, security, testing, workflow |
+| `development/RENDER_MODEL_DEPLOYMENT.md` | Model artifact storage and Render deployment steps |
 | `evaluation/EXTERNAL_EVALUATION.md` | External T5 candidate: contract, adapter, load + quality evidence |
 | `AGENTS.md` | Rules for AI coding agents |
 | `architecture/` | Exact-values pins: `end-to-end-contract.md`, `contract-verification.md` |
