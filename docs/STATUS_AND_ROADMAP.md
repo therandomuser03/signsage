@@ -1,4 +1,26 @@
-# Temporal / continuous ISL feasibility audit: see `docs/datasets/TEMPORAL_ISL_DATASET_AUDIT.md` (2026-10-27). Vocabulary alignment review (`docs/datasets/VOCABULARY_ALIGNMENT_REVIEW.md`, 2026-10-27): `NO-GO — DATA INSUFFICIENT` for intended pilot vocabulary (`friend`/`hello`/`hospital`/`market`/`school`/`thank you`) with existing `subset6.csv` manifest; vocabulary discrepancy and annotation anomaly (`hM959_pXlrE`) documented; `subset6.csv` preserved unchanged. Key findings: no promoted temporal/sentence-level model exists (`SIGNSAGE_MODEL_PROMOTED=false` preserved); `iSign` dataset (`docs/architecture/DATA_AND_MODEL.md` §1) is best practical reference for continuous poses but requires full download (`158+` GB `.pose` archive — not performed), verified temporal annotations (not present in `iSign_v1.1.csv`), signer-independent split (`video_id` split only — `docs/evaluation/ISOLATED_ISL_RECOVERY_AUDIT.md` §2), and working model (`docs/architecture/DATA_AND_MODEL.md` §5: `352868924` broken `WER 1.005`; V2 untrained). `subset6.csv` vocabulary discrepancy (`docs/datasets/TEMPORAL_ISL_DATASET_AUDIT.md` §1.5; `docs/datasets/VOCABULARY_ALIGNMENT_REVIEW.md` §3.1, §4) must be resolved before any bounded prototype. No sentence-level dataset exists locally or was downloaded (`docs/STATUS_AND_ROADMAP.md` §6: archive files unchanged; `results.zip` untouched; `.env` unchanged; no training launched; `docs/datasets/VOCABULARY_ALIGNMENT_REVIEW.md` §4.3, §5). Audit complete; recommendations provided; no model/dataset/code changes made; stop after audit; wait for approval before any download/training.
+# SignSage Status & Roadmap
+
+**Status summary reviewed:** 2026-11-02  
+**Model promotion:** `SIGNSAGE_MODEL_PROMOTED=false`.
+
+This document contains detailed dated implementation and evaluation notes. Read
+[ml/MODEL_STATUS.md](ml/MODEL_STATUS.md) for the concise current model decision,
+[product/PRODUCT_OVERVIEW.md](product/PRODUCT_OVERVIEW.md) for the product boundary,
+and [product/DEMONSTRATION_GUIDE.md](product/DEMONSTRATION_GUIDE.md) for the
+evidence-based demo scope.
+
+Current high-level position:
+- The application has verified infrastructure and bounded features, including
+  static alphabet image classification and a constrained English-to-gloss/avatar path.
+- The isolated-word video pilot remains experimental and unpromoted.
+- Continuous ISL-to-English sentence translation is not currently available as
+  a validated/promoted feature.
+- Sid-V5 is a research candidate only; checkpoint access and end-to-end English
+  translation quality remain unverified.
+- Do not present synthetic smoke outputs as real translations.
+
+Historical sections below retain their original dates and evidence. A dated
+historical result is not automatically the current state.
 
 # SignSage Status & Roadmap
 

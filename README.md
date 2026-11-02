@@ -14,6 +14,14 @@ still doesn't work well.
 
 ---
 
+
+## Current Status (see docs/STATUS_AND_ROADMAP.md)
+- `SIGNSAGE_MODEL_PROMOTED=false` (preserved). No production sign-to-text model exists.
+- Working: frontend/backend plumbing, WebSocket transport `/ws/translate`, health/capabilities endpoints, static image classification (`alphabet` CNN: 87.1% test acc; `word` classifier: unpromoted 19% test acc), avatar-gloss deterministic mapping (14 IDs), auth/history/gated endpoints.
+- Not working / not claimed: continuous ISL sentence translation. No promoted continuous model; 352868924 NO-GO (WER 1.0046, diversity 0.99%, collapse); isolated-word pilot 61.1% accuracy (6 words: friend/hello/hospital/market/school/thank-you), below promotion bar (80/80/60), not signer-independent; no temporal sentence-level dataset with verified annotations locally.
+- Model candidates (not promoted, not integrated): ISLiM (research-only, 94-landmark contract, checkpoint load verified, synthetic smoke only, no paired `keypoints.pt`); Sanket (MIT checkpoint 1.4GB, isolated-word 250 categories, INCLUDE dataset license unverified); Sid-V5 (ST-GCN + CTC, `best.pt` not directly downloadable, continuous gloss recognition, 30.77% WER reported — not sentence translation); ISH-NEWS (paper 2026 Vol 16 art 32549, no verified weights released); Multilingual Pose-Based (WSLP 2025, no confirmed checkpoint/download).
+- Key authoritative docs: `docs/MASTER.md` (scope/architecture), `docs/STATUS_AND_ROADMAP.md` (verified state + blockers), `docs/AGENTS.md` (agent rules), `docs/development/DEVELOPMENT.md` (interfaces/deploy/test), `docs/architecture/end-to-end-contract.md` (value-level pins), `docs/reports/DOCUMENTATION_AUDIT.md` (full inventory).
+
 ## Research Status
 
 **Phase 0 model evaluation: NO-GO for general translation**

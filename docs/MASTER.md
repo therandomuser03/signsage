@@ -1,21 +1,31 @@
 # SignSage — Master Project Guide
 
-**Status:** Current orientation document
-**Last reviewed:** 2026-10-13 (docs consolidation: 24 → 6 top-level + `reference/`)
+**Status:** Current project orientation  
+**Last reviewed:** 2026-11-02  
+**Production model gate:** `SIGNSAGE_MODEL_PROMOTED=false`
 
-Start here. This file orients; it does not replace the five authoritative
-documents below. Sections are condensed — details live where cited.
+Start here for project scope and decisions. For quick navigation, use
+[docs/README.md](README.md).
 
-| Document | Answers |
+| Document | Purpose |
 |---|---|
-| `MASTER.md` (this file) | What is this, what is true, what was decided, what remains |
-| `STATUS_AND_ROADMAP.md` | Current state, audit evidence, blockers, validation, work order |
-| `architecture/DATA_AND_MODEL.md` | Dataset facts, storage ops, vocabulary verdict, model readiness & gates |
-| `development/DEVELOPMENT.md` | Setup, interfaces, deployment, security, testing, workflow |
-| `development/RENDER_MODEL_DEPLOYMENT.md` | Model artifact storage and Render deployment steps |
-| `evaluation/EXTERNAL_EVALUATION.md` | External T5 candidate: contract, adapter, load + quality evidence |
-| `AGENTS.md` | Rules for AI coding agents |
-| `architecture/` | Exact-values pins: `end-to-end-contract.md`, `contract-verification.md` |
+| `MASTER.md` (this file) | Product scope, architecture decisions, requirements, constraints |
+| `STATUS_AND_ROADMAP.md` | Detailed status, dated verification, blockers, next work |
+| `ml/MODEL_STATUS.md` | Current model decisions and promotion gates |
+| `ml/DATASET_CATALOG.md` | Dataset summary and links to detailed audits |
+| `architecture/SYSTEM_ARCHITECTURE.md` | High-level system structure |
+| `architecture/BACKEND_ARCHITECTURE.md` | Backend layers and current blockers |
+| `architecture/API_REFERENCE.md` | REST and WebSocket contract summary |
+| `architecture/end-to-end-contract.md` | Pinned landmark, preprocessing, and transport contract |
+| `development/DEVELOPMENT_SETUP.md` | Quick local setup |
+| `development/DEVELOPMENT.md` | Development workflow, interfaces, security, testing |
+| `development/RENDER_MODEL_DEPLOYMENT.md` | Render model-bundle deployment procedure |
+| `product/PRODUCT_OVERVIEW.md` | Product scope and verified capabilities |
+| `product/FEATURES_AND_REQUIREMENTS.md` | Feature-level evidence and requirements |
+| `product/PRIVACY_AND_LIMITATIONS.md` | Privacy commitments and limitations |
+| `product/DEMONSTRATION_GUIDE.md` | Evidence-based live-demo sequence |
+| `AGENTS.md` | Instructions for AI coding agents |
+| `reports/` | Historical audits and research evidence; check dates and supersession notes |
 
 ## 1. One-sentence definition
 
