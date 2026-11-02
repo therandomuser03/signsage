@@ -12,6 +12,8 @@ export const endpoints = {
   avatarVocabulary: "/api/v1/text-to-sign/vocabulary",
   classifyImage: "/api/v1/classification/image",
   videoUpload: "/api/v1/translation/video",
+  islimTranslate: "/api/v1/translation/islim/translate",
+  islimTranslateVideo: "/api/v1/translation/islim/translate-video",
 } as const;
 
 export const WS_PATH = "/ws/translate";
