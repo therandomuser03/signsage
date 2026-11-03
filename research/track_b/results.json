@@ -1,0 +1,200 @@
+{
+  "1D-CNN": {
+    "train_acc": 0.9081632653061225,
+    "train_macro_f1": 0.9059256496756496,
+    "test_acc": 0.9166666666666666,
+    "test_macro_f1": 0.9074074074074074,
+    "baseline": 0.16666666666666666,
+    "latency_ms": 0.23407305000849493,
+    "model_size_mb": 0.067305,
+    "per_class": {
+      "friend": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "hospital": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "market": {
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      },
+      "school": {
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      },
+      "thank_you": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666
+      }
+    },
+    "confusions": [
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        4,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        4,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        1,
+        2
+      ]
+    ],
+    "labels": [
+      "friend",
+      "hello",
+      "hospital",
+      "market",
+      "school",
+      "thank_you"
+    ]
+  },
+  "GRU": {
+    "train_acc": 0.9081632653061225,
+    "train_macro_f1": 0.9056861586894956,
+    "test_acc": 0.7916666666666666,
+    "test_macro_f1": 0.7851851851851852,
+    "baseline": 0.16666666666666666,
+    "latency_ms": 1.8823731749989747,
+    "model_size_mb": 0.054533,
+    "per_class": {
+      "friend": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666
+      },
+      "hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "hospital": {
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      },
+      "market": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666
+      },
+      "school": {
+        "precision": 0.5,
+        "recall": 0.75,
+        "f1": 0.6
+      },
+      "thank_you": {
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      }
+    },
+    "confusions": [
+      [
+        2,
+        0,
+        0,
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        4,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2,
+        1,
+        1
+      ],
+      [
+        0,
+        0,
+        1,
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4
+      ]
+    ],
+    "labels": [
+      "friend",
+      "hello",
+      "hospital",
+      "market",
+      "school",
+      "thank_you"
+    ]
+  }
+}

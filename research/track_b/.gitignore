@@ -1,0 +1,12 @@
+# research/track_b local artifacts
+.venv/
+__pycache__/
+*.pyc
+data/
+*.npy
+*.npz
+checkpoints/
+*.ckpt
+*.pth
+*.zip
+.env
