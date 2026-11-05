@@ -1,0 +1,92 @@
+{
+  "model": "1D-CNN",
+  "n_classes": 17,
+  "labels": [
+    "bad",
+    "doctor",
+    "father",
+    "friend",
+    "good",
+    "hello",
+    "hospital",
+    "market",
+    "medicine",
+    "morning",
+    "mother",
+    "night",
+    "school",
+    "thank you",
+    "today",
+    "tomorrow",
+    "you"
+  ],
+  "feature_spec": {
+    "dim": 98,
+    "n_frames": 60,
+    "layout": "signsage",
+    "description": "left_hand(21x,y=42) + right_hand(21x,y=42) + 7_pose_joints(x,y=14) = 98 dims/frame",
+    "pose_joints": [
+      0,
+      2,
+      5,
+      11,
+      12,
+      13,
+      14
+    ],
+    "normalisation": "shoulder-center + shoulder-width per frame",
+    "temporal": "resample to 60 frames (uniform subsample if T>=60, edge-pad if T<60)",
+    "coords": "x,y only (z dropped)"
+  },
+  "extractor": {
+    "name": "MediaPipe Tasks Vision",
+    "version": "1.2.2",
+    "api": "tasks-vision (PoseLandmarker + FaceLandmarker + HandLandmarker)",
+    "running_mode": "IMAGE",
+    "delegate": "CPU",
+    "num_poses": 1,
+    "num_faces": 1,
+    "num_hands": 2,
+    "model_assets": {
+      "pose": "pose_landmarker_lite (float16)",
+      "face": "face_landmarker (float16)",
+      "hand": "hand_landmarker (float16)"
+    },
+    "min_confidences": {
+      "pose_detection": 0.5,
+      "pose_presence": 0.5,
+      "pose_tracking": 0.5
+    },
+    "note": "Frontend uses VIDEO mode + GPU delegate; Python uses IMAGE mode + CPU delegate. Missing landmarks = [0,0,0] zeros."
+  },
+  "output_layout": {
+    "pose": "0-32 (33 landmarks)",
+    "face": "33-500 (468 landmarks)",
+    "left_hand": "501-521 (21 landmarks)",
+    "right_hand": "522-542 (21 landmarks)",
+    "total": 543
+  },
+  "dataset": "INCLUDE (Zenodo record 4010759, CC-BY-4.0)",
+  "attribution": "INCLUDE, Sridhar et al., ACM MM 2020, AI4Bharat",
+  "vocabulary": [
+    "hello",
+    "thank you",
+    "you",
+    "friend",
+    "hospital",
+    "school",
+    "market",
+    "doctor",
+    "medicine",
+    "good",
+    "bad",
+    "morning",
+    "night",
+    "today",
+    "tomorrow",
+    "mother",
+    "father"
+  ],
+  "split": "official INCLUDE train/test",
+  "train_clips": 255
+}

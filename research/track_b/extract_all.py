@@ -56,12 +56,15 @@ for p in csv_paths:
 # Collect all video paths
 # 1. Local videos in backend/data/isl/videos (subdirs + flat)
 video_paths = []  # (path, basename, word, split)
+VOCAB_SET = set(VOCAB) | {w.replace(' ', '_') for w in VOCAB}  # also match underscore variants
 for root, dirs, files in os.walk(VIDEOS_DIR):
     for f in files:
         if f.endswith(".mp4") and "__INCLUDE__" in f:
             word_part = f.split("__")[0].lower()
-            if word_part in VOCAB:
-                video_paths.append((os.path.join(root, f), f, word_part, video_to_split.get(f, "?")))
+            # Normalize: thank_you -> thank you for vocab matching
+            word_part_norm = word_part.replace('_', ' ')
+            if word_part_norm in VOCAB:
+                video_paths.append((os.path.join(root, f), f, word_part_norm, video_to_split.get(f, "?")))
 
 # 2. Downloaded clips in include_clips (flat MOV/mp4)
 for f in os.listdir(CLIPS_DIR):
