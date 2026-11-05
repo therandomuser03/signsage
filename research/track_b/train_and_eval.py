@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from features import extract_features
 
-POSES_DIR = "/mnt/D/Codes/signsage/research/openhands_pilot/extracted_poses"
+POSES_DIR = "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/extracted_poses"
 SEED = 42
 N_CLASSES_USED = None  # set after loading
 np.random.seed(SEED)

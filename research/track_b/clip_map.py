@@ -5,10 +5,10 @@ import csv
 import os
 from collections import defaultdict
 
-TRAIN = "/mnt/D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/train_include.csv"
-TEST = "/mnt/D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/test_include.csv"
+TRAIN = "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/train_include.csv"
+TEST = "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/test_include.csv"
 
-VIDEOS_DIR = "/mnt/D/Codes/signsage/backend/data/isl/videos"
+VIDEOS_DIR = "/mnt/Drive-D/Codes/signsage/backend/data/isl/videos"
 
 VOCAB = [
     "hello", "thank you", "you", "friend", "hospital", "school", "market",

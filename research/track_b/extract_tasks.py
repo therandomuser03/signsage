@@ -16,7 +16,7 @@ from mediapipe.tasks.python.vision.core.vision_task_running_mode import VisionTa
 from mediapipe.tasks.python.vision.core.image import Image, ImageFormat
 from mediapipe.tasks.python.core.base_options import BaseOptions
 
-ASSETS = "/mnt/D/track_b_venv/assets"
+ASSETS = "/mnt/Drive-D/track_b_venv/assets"
 
 def create_extractors():
     # Tasks-vision parity: IMAGE mode (offline proxy for frontend VIDEO);
@@ -76,7 +76,7 @@ def extract_video(video_path, out_path):
         pose = pose_r[0] if pose_r else []
         face_r = face_res.face_landmarks if hasattr(face_res, 'face_landmarks') else (face_res.landmarks if hasattr(face_res, 'landmarks') else [])
         face = face_r[0] if face_r else []
-        hands = (hand_res.landmarks if hasattr(hand_res, 'landmarks') else [])
+        hands = (hand_res.hand_landmarks if hasattr(hand_res, 'hand_landmarks') else (hand_res.landmarks if hasattr(hand_res, 'landmarks') else []))
         handed = (hand_res.handedness if hasattr(hand_res, 'handedness') else [])
         left_hand = []
         right_hand = []

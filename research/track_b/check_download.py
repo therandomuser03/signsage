@@ -3,8 +3,8 @@ from collections import Counter
 
 # Map downloaded basename back to word via CSV video filenames
 csv_paths = [
-    "/mnt/D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/train_include.csv",
-    "/mnt/D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/test_include.csv",
+    "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/train_include.csv",
+    "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/test_include.csv",
 ]
 video_to_word = {}
 NUM = __import__("re").compile(r"^\d+\.\s*")

@@ -6,9 +6,9 @@ import csv, os, time, sys
 from collections import defaultdict
 sys.path.insert(0, "/mnt/D/Codes/signsage/research/track_b")
 
-TRAIN = "/mnt/D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/train_include.csv"
-TEST = "/mnt/D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/test_include.csv"
-OUT_DIR = "/mnt/D/Codes/signsage/research/track_b/data/include_clips"
+TRAIN = "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/train_include.csv"
+TEST = "/mnt/Drive-D/Codes/signsage/research/openhands_pilot/openhands_repo/openhands/datasets/assets/include_metadata/Train_Test_Split/test_include.csv"
+OUT_DIR = "/mnt/Drive-D/Codes/signsage/research/track_b/data/include_clips"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 VOCAB = [
