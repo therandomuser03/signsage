@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ISL Clip Recorder — SignSage track_b</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0b0c10; color: #eaeaea; font-size: 14px; }
+  .shell { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  h1 { font-size: 15px; margin: 0; letter-spacing: 0.08em; text-transform: uppercase; }
+  .tag { font-size: 11px; padding: 2px 8px; border: 1px solid #334155; border-radius: 10px; color: #94a3b8; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: #11131c; border: 1px solid #23293b; border-radius: 12px; padding: 16px; }
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 11.5px; color: #94a3b8; margin-bottom: 6px; font-weight: 600; letter-spacing: 0.04em; }
+  .field input, .field select { width: 100%; padding: 8px 10px; background: #0b0c10; border: 1px solid #334155; border-radius: 8px; color: #eaeaea; font-size: 14px; }
+  .field input:focus { outline: none; border-color: #22c55e; }
+  .words { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 6px; }
+  .word-btn { padding: 9px 6px; border: 1px solid #334155; border-radius: 8px; background: #0b0c10; color: #cbd5e1; font-size: 12.5px; cursor: pointer; text-align: left; transition: border-color .15s; }
+  .word-btn:hover { border-color: #22c55e; color: #fff; }
+  .word-btn.selected { background: #22c55e; color: #000; border-color: #22c55e; font-weight: 700; }
+  .counts-cap { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+  table.counts { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.counts td { padding: 5px 6px; border-bottom: 1px solid #23293b; color: #cbd5e1; }
+  table.counts td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, monospace; }
+  .muted { color: #94a3b8; font-size: 12px; }
+  .stage { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #23293b; }
+  .video-wrap { position: relative; width: 100%; aspect-ratio: 16/9; }
+  video, canvas.overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+  canvas.overlay { pointer-events: none; }
+  .countdown { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: clamp(48px, 15vw, 140px); font-weight: 900; letter-spacing: -0.05em; pointer-events: none; z-index: 10; text-shadow: 0 0 24px rgba(34,197,94,0.35); }
+  .countdown.hidden { display: none; }
+  .bar { display: flex; gap: 14px; align-items: center; padding: 10px 16px; background: #11131c; border: 1px solid #23293b; border-top: none; border-radius: 0 0 12px 12px; flex-wrap: wrap; }
+  .pill { padding: 3px 10px; border-radius: 10px; font-size: 11.5px; font-weight: 700; border: 1px solid #334155; color: #94a3b8; background: #0b0c10; }
+  .pill.live { color: #22c55e; border-color: #22c55e; background: rgba(34,197,94,0.12); }
+  .pill.rec { color: #ef4444; border-color: #ef4444; background: rgba(239,68,68,0.12); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+  .hand { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .hand .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; border: 1px solid #334155; }
+  .hand .dot.on { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  button { border: 1px solid #334155; background: #11131c; color: #eaeaea; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600; }
+  button:hover { border-color: #22c55e; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; border-color: #334155; }
+  button.primary { background: #22c55e; color: #000; border-color: #22c55e; }
+  button.primary:disabled { opacity: 0.55; }
+  button.danger { background: #7f1d1d; border-color: #7f1d1d; color: #fecaca; }
+  button.danger:hover { border-color: #ef4444; }
+  .warn { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: #7f1d1d; color: #fecaca; border: 1px solid #7f1d1d; font-size: 13px; display: none; }
+  .warn .w-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .warn b { color: #ffe4e6; }
+  pre#log { margin-top: 14px; height: 140px; overflow: auto; background: #0b0c10; border: 1px solid #23293b; border-radius: 8px; padding: 10px; font-size: 11.5px; color: #94a3b8; font-family: ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; }
+  .ok { color: #22c55e; }
+  .err { color: #ef4444; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .row .field { flex: 1 1 150px; margin-bottom: 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <h1>ISL clip recorder</h1>
+    <span class="tag" id="tag-extractor">extractor: —</span>
+    <span class="tag" id="tag-status">idle</span>
+    <span class="tag" id="tag-localhost">localhost only</span>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="field">
+        <label>Session</label>
+        <input id="input-session" value="S1" maxlength="8"/>
+      </div>
+      <div class="field">
+        <label>Record duration (s)</label>
+        <input id="input-duration" type="number" value="2.5" step="0.1" min="0.5" max="30"/>
+      </div>
+      <div class="field">
+        <label>Word (<span id="n-words">—</span>)</label>
+        <div class="words" id="word-list"></div>
+      </div>
+      <div class="counts-cap">Takes saved — per label · per session</div>
+      <table class="counts" id="counts-table">
+        <thead><tr><td style="color:#94a3b8"><b>label · session</b></td><td class="num" style="color:#94a3b8"><b>takes</b></td></tr></thead>
+        <tbody id="counts-body"></tbody>
+      </table>
+      <p class="muted">Saved clips download as JSON (landmarks only — no video/images). Nothing leaves this tab.</p>
+    </div>
+
+    <div class="panel" style="display:flex; flex-direction:column; height: 560px;">
+      <div class="stage" id="stage" style="flex: 1 1 0;">
+        <div class="video-wrap">
+          <video id="video" playsInline muted autoplay></video>
+          <canvas id="overlay" class="overlay"></canvas>
+          <div id="countdown" class="countdown hidden">3</div>
+        </div>
+        <div class="bar">
+          <span class="pill" id="pill-state">idle</span>
+          <div class="hand" id="hand-l"><span>L</span><span class="dot" id="dot-l"></span></div>
+          <div class="hand" id="hand-r"><span>R</span><span class="dot" id="dot-r"></span></div>
+          <span class="muted" id="fps-text">effective fps: —</span>
+          <span class="muted" id="frame-text">frames: 0</span>
+        </div>
+        <div class="actions" id="actions">
+          <button id="btn-start">Start camera + detector</button>
+          <button id="btn-record" disabled>Record</button>
+          <button id="btn-save" disabled>Save</button>
+          <button id="btn-discard" disabled class="danger">Discard</button>
+          <button id="btn-retake" disabled class="danger" style="display:none">Retake</button>
+        </div>
+        <div id="warn" class="warn">
+          <b>Hands missing in too many frames — check framing (match the live app) and retake, or save anyway.</b>
+          <div id="warn-detail" class="muted"></div>
+          <div class="w-actions"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <pre id="log">ready — open this file via a local server (see README), e.g.:
+  cd research/track_b/recorder && python3 -m http.server 8765
+  then open http://localhost:8765/recorder.html</pre>
+  </div>
+
+<script type="module">
+import * as vision from "./vision_bundle.mjs";
+
+// ---------------------------------------------------------------
+// Copied from frontend/src/features/translate/landmarks.ts (SignSage).
+// Same extractor: PoseLandmarker + FaceLandmarker + HandLandmarker,
+// VIDEO mode, @mediapipe/tasks-vision 1.0.1. Assets vendored locally
+// (assets/models/*, assets/wasm/*) so nothing loads from the network.
+//
+// Contract: 543 landmarks/frame = POSE[0:33] + FACE[33:501] +
+// LEFT_HAND[501:522] + RIGHT_HAND[522:543], each [x,y,z]. Missing = [0,0,0].
+// ---------------------------------------------------------------
+const TOTAL_LANDMARKS = 543;
+const POSE_COUNT = 33;
+const FACE_COUNT = 468;
+const HAND_COUNT = 21;
+const COMPONENT_RANGES = {
+  POSE_LANDMARKS: [0, 33],
+  FACE_LANDMARKS: [33, 501],
+  LEFT_HAND_LANDMARKS: [501, 522],
+  RIGHT_HAND_LANDMARKS: [522, 543],
+};
+
+const MODEL_BASE = "./assets/models";
+const WASM_BASE = "./assets/wasm";
+
+const zero = () => [0, 0, 0];
+
+function toPoints(marks, count) {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const m = marks?.[i];
+    out.push(m ? [m.x, m.y, m.z ?? 0] : zero());
+  }
+  return out;
+}
+
+class HolisticExtractor {
+  constructor() {
+    this.pose = null;
+    this.face = null;
+    this.hands = null;
+    this.lastVideoTime = -1;
+  }
+
+  async init() {
+    const fileset = await vision.FilesetResolver.forVisionTasks(WASM_BASE);
+    [this.pose, this.face, this.hands] = await Promise.all([
+      vision.PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: `${MODEL_BASE}/pose_landmarker_lite.task`,
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+      }),
+      vision.FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: `${MODEL_BASE}/face_landmarker.task`,
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+      }),
+      vision.HandLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: `${MODEL_BASE}/hand_landmarker.task`,
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numHands: 2,
+      }),
+    ]);
+  }
+
+  detect(video, nowMs) {
+    if (!this.pose || !this.face || !this.hands) return null;
+    // VIDEO mode requires a strictly increasing timestamp.
+    if (video.currentTime === this.lastVideoTime) return null;
+    this.lastVideoTime = video.currentTime;
+
+    const poseRes = this.pose.detectForVideo(video, nowMs);
+    const faceRes = this.face.detectForVideo(video, nowMs);
+    const handRes = this.hands.detectForVideo(video, nowMs);
+
+    const pose = poseRes.landmarks?.[0] ?? [];
+    const face = faceRes.faceLandmarks?.[0] ?? [];
+
+    // Handedness labels follow the image ("Left" = appears on the left).
+    // Training data uses the person's own left/right, so a mirrored
+    // selfie preview can swap hands — accepted calibration limit.
+    let leftHand = [];
+    let rightHand = [];
+    const hands = handRes.landmarks ?? [];
+    const handed = handRes.handedness ?? [];
+    hands.forEach((marks, i) => {
+      const label = handed[i]?.[0]?.categoryName;
+      if (label === "Left" && leftHand.length === 0) leftHand = marks;
+      else if (label === "Right" && rightHand.length === 0) rightHand = marks;
+      else if (leftHand.length === 0) leftHand = marks;
+      else if (rightHand.length === 0) rightHand = marks;
+    });
+
+    const landmarks = [
+      ...toPoints(pose, POSE_COUNT),
+      ...toPoints(face, FACE_COUNT),
+      ...toPoints(leftHand, HAND_COUNT),
+      ...toPoints(rightHand, HAND_COUNT),
+    ];
+
+    return {
+      landmarks,
+      pose,
+      face,
+      leftHand,
+      rightHand,
+      detected:
+        pose.length > 0 || face.length > 0 || leftHand.length > 0 || rightHand.length > 0,
+    };
+  }
+
+  close() {
+    this.pose?.close();
+    this.face?.close();
+    this.hands?.close();
+    this.pose = this.face = this.hands = null;
+  }
+}
+
+// ---------------------------------------------------------------
+// Skeleton overlay (copied from frontend drawOverlay).
+// ---------------------------------------------------------------
+function drawOverlay(canvas, frame, color = "#22c55e") {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = color;
+  const dot = (x, y, r) => {
+    ctx.beginPath();
+    ctx.arc(x * width, y * height, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  for (const m of frame.pose) dot(m.x, m.y, 3);
+  for (const m of frame.face) dot(m.x, m.y, 1.2);
+  for (const m of frame.leftHand) dot(m.x, m.y, 2);
+  for (const m of frame.rightHand) dot(m.x, m.y, 2);
+}
+
+// ---------------------------------------------------------------
+// App state
+// ---------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "") => {
+  const line = document.createElement("div");
+  line.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  if (cls) line.className = cls;
+  const pre = $("log");
+  pre.appendChild(line);
+  pre.scrollTop = pre.scrollHeight;
+};
+
+let words = [];
+let selectedWord = null;
+let counts = {}; // "label|session" -> take count
+
+const extractor = new HolisticExtractor();
+let stream = null;
+let raf = 0;
+let lastDetect = 0;
+const DETECT_INTERVAL_MS = 80; // same throttle as the frontend TranslatePage loop
+let phase = "idle"; // idle | live | recording
+let recording = false;
+let recordedFrames = []; // { t, landmarks }
+let recStart = 0;
+let stopTime = 0;
+let lastFrame = null;
+
+function setState(s) {
+  phase = s;
+  const pill = $("pill-state");
+  pill.textContent = s;
+  pill.className = "pill" + (s === "live" ? " live" : s === "recording" ? " rec" : "");
+  $("tag-status").textContent = s;
+}
+
+function setEnabled(id, bool) { $(id).disabled = !!bool; }
+
+function renderWords() {
+  const list = $("word-list");
+  list.innerHTML = "";
+  $("n-words").textContent = words.length;
+  for (const w of words) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "word-btn" + (selectedWord === w ? " selected" : "");
+    b.textContent = w;
+    b.addEventListener("click", () => selectWord(w));
+    list.appendChild(b);
+  }
+  renderCounts();
+}
+
+function selectWord(w) {
+  selectedWord = w;
+  renderWords();
+  log(`word selected: ${w}`);
+}
+
+function loadCounts() {
+  try {
+    const raw = sessionStorage.getItem("recorder:counts");
+    counts = raw ? JSON.parse(raw) : {};
+  } catch { counts = {}; }
+}
+function saveCounts() {
+  try { sessionStorage.setItem("recorder:counts", JSON.stringify(counts)); } catch {}
+}
+function countKey(label, session) { return `${label}::${session}`; }
+function takeCount(label, session) { return counts[countKey(label, session)] || 0; }
+function renderCounts() {
+  const body = $("counts-body");
+  body.innerHTML = "";
+  const session = $("input-session").value.trim() || "S1";
+  const rows = Object.entries(counts)
+    .filter(([k]) => k.endsWith(`::${session}`))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  if (rows.length === 0) {
+    body.innerHTML = `<tr><td colspan="2" class="muted">none yet</td></tr>`;
+    return;
+  }
+  for (const [k, n] of rows) {
+    const tr = document.createElement("tr");
+    const [label] = k.split("::");
+    tr.innerHTML = `<td>${label}</td><td class="num">${n}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+// ---------------------------------------------------------------
+// Camera + detector
+// ---------------------------------------------------------------
+async function start() {
+  if (phase === "live" || phase === "recording") return;
+  const session = $("input-session").value.trim() || "S1";
+  $("input-session").value = session;
+  setState("starting-camera");
+  log("requesting camera (facingMode user, width ideal 1280)");
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 } },
+    });
+    const video = $("video");
+    video.srcObject = stream;
+    await video.play().catch(() => undefined);
+  } catch (err) {
+    log(`camera failed: ${err}`, "err");
+    setState("error");
+    return;
+  }
+  setState("loading-detector");
+  log("loading tasks-vision 1.0.1 models from ./assets/* (local, no network)");
+  try {
+    await extractor.init();
+    $("tag-extractor").textContent =
+      "@mediapipe/tasks-vision 1.0.1 · Pose/Face/Hands · VIDEO · GPU";
+    log("detector ready");
+    setState("live");
+    setEnabled("btn-record", false);
+    setEnabled("btn-start", true);
+    lastDetect = performance.now();
+    raf = requestAnimationFrame(loop);
+  } catch (err) {
+    log(`detector failed: ${err}`, "err");
+    log("tip: serve via http://localhost (getUserMedia needs secure context; localhost is fine)", "err");
+    setState("error");
+  }
+}
+
+function stop() {
+  cancelAnimationFrame(raf);
+  extractor.close();
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
+  const video = $("video");
+  if (video) video.srcObject = null;
+  recordedFrames = [];
+  recording = false;
+  setState("idle");
+  setEnabled("btn-record", true);
+  setEnabled("btn-save", false);
+  setEnabled("btn-discard", false);
+  setEnabled("btn-retake", false);
+  $("btn-retake").style.display = "none";
+  $("warn").style.display = "none";
+  $("dot-l").className = "dot";
+  $("dot-r").className = "dot";
+  $("hand-l").title = "";
+  $("hand-r").title = "";
+  $("fps-text").textContent = "effective fps: —";
+  $("frame-text").textContent = "frames: 0";
+  const ctx = $("overlay").getContext("2d");
+  if (ctx) ctx.clearRect(0, 0, $("overlay").width, $("overlay").height);
+}
+
+// ---------------------------------------------------------------
+// Main loop (mirrors frontend TranslatePage loop: rAF + 80ms detect throttle)
+// ---------------------------------------------------------------
+function loop() {
+  raf = requestAnimationFrame(loop);
+  const video = $("video");
+  const canvas = $("overlay");
+  if (!video || !canvas || !extractor.pose || video.readyState < 2) return;
+
+  if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+    canvas.width = video.clientWidth;
+    canvas.height = video.clientHeight;
+  }
+
+  const now = performance.now();
+  if (now - lastDetect >= DETECT_INTERVAL_MS) {
+    const frame = extractor.detect(video, now);
+    if (frame) {
+      lastDetect = now;
+      lastFrame = frame;
+      drawOverlay(canvas, frame);
+      updateHandIndicator(frame);
+    }
+  }
+
+  if (recording) {
+    if (now >= stopTime) {
+      stopRecording();
+      return;
+    }
+    if (lastFrame) {
+      recordedFrames.push({ t: now - recStart, landmarks: lastFrame.landmarks });
+      $("frame-text").textContent = `frames: ${recordedFrames.length}`;
+    }
+  }
+}
+
+function updateHandIndicator(frame) {
+  const lOk = frame.leftHand.length > 0;
+  const rOk = frame.rightHand.length > 0;
+  const dl = $("dot-l"); const dr = $("dot-r");
+  dl.className = "dot" + (lOk ? " on" : "");
+  dr.className = "dot" + (rOk ? " on" : "");
+  $("hand-l").title = lOk ? "left hand detected" : "left hand missing";
+  $("hand-r").title = rOk ? "right hand detected" : "right hand missing";
+}
+
+// ---------------------------------------------------------------
+// Recording
+// ---------------------------------------------------------------
+async function beginRecording() {
+  if (!selectedWord) { log("select a word first", "err"); return; }
+  if (phase !== "live") { log("camera not live", "err"); return; }
+  const duration = parseFloat($("input-duration").value) || 2.5;
+  if (!duration || duration <= 0) { log("invalid duration", "err"); return; }
+
+  recordedFrames = [];
+  recStart = performance.now();
+  stopTime = recStart + duration * 1000;
+  recording = true;
+  setState("recording");
+  setEnabled("btn-record", true);
+  setEnabled("btn-save", false);
+  setEnabled("btn-discard", false);
+  setEnabled("btn-retake", false);
+  $("btn-retake").style.display = "none";
+  $("warn").style.display = "none";
+  $("frame-text").textContent = "frames: 0";
+
+  log(`record start: "${selectedWord}" session=${$("input-session").value} duration=${duration}s`);
+  await countdownThenRecord(duration);
+}
+
+function countdownThenRecord(duration) {
+  return new Promise((resolve) => {
+    const cd = $("countdown");
+    const show = (n) => {
+      cd.textContent = n;
+      cd.classList.remove("hidden");
+    };
+    let k = 3;
+    show(k);
+    const tick = () => {
+      k -= 1;
+      if (k >= 1) { show(k); setTimeout(tick, 1000); }
+      else {
+        cd.classList.add("hidden");
+        // counting done: detection loop keeps running; recording window is
+        // governed by recStart/stopTime above (frames pushed from loop()).
+        setTimeout(resolve, 0);
+      }
+    };
+    setTimeout(tick, 1000);
+  });
+}
+
+function stopRecording() {
+  recording = false;
+  const duration = parseFloat($("input-duration").value) || 2.5;
+  const elapsed = (recordedFrames.length ? recordedFrames[recordedFrames.length - 1].t : 0) / 1000;
+  const effectiveFps = recordedFrames.length / duration; // frames captured per requested second
+  const leftMiss = missingFraction(recordedFrames, COMPONENT_RANGES.LEFT_HAND_LANDMARKS[0], HAND_COUNT);
+  const rightMiss = missingFraction(recordedFrames, COMPONENT_RANGES.RIGHT_HAND_LANDMARKS[0], HAND_COUNT);
+
+  log(`record done: frames=${recordedFrames.length} effective_fps=${effectiveFps.toFixed(2)} left_miss=${(leftMiss*100).toFixed(1)}% right_miss=${(rightMiss*100).toFixed(1)}%`);
+  $("fps-text").textContent = `effective fps: ${effectiveFps.toFixed(2)}`;
+  setState("live");
+  setEnabled("btn-record", false);
+  setEnabled("btn-discard", true);
+
+  const warn = $("warn");
+  const detail = $("warn-detail");
+  const wactions = warn.querySelector(".w-actions");
+  const high = leftMiss > 0.40 || rightMiss > 0.40;
+  detail.textContent = `left ${(leftMiss*100).toFixed(1)}% · right ${(rightMiss*100).toFixed(1)}% · threshold 40%`;
+  if (high) {
+    warn.style.display = "block";
+    wactions.innerHTML = "";
+    const bRetake = document.createElement("button");
+    bRetake.type = "button"; bRetake.textContent = "Retake";
+    bRetake.className = "danger";
+    bRetake.addEventListener("click", () => { warn.style.display = "none"; beginRecording(); });
+    const bSave = document.createElement("button");
+    bSave.type = "button"; bSave.textContent = "Save anyway"; bSave.className = "primary";
+    bSave.addEventListener("click", saveClip);
+    const bDiscard = document.createElement("button");
+    bDiscard.type = "button"; bDiscard.textContent = "Discard"; bDiscard.className = "danger";
+    bDiscard.addEventListener("click", discardClip);
+    wactions.append(bRetake, bSave, bDiscard);
+    setEnabled("btn-save", false);
+  } else {
+    warn.style.display = "none";
+    setEnabled("btn-save", true);
+  }
+}
+
+function missingFraction(frames, start, count) {
+  if (!frames.length) return 0;
+  let missing = 0;
+  for (const f of frames) {
+    let allZero = true;
+    for (let i = start; i < start + count; i++) {
+      const p = f.landmarks[i];
+      if (p[0] !== 0 || p[1] !== 0 || p[2] !== 0) { allZero = false; break; }
+    }
+    if (allZero) missing++;
+  }
+  return missing / frames.length;
+}
+
+function compactTs() {
+  return new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+}
+
+function saveClip() {
+  if (!recordedFrames.length) return;
+  const label = selectedWord;
+  const session = $("input-session").value.trim() || "S1";
+  const take = takeCount(label, session) + 1;
+  const duration = parseFloat($("input-duration").value) || 2.5;
+  const elapsed = (recordedFrames[recordedFrames.length - 1].t) / 1000;
+  const effectiveFps = recordedFrames.length / duration;
+  const leftMiss = missingFraction(recordedFrames, COMPONENT_RANGES.LEFT_HAND_LANDMARKS[0], HAND_COUNT);
+  const rightMiss = missingFraction(recordedFrames, COMPONENT_RANGES.RIGHT_HAND_LANDMARKS[0], HAND_COUNT);
+
+  const clip = {
+    extractor: {
+      name: "@mediapipe/tasks-vision HolisticExtractor",
+      version: "1.0.1",
+      running_mode: "VIDEO",
+      note: "Same options as the SignSage frontend (frontend/src/features/translate/landmarks.ts): pose numPoses=1, face numFaces=1, hands numHands=2, delegate GPU, no confidence thresholds set (MediaPipe defaults), no delegate fallback. Coordinates are NOT mirrored; only the preview is CSS-mirrored (scaleX(-1)) like the app.",
+      options: {
+        pose: { modelAssetPath: "assets/models/pose_landmarker_lite.task", delegate: "GPU", runningMode: "VIDEO", numPoses: 1 },
+        face: { modelAssetPath: "assets/models/face_landmarker.task", delegate: "GPU", runningMode: "VIDEO", numFaces: 1 },
+        hands: { modelAssetPath: "assets/models/hand_landmarker.task", delegate: "GPU", runningMode: "VIDEO", numHands: 2 },
+      },
+    },
+    label,
+    session,
+    take,
+    timestamp: new Date().toISOString(),
+    duration_s: duration,
+    effective_fps: Number(effectiveFps.toFixed(3)),
+    frames: recordedFrames.length,
+    hands_missing_fraction: { left: Number(leftMiss.toFixed(4)), right: Number(rightMiss.toFixed(4)) },
+    landmarks: recordedFrames.map((f) => f.landmarks), // (T, 543, 3)
+  };
+
+  const blob = new Blob([JSON.stringify(clip)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${label}__${session}__take${String(take).padStart(2, "0")}__${compactTs()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  counts[countKey(label, session)] = take;
+  saveCounts();
+  renderCounts();
+  log(`SAVED ${a.download} (take ${take} for "${label}" · ${session})`, "ok");
+  discardClip();
+}
+
+function discardClip() {
+  recordedFrames = [];
+  recording = false;
+  setState("live");
+  setEnabled("btn-record", false);
+  setEnabled("btn-save", false);
+  setEnabled("btn-discard", false);
+  setEnabled("btn-retake", false);
+  $("btn-retake").style.display = "none";
+  $("warn").style.display = "none";
+  $("frame-text").textContent = "frames: 0";
+  const ctx = $("overlay").getContext("2d");
+  if (ctx) ctx.clearRect(0, 0, $("overlay").width, $("overlay").height);
+  log("clip discarded");
+}
+
+// ---------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------
+async function loadWords() {
+  try {
+    const res = await fetch("words.json");
+    if (!res.ok) throw new Error(`words.json ${res.status}`);
+    const data = await res.json();
+    words = data.words || [];
+    renderWords();
+    log(`vocabulary loaded: ${words.length} labels from words.json`);
+  } catch (err) {
+    log(`failed to load words.json: ${err}`, "err");
+  }
+}
+
+$("btn-start").addEventListener("click", start);
+$("btn-record").addEventListener("click", beginRecording);
+$("btn-save").addEventListener("click", saveClip);
+$("btn-discard").addEventListener("click", discardClip);
+
+// keep counts view synced when session changes
+$("input-session").addEventListener("change", renderCounts);
+
+// page lifecycle
+window.addEventListener("beforeunload", () => { stop(); });
+loadWords();
+</script>
+</body>
+</html>

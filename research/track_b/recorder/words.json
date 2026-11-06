@@ -1,0 +1,17 @@
+{
+  "_comment": "SignSage ISL clip recorder vocabulary (research/track_b/recorder). Standalone — not part of the SignSage app.",
+  "_sources": {
+    "avatar_words": "backend/app/data/sign_vocabulary.json (gloss_ids, lowercased): 14 words",
+    "extra_words": "hello, thank you, you, friend, hospital, school, market, doctor, medicine, good, bad, morning, night, today, tomorrow, mother, father (deduplicated)",
+    "activity_labels": "rest (hands down), transition (hands moving, no word)"
+  },
+  "words": [
+    "hello", "thank you", "sorry", "please", "yes", "no", "help", "water",
+    "food", "name", "you", "me", "where", "how",
+    "friend", "hospital", "school", "market", "doctor", "medicine", "good",
+    "bad", "morning", "night", "today", "tomorrow", "mother", "father",
+    "rest", "transition"
+  ],
+  "n_words": 27,
+  "n_labels": 29
+}
