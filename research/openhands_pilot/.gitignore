@@ -1,0 +1,8 @@
+.venv/
+openhands_repo/
+extracted_poses/
+*.zip
+*.ckpt
+*.pth
+*.pt
+*.npy

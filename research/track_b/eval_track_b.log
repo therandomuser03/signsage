@@ -1,0 +1,126 @@
+  features 50/347
+  features 100/347
+  features 150/347
+  features 200/347
+  features 250/347
+  features 300/347
+features: 347 clips x 60x98 in 0.2s, 29 labels: ['bad', 'doctor', 'father', 'food', 'friend', 'good', 'hello', 'help', 'hospital', 'how', 'market', 'me', 'medicine', 'morning', 'mother', 'name', 'night', 'no', 'please', 'rest', 'school', 'sorry', 'thank you', 'today', 'tomorrow', 'water', 'where', 'yes', 'you']
+
+===== SEED 0 =====
+[1D-CNN  CORE seed 0] CV acc=0.650 macroF1=0.596  per-fold acc=[0.545, 0.75, 0.636, 0.591, 0.727]
+[GRU     CORE seed 0] CV acc=0.640 macroF1=0.597  per-fold acc=[0.576, 0.625, 0.682, 0.682, 0.636]
+[1D-CNN  FULL seed 0] CV acc=0.743 macroF1=0.723  per-fold acc=[0.69, 0.802, 0.759, 0.759, 0.707]
+[GRU     FULL seed 0] CV acc=0.640 macroF1=0.601  per-fold acc=[0.632, 0.686, 0.69, 0.603, 0.586]
+
+===== SEED 1 =====
+[1D-CNN  CORE seed 1] CV acc=0.665 macroF1=0.622  per-fold acc=[0.576, 0.656, 0.727, 0.636, 0.727]
+[GRU     CORE seed 1] CV acc=0.613 macroF1=0.594  per-fold acc=[0.576, 0.625, 0.727, 0.682, 0.455]
+[1D-CNN  FULL seed 1] CV acc=0.712 macroF1=0.687  per-fold acc=[0.621, 0.767, 0.741, 0.741, 0.69]
+[GRU     FULL seed 1] CV acc=0.648 macroF1=0.627  per-fold acc=[0.586, 0.756, 0.621, 0.707, 0.569]
+
+===== SEED 2 =====
+[1D-CNN  CORE seed 2] CV acc=0.665 macroF1=0.613  per-fold acc=[0.606, 0.719, 0.727, 0.682, 0.591]
+[GRU     CORE seed 2] CV acc=0.695 macroF1=0.662  per-fold acc=[0.576, 0.719, 0.727, 0.773, 0.682]
+[1D-CNN  FULL seed 2] CV acc=0.720 macroF1=0.692  per-fold acc=[0.644, 0.733, 0.741, 0.759, 0.724]
+[GRU     FULL seed 2] CV acc=0.673 macroF1=0.639  per-fold acc=[0.632, 0.663, 0.724, 0.69, 0.655]
+
+===== SEED 3 =====
+[1D-CNN  CORE seed 3] CV acc=0.653 macroF1=0.627  per-fold acc=[0.515, 0.75, 0.773, 0.682, 0.545]
+[GRU     CORE seed 3] CV acc=0.628 macroF1=0.592  per-fold acc=[0.545, 0.594, 0.727, 0.636, 0.636]
+[1D-CNN  FULL seed 3] CV acc=0.750 macroF1=0.732  per-fold acc=[0.713, 0.744, 0.741, 0.776, 0.776]
+[GRU     FULL seed 3] CV acc=0.650 macroF1=0.623  per-fold acc=[0.575, 0.744, 0.655, 0.672, 0.603]
+
+===== SEED 4 =====
+[1D-CNN  CORE seed 4] CV acc=0.647 macroF1=0.612  per-fold acc=[0.485, 0.75, 0.636, 0.636, 0.727]
+[GRU     CORE seed 4] CV acc=0.647 macroF1=0.625  per-fold acc=[0.545, 0.688, 0.727, 0.682, 0.591]
+[1D-CNN  FULL seed 4] CV acc=0.741 macroF1=0.721  per-fold acc=[0.736, 0.709, 0.741, 0.793, 0.724]
+[GRU     FULL seed 4] CV acc=0.671 macroF1=0.638  per-fold acc=[0.655, 0.767, 0.707, 0.517, 0.707]
+
+Wrote results_track_b.json (total 943.1s)
+
+======================================================================
+SUMMARY: mean +/- std over 5 seeds of 5-fold take CV (S1)
+======================================================================
+1D-CNN  CORE  acc=0.656 +/- 0.007  macroF1=0.614 +/- 0.010  per_seed=[0.65, 0.665, 0.665, 0.653, 0.647]
+1D-CNN  FULL  acc=0.733 +/- 0.015  macroF1=0.711 +/- 0.018  per_seed=[0.743, 0.712, 0.72, 0.75, 0.741]
+GRU     CORE  acc=0.645 +/- 0.028  macroF1=0.614 +/- 0.027  per_seed=[0.64, 0.613, 0.695, 0.628, 0.647]
+GRU     FULL  acc=0.656 +/- 0.013  macroF1=0.625 +/- 0.014  per_seed=[0.64, 0.648, 0.673, 0.65, 0.671]
+
+--- POOLED CV class table: 1D-CNN CORE (majority vote over 5 seeds, n=131) ---
+acc=0.664 macroF1=0.644 baseline(majority)=0.092 chance(uniform)=0.091
+class               P      R     F1
+you              0.00   0.00   0.00  <-- candidate drop (F1<0.80)
+water            0.29   0.17   0.21  <-- candidate drop (F1<0.80)
+thank you        0.56   0.42   0.48  <-- candidate drop (F1<0.80)
+yes              0.45   0.83   0.59  <-- candidate drop (F1<0.80)
+no               0.78   0.58   0.67  <-- candidate drop (F1<0.80)
+please           0.60   0.82   0.69  <-- candidate drop (F1<0.80)
+me               0.65   0.92   0.76  <-- candidate drop (F1<0.80)
+help             1.00   0.75   0.86
+where            0.91   0.83   0.87
+hello            0.92   1.00   0.96
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    5  you            -> yes           
+    5  water          -> you           
+    4  thank you      -> please        
+    3  you            -> water         
+    3  water          -> yes           
+    2  you            -> no            
+    2  water          -> me            
+    2  no             -> water         
+    2  no             -> yes           
+    2  please         -> thank you     
+
+--- POOLED CV class table: 1D-CNN FULL (majority vote over 5 seeds, n=347) ---
+acc=0.752 macroF1=0.743 baseline(majority)=0.035 chance(uniform)=0.034
+class               P      R     F1
+you              0.00   0.00   0.00  <-- candidate drop (F1<0.80)
+water            0.20   0.08   0.12  <-- candidate drop (F1<0.80)
+thank you        0.50   0.33   0.40  <-- candidate drop (F1<0.80)
+how              0.40   0.50   0.44  <-- candidate drop (F1<0.80)
+yes              0.38   0.67   0.48  <-- candidate drop (F1<0.80)
+me               0.57   0.67   0.62  <-- candidate drop (F1<0.80)
+no               0.70   0.58   0.64  <-- candidate drop (F1<0.80)
+mother           0.64   0.75   0.69  <-- candidate drop (F1<0.80)
+market           0.89   0.67   0.76  <-- candidate drop (F1<0.80)
+friend           0.82   0.75   0.78  <-- candidate drop (F1<0.80)
+please           0.75   0.82   0.78  <-- candidate drop (F1<0.80)
+sorry            0.69   0.92   0.79  <-- candidate drop (F1<0.80)
+father           0.77   0.83   0.80
+food             0.77   0.83   0.80
+good             0.77   0.83   0.80
+help             1.00   0.67   0.80
+school           0.77   0.83   0.80
+today            0.90   0.75   0.82
+hospital         0.83   0.83   0.83
+name             0.83   0.83   0.83
+bad              0.80   1.00   0.89
+where            1.00   0.83   0.91
+medicine         0.92   0.92   0.92
+morning          1.00   0.92   0.96
+doctor           0.92   1.00   0.96
+hello            0.92   1.00   0.96
+tomorrow         0.92   1.00   0.96
+night            1.00   1.00   1.00
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    4  you            -> yes           
+    4  how            -> yes           
+    3  water          -> you           
+    3  water          -> how           
+    3  thank you      -> please        
+    3  mother         -> father        
+    2  you            -> water         
+    2  you            -> no            
+    2  you            -> how           
+    2  yes            -> you           
+
+--- Unknown handling (max-softmax threshold), 1D-CNN CORE, seed-0 OOF ---
+ threshold  accepted  coverage     acc rest_clips  rest->word    rate
+    argmax       131   100.0%   0.649         12           0    0.0%
+       0.5        94    71.8%   0.745         12           0    0.0%
+       0.7        75    57.3%   0.867         12           0    0.0%
+       0.9        55    42.0%   0.945         12           0    0.0%
+
+PRELIMINARY, OPTIMISTIC: 5-fold take CV on S1 only (same session, same position/lighting). Not a final result.
