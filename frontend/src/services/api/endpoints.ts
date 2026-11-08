@@ -14,6 +14,8 @@ export const endpoints = {
   videoUpload: "/api/v1/translation/video",
   islimTranslate: "/api/v1/translation/islim/translate",
   islimTranslateVideo: "/api/v1/translation/islim/translate-video",
+  word: "/api/v1/translation/word",
+  compose: "/api/v1/translation/compose",
 } as const;
 
 export const WS_PATH = "/ws/translate";

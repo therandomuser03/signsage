@@ -1,0 +1,360 @@
+  features 50/347
+  features 100/347
+  features 150/347
+  features 200/347
+  features 250/347
+  features 300/347
+features: 347 clips x 60x122 v2  x 98 v1  (29 labels: ['bad', 'doctor', 'father', 'food', 'friend', 'good', 'hello', 'help', 'hospital', 'how', 'market', 'me', 'medicine', 'morning', 'mother', 'name', 'night', 'no', 'please', 'rest', 'school', 'sorry', 'thank you', 'today', 'tomorrow', 'water', 'where', 'yes', 'you'])
+
+===== SEED 0 =====
+[cnn-v2   CORE-10 seed 0] CV acc=0.893 macroF1=0.880
+[logreg   CORE-10 seed 0] CV acc=0.814 macroF1=0.797
+[cnn-v1   CORE-10 seed 0] CV acc=0.683 macroF1=0.636
+[cnn-v2   CORE-9  seed 0] CV acc=0.926 macroF1=0.922
+[logreg   CORE-9  seed 0] CV acc=0.863 macroF1=0.849
+[cnn-v1   CORE-9  seed 0] CV acc=0.846 macroF1=0.821
+[cnn-v2   FULL    seed 0] CV acc=0.901 macroF1=0.896
+[logreg   FULL    seed 0] CV acc=0.810 macroF1=0.790
+[cnn-v1   FULL    seed 0] CV acc=0.808 macroF1=0.788
+
+===== SEED 1 =====
+[cnn-v2   CORE-10 seed 1] CV acc=0.869 macroF1=0.855
+[logreg   CORE-10 seed 1] CV acc=0.823 macroF1=0.800
+[cnn-v1   CORE-10 seed 1] CV acc=0.689 macroF1=0.653
+[cnn-v2   CORE-9  seed 1] CV acc=0.920 macroF1=0.915
+[logreg   CORE-9  seed 1] CV acc=0.869 macroF1=0.854
+[cnn-v1   CORE-9  seed 1] CV acc=0.782 macroF1=0.760
+[cnn-v2   FULL    seed 1] CV acc=0.897 macroF1=0.890
+[logreg   FULL    seed 1] CV acc=0.820 macroF1=0.801
+[cnn-v1   FULL    seed 1] CV acc=0.785 macroF1=0.763
+
+===== SEED 2 =====
+[cnn-v2   CORE-10 seed 2] CV acc=0.905 macroF1=0.899
+[logreg   CORE-10 seed 2] CV acc=0.823 macroF1=0.803
+[cnn-v1   CORE-10 seed 2] CV acc=0.738 macroF1=0.709
+[cnn-v2   CORE-9  seed 2] CV acc=0.930 macroF1=0.924
+[logreg   CORE-9  seed 2] CV acc=0.856 macroF1=0.843
+[cnn-v1   CORE-9  seed 2] CV acc=0.822 macroF1=0.806
+[cnn-v2   FULL    seed 2] CV acc=0.894 macroF1=0.885
+[logreg   FULL    seed 2] CV acc=0.812 macroF1=0.793
+[cnn-v1   FULL    seed 2] CV acc=0.771 macroF1=0.750
+
+===== SEED 3 =====
+[cnn-v2   CORE-10 seed 3] CV acc=0.899 macroF1=0.892
+[logreg   CORE-10 seed 3] CV acc=0.823 macroF1=0.803
+[cnn-v1   CORE-10 seed 3] CV acc=0.707 macroF1=0.675
+[cnn-v2   CORE-9  seed 3] CV acc=0.923 macroF1=0.915
+[logreg   CORE-9  seed 3] CV acc=0.853 macroF1=0.843
+[cnn-v1   CORE-9  seed 3] CV acc=0.779 macroF1=0.751
+[cnn-v2   FULL    seed 3] CV acc=0.907 macroF1=0.898
+[logreg   FULL    seed 3] CV acc=0.824 macroF1=0.806
+[cnn-v1   FULL    seed 3] CV acc=0.756 macroF1=0.731
+
+===== SEED 4 =====
+[cnn-v2   CORE-10 seed 4] CV acc=0.902 macroF1=0.896
+[logreg   CORE-10 seed 4] CV acc=0.823 macroF1=0.800
+[cnn-v1   CORE-10 seed 4] CV acc=0.674 macroF1=0.642
+[cnn-v2   CORE-9  seed 4] CV acc=0.919 macroF1=0.914
+[logreg   CORE-9  seed 4] CV acc=0.862 macroF1=0.845
+[cnn-v1   CORE-9  seed 4] CV acc=0.822 macroF1=0.807
+[cnn-v2   FULL    seed 4] CV acc=0.894 macroF1=0.887
+[logreg   FULL    seed 4] CV acc=0.813 macroF1=0.798
+[cnn-v1   FULL    seed 4] CV acc=0.718 macroF1=0.701
+
+--- POOLED cnn-v2 CORE-10 (n=131): acc=0.901 macroF1=0.899 baseline(majority)=0.092 chance(uniform)=0.091 ---
+class               P      R     F1
+thank you        0.80   0.67   0.73
+water            0.79   0.92   0.85
+no               1.00   0.75   0.86
+you              1.00   0.75   0.86
+please           0.83   0.91   0.87
+hello            0.80   1.00   0.89
+where            0.92   0.92   0.92
+yes              0.86   1.00   0.92
+help             1.00   1.00   1.00
+me               1.00   1.00   1.00
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    2  you            -> yes           
+    2  no             -> hello         
+    2  thank you      -> please        
+    1  where          -> thank you     
+    1  you            -> water         
+    1  water          -> hello         
+    1  no             -> water         
+    1  please         -> thank you     
+    1  thank you      -> where         
+    1  thank you      -> water         
+
+--- POOLED logreg CORE-10 (n=131): acc=0.817 macroF1=0.811 baseline(majority)=0.092 chance(uniform)=0.091 ---
+class               P      R     F1
+you              0.83   0.42   0.56
+water            0.57   0.67   0.62
+thank you        0.70   0.58   0.64
+no               0.75   0.75   0.75
+please           0.75   0.82   0.78
+yes              0.75   1.00   0.86
+hello            0.80   1.00   0.89
+me               0.92   0.92   0.92
+help             1.00   0.92   0.96
+where            1.00   0.92   0.96
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    4  you            -> water         
+    3  thank you      -> please        
+    2  you            -> yes           
+    2  please         -> thank you     
+    1  where          -> thank you     
+    1  me             -> no            
+    1  you            -> no            
+    1  water          -> you           
+    1  water          -> no            
+    1  water          -> yes           
+
+--- POOLED cnn-v1 CORE-10 (n=131): acc=0.695 macroF1=0.667 baseline(majority)=0.092 chance(uniform)=0.091 ---
+class               P      R     F1
+you              0.00   0.00   0.00
+thank you        0.60   0.25   0.35
+water            0.50   0.42   0.45
+yes              0.42   0.92   0.58
+no               0.78   0.58   0.67
+me               0.69   0.92   0.79
+please           0.69   1.00   0.81
+help             1.00   0.75   0.86
+where            0.91   0.83   0.87
+rest             0.92   1.00   0.96
+hello            1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    6  you            -> yes           
+    4  thank you      -> please        
+    3  you            -> water         
+    3  water          -> you           
+    3  water          -> yes           
+    2  you            -> no            
+    2  no             -> water         
+    2  no             -> yes           
+    2  thank you      -> me            
+    2  thank you      -> yes           
+
+--- POOLED cnn-v2 CORE-9 (n=119): acc=0.908 macroF1=0.906 baseline(majority)=0.101 chance(uniform)=0.100 ---
+class               P      R     F1
+thank you        0.80   0.67   0.73
+hello            0.75   1.00   0.86
+no               1.00   0.75   0.86
+please           0.83   0.91   0.87
+water            0.85   0.92   0.88
+where            0.92   0.92   0.92
+help             1.00   0.92   0.96
+yes              1.00   1.00   1.00
+me               1.00   1.00   1.00
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    2  no             -> hello         
+    2  thank you      -> please        
+    1  where          -> thank you     
+    1  water          -> hello         
+    1  help           -> hello         
+    1  no             -> water         
+    1  please         -> thank you     
+    1  thank you      -> where         
+    1  thank you      -> water         
+
+--- POOLED logreg CORE-9 (n=119): acc=0.857 macroF1=0.855 baseline(majority)=0.101 chance(uniform)=0.100 ---
+class               P      R     F1
+thank you        0.64   0.58   0.61
+water            0.80   0.67   0.73
+please           0.75   0.82   0.78
+no               0.82   0.75   0.78
+hello            0.75   1.00   0.86
+me               0.92   0.92   0.92
+help             1.00   0.92   0.96
+where            1.00   0.92   0.96
+yes              0.92   1.00   0.96
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    3  thank you      -> please        
+    2  no             -> hello         
+    2  please         -> thank you     
+    1  where          -> thank you     
+    1  me             -> no            
+    1  water          -> no            
+    1  water          -> yes           
+    1  water          -> thank you     
+    1  water          -> hello         
+    1  help           -> me            
+
+--- POOLED cnn-v1 CORE-9 (n=119): acc=0.798 macroF1=0.793 baseline(majority)=0.101 chance(uniform)=0.100 ---
+class               P      R     F1
+thank you        0.67   0.33   0.44
+yes              0.55   0.92   0.69
+water            0.80   0.67   0.73
+no               1.00   0.58   0.74
+me               0.65   0.92   0.76
+please           0.71   0.91   0.80
+where            0.91   0.83   0.87
+help             1.00   0.83   0.91
+hello            1.00   1.00   1.00
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    3  water          -> yes           
+    3  thank you      -> please        
+    2  no             -> water         
+    2  no             -> yes           
+    2  thank you      -> me            
+    2  thank you      -> yes           
+    1  where          -> me            
+    1  where          -> thank you     
+    1  me             -> yes           
+    1  water          -> me            
+
+--- POOLED cnn-v2 FULL (n=347): acc=0.905 macroF1=0.904 baseline(majority)=0.035 chance(uniform)=0.034 ---
+class               P      R     F1
+thank you        0.70   0.58   0.64
+you              0.89   0.67   0.76
+how              0.67   1.00   0.80
+please           0.71   0.91   0.80
+help             0.90   0.75   0.82
+father           0.83   0.83   0.83
+friend           0.83   0.83   0.83
+water            0.83   0.83   0.83
+no               1.00   0.75   0.86
+name             0.91   0.83   0.87
+mother           0.85   0.92   0.88
+where            1.00   0.83   0.91
+food             0.92   0.92   0.92
+good             0.92   0.92   0.92
+market           0.92   0.92   0.92
+morning          0.86   1.00   0.92
+yes              0.86   1.00   0.92
+night            1.00   0.92   0.96
+school           1.00   0.92   0.96
+today            1.00   0.92   0.96
+hello            0.92   1.00   0.96
+sorry            0.92   1.00   0.96
+bad              1.00   1.00   1.00
+doctor           1.00   1.00   1.00
+hospital         1.00   1.00   1.00
+me               1.00   1.00   1.00
+medicine         1.00   1.00   1.00
+rest             1.00   1.00   1.00
+tomorrow         1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    2  you            -> water         
+    2  water          -> how           
+    2  thank you      -> please        
+    2  no             -> morning       
+    2  friend         -> how           
+    2  father         -> mother        
+    1  you            -> name          
+    1  you            -> father        
+    1  where          -> market        
+    1  where          -> friend        
+
+--- POOLED logreg FULL (n=347): acc=0.821 macroF1=0.815 baseline(majority)=0.035 chance(uniform)=0.034 ---
+class               P      R     F1
+you              0.67   0.17   0.27
+water            0.43   0.50   0.46
+thank you        0.50   0.50   0.50
+how              0.62   0.67   0.64
+please           0.62   0.73   0.67
+friend           0.64   0.75   0.69
+no               0.73   0.67   0.70
+food             0.75   0.75   0.75
+market           0.89   0.67   0.76
+mother           0.69   0.92   0.79
+help             1.00   0.67   0.80
+father           0.91   0.83   0.87
+school           0.85   0.92   0.88
+sorry            0.85   0.92   0.88
+good             0.80   1.00   0.89
+hello            0.80   1.00   0.89
+me               1.00   0.83   0.91
+where            1.00   0.83   0.91
+doctor           0.92   0.92   0.92
+morning          0.92   0.92   0.92
+night            0.92   0.92   0.92
+hospital         0.86   1.00   0.92
+today            0.86   1.00   0.92
+medicine         1.00   0.92   0.96
+name             1.00   0.92   0.96
+tomorrow         1.00   0.92   0.96
+bad              0.92   1.00   0.96
+yes              0.92   1.00   0.96
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    5  you            -> water         
+    4  thank you      -> please        
+    3  water          -> how           
+    3  please         -> thank you     
+    2  you            -> mother        
+    2  no             -> water         
+    2  how            -> hello         
+    2  help           -> good          
+    2  friend         -> food          
+    2  father         -> mother        
+
+--- POOLED cnn-v1 FULL (n=347): acc=0.784 macroF1=0.778 baseline(majority)=0.035 chance(uniform)=0.034 ---
+class               P      R     F1
+you              0.25   0.08   0.12
+thank you        0.62   0.42   0.50
+how              0.47   0.67   0.55
+mother           0.54   0.58   0.56
+water            0.54   0.58   0.56
+no               0.70   0.58   0.64
+yes              0.59   0.83   0.69
+father           0.64   0.75   0.69
+help             0.80   0.67   0.73
+market           0.80   0.67   0.73
+me               0.75   0.75   0.75
+friend           0.82   0.75   0.78
+sorry            0.69   0.92   0.79
+food             0.77   0.83   0.80
+school           0.83   0.83   0.83
+good             0.79   0.92   0.85
+hospital         0.91   0.83   0.87
+please           0.83   0.91   0.87
+today            0.91   0.83   0.87
+where            0.91   0.83   0.87
+name             0.85   0.92   0.88
+bad              0.92   0.92   0.92
+doctor           0.92   0.92   0.92
+morning          0.92   0.92   0.92
+tomorrow         0.92   0.92   0.92
+medicine         1.00   0.92   0.96
+hello            1.00   1.00   1.00
+night            1.00   1.00   1.00
+rest             1.00   1.00   1.00
+Top-10 confusions (count, true -> pred):
+    5  mother         -> father        
+    4  you            -> yes           
+    3  father         -> mother        
+    2  you            -> water         
+    2  you            -> no            
+    2  you            -> how           
+    2  water          -> how           
+    2  thank you      -> please        
+    2  thank you      -> how           
+    2  thank you      -> friend        
+
+--- max-softmax threshold table (cnn-v2 CORE-10) ---
+ threshold  accepted  coverage     acc rest_clips  rest->word    rate
+    argmax       655   100.0%   0.893         60           0    0.0%
+       0.5       640    97.7%   0.898         60           0    0.0%
+       0.7       615    93.9%   0.914         60           0    0.0%
+       0.9       525    80.2%   0.945         60           0    0.0%
+
+Wrote /mnt/Drive-D/Codes/signsage/research/track_b/results_v2.json (total 2056.3s)
+
+======================================================================
+SUMMARY: mean +/- std over 5 seeds of 5-fold take CV (S1, v2 features)
+======================================================================
+cnn-v1 CORE-10       acc=0.698 +/- 0.022  macroF1=0.663 +/- 0.027
+cnn-v1 CORE-9        acc=0.810 +/- 0.026  macroF1=0.789 +/- 0.028
+cnn-v1 FULL          acc=0.767 +/- 0.030  macroF1=0.746 +/- 0.029
+cnn-v2 CORE-10       acc=0.894 +/- 0.013  macroF1=0.884 +/- 0.016
+cnn-v2 CORE-9        acc=0.924 +/- 0.004  macroF1=0.918 +/- 0.004
+cnn-v2 FULL          acc=0.899 +/- 0.005  macroF1=0.891 +/- 0.005
+logreg CORE-10       acc=0.822 +/- 0.004  macroF1=0.801 +/- 0.002
+logreg CORE-9        acc=0.861 +/- 0.006  macroF1=0.847 +/- 0.004
+logreg FULL          acc=0.816 +/- 0.005  macroF1=0.798 +/- 0.006
+PRELIMINARY, OPTIMISTIC (same session S1). Not a final result.

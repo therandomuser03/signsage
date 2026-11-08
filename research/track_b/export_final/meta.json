@@ -1,0 +1,109 @@
+{
+  "export_type": "s1+s2-final-unevaluated",
+  "trained_on": {
+    "sessions": [
+      "S1",
+      "S2"
+    ]
+  },
+  "label_list": [
+    "hello",
+    "thank you",
+    "please",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "you",
+    "me",
+    "where",
+    "rest"
+  ],
+  "n_classes": 11,
+  "model": "1D-CNN (cnn-v2), dropout 0.3, Conv1d(122->32->64, AdaptiveAvgPool, Linear->n_classes)",
+  "hyperparameters": {
+    "epochs": 60,
+    "lr": 0.001,
+    "batch": 16,
+    "optimizer": "Adam",
+    "dropout": 0.3,
+    "augmentation": "none",
+    "seed": 0
+  },
+  "features": {
+    "spec": "features_v2.py / sign_features_v2.py",
+    "dim": 122,
+    "frames": 60,
+    "layout": "signsage",
+    "normalisation": "per-frame shoulder-centre + shoulder-width; per hand: wrist relative to shoulder centre / shoulder width; other 20 landmarks relative to wrist / hand size (hand_size = ||wrist - middle fingertip||); hand-to-face vectors scaled by shoulder width. Missing runs <=5 frames interpolated; longer/leading/trailing missing kept as zero coordinates with mask=0 and never normalised into shoulder space.",
+    "channels": [
+      "left hand 42 (wrist-rel-shoulder + 20 landmarks-rel-wrist)",
+      "right hand 42 (same)",
+      "left_mask, right_mask",
+      "hand-to-face 32 (L/R x wrist/index-tip x nose/chin/mouth/forehead)",
+      "wrist velocity 4"
+    ]
+  },
+  "extractor": {
+    "name": "@mediapipe/tasks-vision HolisticExtractor",
+    "version": "1.0.1",
+    "running_mode": "VIDEO",
+    "note": "Same options as the SignSage frontend (frontend/src/features/translate/landmarks.ts): pose numPoses=1, face numFaces=1, hands numHands=2, delegate GPU, no confidence thresholds set (MediaPipe defaults), no delegate fallback. Coordinates are NOT mirrored; only the preview is CSS-mirrored (scaleX(-1)) like the app.",
+    "options": {
+      "pose": {
+        "modelAssetPath": "assets/models/pose_landmarker_lite.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numPoses": 1
+      },
+      "face": {
+        "modelAssetPath": "assets/models/face_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numFaces": 1
+      },
+      "hands": {
+        "modelAssetPath": "assets/models/hand_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numHands": 2
+      }
+    }
+  },
+  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). Effective FPS varies per clip (S1 ~5-12 fps, S2 ~5-12 fps); the model is invariant to this because of resampling. Coordinates are NOT mirrored (only the app preview is CSS-mirrored).",
+  "recommended_confidence_threshold": 0.7,
+  "threshold_note": "Calibrated on the S2 cross-session test (train S1, test S2, cnn-v2, 50 clips, 10 CORE words, no rest). S2 max-softmax threshold table: 0.5 -> acc 0.612 coverage 98.0%; 0.7 -> acc 0.659 coverage 88.0% (recommended operating point); 0.9 -> acc 0.758 coverage 66.0%; argmax -> acc 0.620 coverage 100%. Stated as calibrated on S2 only; not validated on held-out data.",
+  "s2_test_metrics": null,
+  "cpu_latency_ms_per_clip": 0.3027625028238547,
+  "golden_test_vector": {
+    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_final/golden_test_vector.npy",
+    "expected_logits": [
+      -12.346238136291504,
+      -6.618911266326904,
+      -8.498988151550293,
+      -0.839250922203064,
+      -21.821252822875977,
+      -4.267067909240723,
+      -11.366888046264648,
+      -4.552708625793457,
+      3.8247077465057373,
+      -0.24190041422843933,
+      -11.37031364440918
+    ],
+    "expected_logits_labels": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where",
+      "rest"
+    ],
+    "note": "Run features_v2/sign_features_v2 on golden_test_vector.npy then the model; logits must match expected_logits (within float tolerance)."
+  },
+  "note": "FINAL-UNEVALUATED: trained on S1+S2 combined. S2 was already used as the held-out test set for export_s1, so this model has NO held-out test set. Do not promote without S2-independent validation."
+}

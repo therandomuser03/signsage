@@ -1,0 +1,111 @@
+S1 train clips: 131  labels=['hello', 'help', 'me', 'no', 'please', 'rest', 'thank you', 'water', 'where', 'yes', 'you']
+S2 dev clips:   50  labels=['hello', 'help', 'me', 'no', 'please', 'thank you', 'water', 'where', 'yes', 'you']  (rest in S2: 0)
+
+===== cnn-v3: S1 5-fold CV (CORE-10 + rest) =====
+  seed 0: CV acc=0.845 macroF1=0.838
+  seed 1: CV acc=0.836 macroF1=0.809
+  seed 2: CV acc=0.842 macroF1=0.836
+  seed 3: CV acc=0.848 macroF1=0.835
+  seed 4: CV acc=0.869 macroF1=0.860
+  POOLED S1 CV: acc=0.863 macroF1=0.862 (mean±std over seeds: 0.848±0.011 / 0.835±0.016)
+  per-class F1 (pooled): 1=0.62, 2=0.76, 9=0.76, 6=0.81, 4=0.86, 3=0.92, 7=0.92, 10=0.92, 0=0.92, 5=1.00, 8=1.00
+
+===== cnn-v3: Train S1 / Test S2 (DEV SET) =====
+  seed 0: S2 acc=0.640 macroF1=0.614
+  seed 1: S2 acc=0.520 macroF1=0.530
+  seed 2: S2 acc=0.660 macroF1=0.624
+  seed 3: S2 acc=0.600 macroF1=0.588
+  seed 4: S2 acc=0.640 macroF1=0.635
+  POOLED S2 DEV: acc=0.612 macroF1=0.598 (mean±std over 5 seeds: 0.612±0.050 / 0.598±0.038)
+  chance (uniform, 10) = 0.100
+  per-class F1 (seed-mean): thank you=0.13, where=0.27, yes=0.30, no=0.58, water=0.60, you=0.64, help=0.74, please=0.81, hello=0.93, me=0.98
+  top-10 confusions (seed0 representative, count true->pred):
+      5  thank you      -> where
+      3  yes            -> water
+      3  help           -> water
+      2  where          -> please
+      1  you            -> yes
+      1  you            -> water
+      1  you            -> help
+      1  yes            -> thank you
+  threshold table (S2 dev):
+     threshold  accepted  coverage     acc
+        argmax        50   100.0%   0.640
+           0.5        48    96.0%   0.646
+           0.7        37    74.0%   0.676
+           0.9        25    50.0%   0.600
+  rest FPR: NOT VERIFIED (no rest clips in S2)
+  comparison: v2 cnn-v2 S2 acc was 0.592; v3 cnn-v3 S2 acc = 0.612
+
+===== logreg: S1 5-fold CV (CORE-10 + rest) =====
+  seed 0: CV acc=0.772 macroF1=0.739
+  seed 1: CV acc=0.778 macroF1=0.744
+  seed 2: CV acc=0.778 macroF1=0.744
+  seed 3: CV acc=0.778 macroF1=0.744
+  seed 4: CV acc=0.766 macroF1=0.730
+  POOLED S1 CV: acc=0.763 macroF1=0.765 (mean±std over seeds: 0.774±0.005 / 0.740±0.005)
+  per-class F1 (pooled): 1=0.44, 6=0.54, 7=0.57, 2=0.61, 4=0.82, 9=0.82, 5=0.86, 0=0.92, 3=0.92, 10=0.96, 8=0.96
+
+===== logreg: Train S1 / Test S2 (DEV SET) =====
+  seed 0: S2 acc=0.540 macroF1=0.515
+  seed 1: S2 acc=0.520 macroF1=0.495
+  seed 2: S2 acc=0.480 macroF1=0.448
+  seed 3: S2 acc=0.540 macroF1=0.514
+  seed 4: S2 acc=0.540 macroF1=0.515
+  POOLED S2 DEV: acc=0.524 macroF1=0.497 (mean±std over 5 seeds: 0.524±0.023 / 0.497±0.026)
+  chance (uniform, 10) = 0.100
+  per-class F1 (seed-mean): thank you=0.00, no=0.00, where=0.36, water=0.51, you=0.52, hello=0.57, yes=0.59, help=0.70, please=0.72, me=1.00
+  top-10 confusions (seed0 representative, count true->pred):
+      5  no             -> water
+      4  thank you      -> where
+      2  you            -> help
+      2  where          -> please
+      1  you            -> yes
+      1  yes            -> water
+      1  yes            -> thank you
+      1  where          -> no
+      1  help           -> please
+      1  hello          -> water
+  threshold table (S2 dev):
+     threshold  accepted  coverage     acc
+        argmax        50   100.0%   0.540
+           0.5        40    80.0%   0.600
+           0.7        31    62.0%   0.581
+           0.9        24    48.0%   0.583
+  rest FPR: NOT VERIFIED (no rest clips in S2)
+  comparison: v2 cnn-v2 S2 acc was 0.592; v3 cnn-v3 S2 acc = 0.524
+
+===== Mirrored-fraction after canonicalisation (S1 vs S2) =====
+label          S1 clips  S1 mirrored S2 clips  S2 mirrored
+bad                  12 12/12 (1.00)         0 0/0 (0.00)
+doctor               12 6/12 (0.50)         0 0/0 (0.00)
+father               12 12/12 (1.00)         0 0/0 (0.00)
+food                 12 2/12 (0.17)         0 0/0 (0.00)
+friend               12 3/12 (0.25)         0 0/0 (0.00)
+good                 12 12/12 (1.00)         0 0/0 (0.00)
+hello                12 12/12 (1.00)         5 5/5 (1.00)
+help                 12 6/12 (0.50)         5 3/5 (0.60)
+hospital             12 6/12 (0.50)         0 0/0 (0.00)
+how                  12 6/12 (0.50)         0 0/0 (0.00)
+market               12 5/12 (0.42)         0 0/0 (0.00)
+me                   12 6/12 (0.50)         5 5/5 (1.00)
+medicine             12 10/12 (0.83)         0 0/0 (0.00)
+morning              12 12/12 (1.00)         0 0/0 (0.00)
+mother               12 12/12 (1.00)         0 0/0 (0.00)
+name                 12 12/12 (1.00)         0 0/0 (0.00)
+night                12 12/12 (1.00)         0 0/0 (0.00)
+no                   12 2/12 (0.17)         5 5/5 (1.00)
+please               11 11/11 (1.00)         5 5/5 (1.00)
+rest                 12 1/12 (0.08)         0 0/0 (0.00)
+school               12 6/12 (0.50)         0 0/0 (0.00)
+sorry                12 12/12 (1.00)         0 0/0 (0.00)
+thank you            12 11/12 (0.92)         5 0/5 (0.00)
+today                12 12/12 (1.00)         0 0/0 (0.00)
+tomorrow             12 12/12 (1.00)         0 0/0 (0.00)
+water                12 6/12 (0.50)         5 5/5 (1.00)
+where                12 5/12 (0.42)         5 4/5 (0.80)
+yes                  12 12/12 (1.00)         5 5/5 (1.00)
+you                  12 6/12 (0.50)         5 5/5 (1.00)
+
+Wrote /mnt/Drive-D/Codes/signsage/research/track_b/results_v3.json (total 888.8s)
+PRELIMINARY, OPTIMISTIC. S2 is a DEV SET (used to diagnose handedness), not a clean test.

@@ -26,6 +26,7 @@ import type {
   CapabilitiesResponse,
   ImageClassifyResponse,
   VideoTranslationResponse,
+  WordRecognitionResponse,
 } from "@/types/api";
 import {
   activityLabel,
@@ -48,8 +49,12 @@ type Phase =
   | "paused"
   | "error";
 
+type WordPhase = "idle" | "countdown" | "recording" | "result" | "error";
+
 const SEND_INTERVAL_MS = 100; // ~10 landmark frames per second
 const DETECT_INTERVAL_MS = 80; // MediaPipe runs far faster than the backend can use; keep preview responsive without re-running all models every animation frame.
+const WORD_RECORD_DURATION_MS = 2500; // 2.5 s capture window
+const WORD_COUNTDOWN_SECONDS = 3;
 
 function drawOverlay(
   canvas: HTMLCanvasElement,
@@ -113,6 +118,20 @@ export default function TranslatePage() {
   const scoreLabel = capabilities?.sign_to_text_source === "heuristic-fallback"
     ? "frame agreement"
     : "uncalibrated model score";
+
+  // --- Word mode (behind SIGNSAGE_WORD_MODE_ENABLED) ---
+  // Reuses the same camera + HolisticExtractor as the live interpreter.
+  const [wordPhase, setWordPhase] = useState<WordPhase>("idle");
+  const [wordResult, setWordResult] = useState<WordRecognitionResponse | null>(null);
+  const [wordError, setWordError] = useState<string | null>(null);
+  const [wordList, setWordList] = useState<string[]>([]);
+  const [wordCountdown, setWordCountdown] = useState(0);
+  const [composedSentence, setComposedSentence] = useState<string | null>(null);
+  const wordRafRef = useRef(0);
+  const wordLastDetectRef = useRef(0);
+  const wordFramesRef = useRef<HolisticFrame[]>([]);
+  const wordRecStartRef = useRef(0);
+  const wordStopTimeRef = useRef(0);
 
   // --- Static image classification (REST, alphabet / word) ---
   const [imageClassifyMode, setImageClassifyMode] = useState(false);
@@ -450,6 +469,203 @@ export default function TranslatePage() {
     phase === "live" &&
     framesSent > 0 &&
     (lastSeenAt === null || Date.now() - lastSeenAt > 4000);
+
+  // --- Word mode: capture a 2.5 s window of landmarks and classify ---
+  const wordLoop = useCallback(() => {
+    wordRafRef.current = requestAnimationFrame(wordLoop);
+    const video = videoRef.current;
+    const extractor = extractorRef.current;
+    if (!video || !extractor || video.readyState < 2) return;
+
+    const now = performance.now();
+    const shouldDetect = now - wordLastDetectRef.current >= DETECT_INTERVAL_MS;
+    let frame: HolisticFrame | null = null;
+    if (shouldDetect) {
+      frame = extractor.detect(video, now);
+      if (frame) {
+        wordLastDetectRef.current = now;
+        drawOverlay(canvasRef.current!, frame, "#22c55e");
+      }
+    }
+
+    if (!frame) return;
+
+    if (wordPhaseRef.current !== "recording") return;
+    if (frame.detected) {
+      // capture the latest detected frame into the recording buffer
+      wordFramesRef.current.push(frame);
+    }
+
+    if (now >= wordStopTimeRef.current) {
+      stopWordRecording();
+      return;
+    }
+  }, []);
+
+  const wordPhaseRef = useRef<WordPhase>("idle");
+
+  const startWordRecording = useCallback(async () => {
+    if (wordPhaseRef.current === "countdown" || wordPhaseRef.current === "recording") return;
+    const video = videoRef.current;
+    const extractor = extractorRef.current;
+    if (!video || !extractor) {
+      setWordError("Camera or detector not ready.");
+      return;
+    }
+    setWordError(null);
+    setWordResult(null);
+    setWordPhase("countdown");
+    wordPhaseRef.current = "countdown";
+
+    // 3-2-1 countdown
+    console.log("[word-mode] countdown start");
+    let remaining = WORD_COUNTDOWN_SECONDS;
+    setWordCountdown(remaining);
+    const countdownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining >= 1) {
+        setWordCountdown(remaining);
+      } else {
+        setWordCountdown(0);
+        clearInterval(countdownTimer);
+        console.log("[word-mode] capture start");
+        beginWordCapture();
+      }
+    }, 1000);
+  }, []);
+
+  const beginWordCapture = useCallback(() => {
+    const video = videoRef.current;
+    const extractor = extractorRef.current;
+    if (!video || !extractor) {
+      setWordPhase("idle");
+      wordPhaseRef.current = "idle";
+      setWordError("Camera or detector not ready.");
+      return;
+    }
+    wordFramesRef.current = [];
+    wordRecStartRef.current = performance.now();
+    wordStopTimeRef.current = wordRecStartRef.current + WORD_RECORD_DURATION_MS;
+    setWordPhase("recording");
+    wordPhaseRef.current = "recording";
+
+    // start the capture loop if not already running
+    if (wordRafRef.current === 0) {
+      wordRafRef.current = requestAnimationFrame(wordLoop);
+    }
+  }, [wordLoop]);
+
+  const stopWordRecording = useCallback(async () => {
+    setWordPhase("result");
+    wordPhaseRef.current = "result";
+
+    const frames = wordFramesRef.current;
+    const captureEndMs = performance.now();
+    const captureDurationMs = captureEndMs - wordRecStartRef.current;
+    const effectiveFps =
+      frames && frames.length > 0
+        ? (frames.length / captureDurationMs) * 1000
+        : 0;
+
+    // Hand-present fractions over captured frames.
+    let leftPresent = 0;
+    let rightPresent = 0;
+    if (frames && frames.length > 0) {
+      for (const f of frames) {
+        const lm = f.landmarks;
+        const left = lm.slice(501, 522).some(([x, y, z]) => x !== 0 || y !== 0 || z !== 0);
+        const right = lm.slice(522, 543).some(([x, y, z]) => x !== 0 || y !== 0 || z !== 0);
+        if (left) leftPresent += 1;
+        if (right) rightPresent += 1;
+      }
+      leftPresent = leftPresent / frames.length;
+      rightPresent = rightPresent / frames.length;
+    }
+
+    const requestPayload = {
+      frames: frames?.map((f) => ({ landmarks: f.landmarks })) ?? [],
+    };
+    const payloadSize = JSON.stringify(requestPayload).length;
+
+    const t0Request = performance.now();
+
+    if (frames && frames.length > 0) {
+      try {
+        const result = await apiClient.word(requestPayload);
+        const roundTripMs = performance.now() - t0Request;
+        const totalMs = performance.now() - captureEndMs;
+        setWordResult(result);
+        if (result.accepted && result.word) {
+          setWordList((prev) => [...prev, result.word!]);
+        }
+        console.log(
+          "[word-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f",
+          frames.length,
+          effectiveFps,
+          leftPresent,
+          rightPresent,
+          payloadSize,
+          roundTripMs,
+          totalMs,
+        );
+      } catch (err: any) {
+        const roundTripMs = performance.now() - t0Request;
+        const totalMs = performance.now() - captureEndMs;
+        console.log(
+          "[word-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f error",
+          frames.length,
+          effectiveFps,
+          leftPresent,
+          rightPresent,
+          payloadSize,
+          roundTripMs,
+          totalMs,
+        );
+        setWordError(err?.message ?? "Word recognition failed.");
+      }
+    } else {
+      const totalMs = performance.now() - captureEndMs;
+      console.log(
+        "[word-mode] capture end frames=0 effective_fps=0 left_present=0 right_present=0 payload_bytes=0 round_trip_ms=0 total_ms=%.1f no_frames",
+        totalMs,
+      );
+      setWordError("No frames captured.");
+    }
+
+    cancelAnimationFrame(wordRafRef.current);
+    wordRafRef.current = 0;
+    wordFramesRef.current = [];
+    setWordCountdown(0);
+  }, []);
+
+  const removeWordFromList = useCallback((index: number) => {
+    setWordList((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const clearWordList = useCallback(() => {
+    setWordList([]);
+    setWordResult(null);
+    setWordError(null);
+    setComposedSentence(null);
+  }, []);
+
+  const makeSentence = useCallback(async () => {
+    if (wordList.length === 0) return;
+    setComposedSentence(null);
+    try {
+      const result = await apiClient.compose({ words: wordList });
+      setComposedSentence(result.sentence);
+    } catch (err: any) {
+      setWordError(err?.message ?? "Failed to compose sentence.");
+    }
+  }, [wordList]);
+
+  // Teardown word mode on unmount
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(wordRafRef.current);
+    };
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -989,6 +1205,147 @@ export default function TranslatePage() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Word mode: record one word → recognised word with confidence → compose sentence */}
+      {capabilities?.word_recognition_enabled && (
+        <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-0">
+              Word recognition
+            </p>
+            <span className="text-xs text-foreground/40">
+              {capabilities.word_recognition_label}
+            </span>
+          </div>
+
+          {/* Record controls */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              disabled={
+                wordPhase === "countdown" ||
+                wordPhase === "recording" ||
+                phase === "starting-camera" ||
+                phase === "loading-detector" ||
+                phase === "error"
+              }
+              onClick={startWordRecording}
+            >
+              {wordPhase === "countdown" ? (
+                <span className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-green-600">{wordCountdown}</span>
+                  Recording…
+                </span>
+              ) : wordPhase === "recording" ? (
+                <span className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-red-600">●</span>
+                  Recording word…
+                </span>
+              ) : (
+                <>
+                  <Camera size={14} /> Record word
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={wordList.length === 0}
+              onClick={makeSentence}
+            >
+              Make sentence
+            </Button>
+          </div>
+
+          {wordError && <p className="mt-1 text-xs text-destructive">{wordError}</p>}
+
+          {/* Last recognition result */}
+          {wordResult && (
+            <div className="mt-3 rounded-md bg-foreground/5 px-3 py-2">
+              <p className="text-xs font-semibold text-foreground/60 mb-1">
+                {wordResult.status === "no_hands"
+                  ? "No hands detected — please repeat"
+                  : wordResult.accepted
+                    ? "Recognised word"
+                    : "Not confidently recognised"}
+              </p>
+              <div className="flex items-center gap-3">
+                <span className={wordResult.accepted ? "font-mono text-2xl font-bold text-foreground" : "font-mono text-2xl font-bold text-foreground/40"}>
+                  {wordResult.word ?? "—"}
+                </span>
+                <div className="text-right text-xs">
+                  <p className="font-medium">
+                    {wordResult.accepted ? "accepted" : "rejected"}
+                  </p>
+                  <p className="text-foreground/50">
+                    confidence {wordResult.confidence.toFixed(2)} ·
+                    threshold {wordResult.threshold.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              {wordResult.top3.length > 0 && !wordResult.accepted && (
+                <p className="mt-1 text-xs text-foreground/50">
+                  Top guesses:{" "}
+                  {wordResult.top3.map((t) => `${t.label} (${t.probability.toFixed(2)})`).join(", ")}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Accepted words list */}
+          {wordList.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-foreground/60 mb-1">
+                Recognised words
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {wordList.map((w, i) => (
+                  <div key={i} className="flex items-center gap-1 bg-muted rounded-full px-3 py-1.5 text-xs">
+                    <span className="font-medium">{w}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className="p-1"
+                      onClick={() => removeWordFromList(i)}
+                      aria-label={`Remove ${w}`}
+                    >
+                      <Square size={10} />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearWordList}
+                >
+                  Clear
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-foreground/50">
+                Tap a word to remove it. Clear removes the whole list.
+              </p>
+            </div>
+          )}
+
+          {/* Composed sentence */}
+          {composedSentence && (
+            <div className="mt-3 rounded-md bg-green-50/50 border border-green-500/25 px-3 py-2">
+              <p className="text-xs font-semibold text-green-700 mb-1">
+                Interpretation of recognised words
+              </p>
+              <p className="text-sm text-green-900">{composedSentence}</p>
+              <p className="mt-1 text-xs text-green-700/70">
+                Method: composed from {wordList.length} recognised word(s)
+              </p>
+            </div>
+          )}
         </div>
       )}
 

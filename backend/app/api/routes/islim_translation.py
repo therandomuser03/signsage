@@ -17,7 +17,6 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.errors import ModelNotPromotedError, ModelUnavailableError
-from app.ml.adapters.islim_adapter import ISLiMAdapter, ISLiMAdapterError
 from app.ml.preprocessing.islim_landmarks import (
     MAX_FRAMES as ISLI_MAX_FRAMES,
     convert_landmarks_543_to_islim,
@@ -27,13 +26,16 @@ from app.services.video_processing.video_pipeline import process_video_file
 router = APIRouter(prefix="/translation", tags=["translation"])
 
 # Load once per process (lazy init on first request to avoid startup failure
-# if the model is missing).
+# if the model is missing). The ISLiMAdapter import is intentionally deferred
+# here: transformers is heavy (~30s) and only needed when the ISLiM endpoint is
+# actually called, not at backend startup.
 _adapter: Optional[ISLiMAdapter] = None
 
 
 def _get_adapter() -> ISLiMAdapter:
     global _adapter
     if _adapter is None:
+        from app.ml.adapters.islim_adapter import ISLiMAdapter, ISLiMAdapterError
         settings = get_settings()
         ckpt = settings.model_bundle_dir / "checkpoints" / "ISLiM_4Loss_best_for_10kSpamoOF.pt" if hasattr(settings, "model_bundle_dir") else None
         if ckpt is None or not ckpt.exists():

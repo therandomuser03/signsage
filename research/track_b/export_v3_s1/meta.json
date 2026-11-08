@@ -1,0 +1,235 @@
+{
+  "export_type": "s1-only",
+  "trained_on": {
+    "sessions": [
+      "S1"
+    ]
+  },
+  "label_list": [
+    "hello",
+    "thank you",
+    "please",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "you",
+    "me",
+    "where",
+    "rest"
+  ],
+  "n_classes": 11,
+  "model": "1D-CNN (cnn-v3), dropout 0.3: Conv1d(122->32->64, ReLU, Dropout) x2, AdaptiveAvgPool1d, Linear->n_classes. Trained WITH frame-level augmentation (hand-frame dropout 0-50%, scale +/-10%, rotation +/-10 deg, time-warp +/-15%).",
+  "hyperparameters": {
+    "epochs": 60,
+    "lr": 0.001,
+    "batch": 16,
+    "optimizer": "Adam",
+    "dropout": 0.3,
+    "seed": 0
+  },
+  "features": {
+    "spec": "features_v3.py / sign_features_v3.py",
+    "dim": 122,
+    "frames": 60,
+    "layout": "signsage (pose 0-32 | face 33-500 | hand slots 501-542)",
+    "normalisation": "MediaPipe Left/Right labels IGNORED. Hands assigned to two stable physical slots by temporal tracking (nearest wrist to previous frame; two hands in one frame ordered by image x, then continuity). ACTIVE slot = hand with larger total wrist travel (tie: more frames present); other = SECONDARY. Per-frame: wrist - shoulder_centre / shoulder_width; other 20 landmarks - wrist / hand_size (hand_size = ||wrist - middle fingertip||). If the active hand's mean wrist x is image-left of the shoulder midpoint, all x coords (hands + face) are mirrored about the per-frame shoulder midpoint so the active hand is right-hand-active. Missing runs <=5 frames interpolated; longer/leading/trailing missing kept as zero coords with mask=0, never normalised into shoulder space.",
+    "channels": [
+      "active hand 42",
+      "secondary hand 42",
+      "active_mask",
+      "secondary_mask",
+      "hand-to-face 32",
+      "wrist velocity 4"
+    ]
+  },
+  "extractor": {
+    "name": "@mediapipe/tasks-vision HolisticExtractor",
+    "version": "1.0.1",
+    "running_mode": "VIDEO",
+    "note": "Same options as the SignSage frontend (frontend/src/features/translate/landmarks.ts): pose numPoses=1, face numFaces=1, hands numHands=2, delegate GPU, no confidence thresholds set (MediaPipe defaults), no delegate fallback. Coordinates are NOT mirrored; only the preview is CSS-mirrored (scaleX(-1)) like the app.",
+    "options": {
+      "pose": {
+        "modelAssetPath": "assets/models/pose_landmarker_lite.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numPoses": 1
+      },
+      "face": {
+        "modelAssetPath": "assets/models/face_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numFaces": 1
+      },
+      "hands": {
+        "modelAssetPath": "assets/models/hand_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numHands": 2
+      }
+    }
+  },
+  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). Effective FPS varies per clip; the model is invariant to this via resampling. Coordinates are NOT mirrored (only the app preview is CSS-mirrored); canonicalisation mirroring is applied inside features_v3.",
+  "recommended_confidence_threshold": 0.7,
+  "threshold_note": "Calibrated on the S2 DEV set (train S1, test S2, cnn-v3, 50 clips, 10 CORE words, no rest). S2 max-softmax threshold table: 0.5 -> acc 0.6458333333333334 coverage 0.96; 0.7 -> acc 0.6756756756756757 coverage 0.74 (recommended operating point); 0.9 -> acc 0.6 coverage 0.5; argmax -> acc 0.64 coverage 100%. Stated as calibrated on S2 only; S2 was used to diagnose the handedness problem, so this is NOT a clean held-out test.",
+  "s2_dev_metrics": {
+    "acc_mean": 0.6120000000000001,
+    "acc_std": 0.04995998398718719,
+    "mf1_mean": 0.5981378033730975,
+    "mf1_std": 0.037544709406943995,
+    "pooled_acc": 0.6120000000000001,
+    "pooled_mf1": 0.5981378033730975,
+    "per_class": {
+      "hello": {
+        "precision": 0.9666666666666668,
+        "recall": 0.9199999999999999,
+        "f1": 0.9318181818181819
+      },
+      "thank you": {
+        "precision": 0.11428571428571428,
+        "recall": 0.16,
+        "f1": 0.13333333333333333
+      },
+      "please": {
+        "precision": 0.6785714285714286,
+        "recall": 1.0,
+        "f1": 0.8076923076923077
+      },
+      "yes": {
+        "precision": 0.6666666666666666,
+        "recall": 0.2,
+        "f1": 0.29761904761904767
+      },
+      "no": {
+        "precision": 0.6916666666666667,
+        "recall": 0.6,
+        "f1": 0.5796037296037296
+      },
+      "help": {
+        "precision": 0.7933333333333333,
+        "recall": 0.71,
+        "f1": 0.7361904761904763
+      },
+      "water": {
+        "precision": 0.48984126984126986,
+        "recall": 0.8400000000000001,
+        "f1": 0.6029131652661064
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.48,
+        "f1": 0.6428571428571429
+      },
+      "me": {
+        "precision": 0.9666666666666668,
+        "recall": 1.0,
+        "f1": 0.9818181818181818
+      },
+      "where": {
+        "precision": 0.21428571428571425,
+        "recall": 0.36,
+        "f1": 0.2675324675324675
+      }
+    },
+    "top10": [
+      [
+        5,
+        "thank you",
+        "where"
+      ],
+      [
+        3,
+        "yes",
+        "water"
+      ],
+      [
+        3,
+        "help",
+        "water"
+      ],
+      [
+        2,
+        "where",
+        "please"
+      ],
+      [
+        1,
+        "you",
+        "yes"
+      ],
+      [
+        1,
+        "you",
+        "water"
+      ],
+      [
+        1,
+        "you",
+        "help"
+      ],
+      [
+        1,
+        "yes",
+        "thank you"
+      ]
+    ],
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 50,
+        "coverage": 1.0,
+        "accuracy": 0.64
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 48,
+        "coverage": 0.96,
+        "accuracy": 0.6458333333333334
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 37,
+        "coverage": 0.74,
+        "accuracy": 0.6756756756756757
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 25,
+        "coverage": 0.5,
+        "accuracy": 0.6
+      }
+    ],
+    "note": "from results_v3.json (cnn-v3, train S1 test S2 dev, 5 seeds)"
+  },
+  "cpu_latency_ms_per_clip": 0.4264114860829017,
+  "golden_test_vector": {
+    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_v3_s1/golden_test_vector.npy",
+    "expected_logits": [
+      -23.835018157958984,
+      -1.950447916984558,
+      -6.454894065856934,
+      0.03805476427078247,
+      -20.275732040405273,
+      -0.7632229328155518,
+      -4.234009742736816,
+      -7.05983304977417,
+      6.756465435028076,
+      -5.849843502044678,
+      -5.626926422119141
+    ],
+    "expected_logits_labels": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where",
+      "rest"
+    ],
+    "note": "Run features_v3/sign_features_v3 on golden_test_vector.npy then the model; logits must match expected_logits (within float tolerance)."
+  }
+}

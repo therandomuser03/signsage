@@ -1,0 +1,423 @@
+{
+  "cnn-v2": {
+    "acc_mean": 0.5920000000000001,
+    "acc_std": 0.020396078054371124,
+    "mf1_mean": 0.5544409869456309,
+    "mf1_std": 0.026923606090554206,
+    "per_seed": [
+      {
+        "seed": 0,
+        "acc": 0.56,
+        "macro_f1": 0.5131313131313131
+      },
+      {
+        "seed": 1,
+        "acc": 0.6,
+        "macro_f1": 0.5705810855810857
+      },
+      {
+        "seed": 2,
+        "acc": 0.58,
+        "macro_f1": 0.5355396065922382
+      },
+      {
+        "seed": 3,
+        "acc": 0.6,
+        "macro_f1": 0.5636502386502387
+      },
+      {
+        "seed": 4,
+        "acc": 0.62,
+        "macro_f1": 0.589302690773279
+      }
+    ],
+    "pooled_acc": 0.62,
+    "pooled_macro_f1": 0.5894660894660895,
+    "per_class": {
+      "hello": {
+        "precision": 0.7142857142857143,
+        "recall": 1.0,
+        "f1": 0.8333333333333333
+      },
+      "thank you": {
+        "precision": 0.3076923076923077,
+        "recall": 0.8,
+        "f1": 0.4444444444444444
+      },
+      "please": {
+        "precision": 0.3333333333333333,
+        "recall": 0.2,
+        "f1": 0.25
+      },
+      "yes": {
+        "precision": 0.3333333333333333,
+        "recall": 0.2,
+        "f1": 0.25
+      },
+      "no": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "water": {
+        "precision": 0.5,
+        "recall": 0.6,
+        "f1": 0.5454545454545454
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.4,
+        "f1": 0.5714285714285715
+      },
+      "me": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "where": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "per_class_seed_mean": {
+      "hello": {
+        "precision": 0.7535714285714287,
+        "recall": 1.0,
+        "f1": 0.8538461538461538
+      },
+      "thank you": {
+        "precision": 0.33807525807525807,
+        "recall": 0.8,
+        "f1": 0.4738837289301686
+      },
+      "please": {
+        "precision": 0.15,
+        "recall": 0.12000000000000002,
+        "f1": 0.1308080808080808
+      },
+      "yes": {
+        "precision": 0.2833333333333333,
+        "recall": 0.2,
+        "f1": 0.2333333333333333
+      },
+      "no": {
+        "precision": 0.9428571428571428,
+        "recall": 1.0,
+        "f1": 0.9666666666666666
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 0.9199999999999999,
+        "f1": 0.9555555555555555
+      },
+      "water": {
+        "precision": 0.44071428571428567,
+        "recall": 0.56,
+        "f1": 0.4904895104895105
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.32,
+        "f1": 0.4761904761904763
+      },
+      "me": {
+        "precision": 0.9333333333333333,
+        "recall": 1.0,
+        "f1": 0.9636363636363636
+      },
+      "where": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "top10": [
+      [
+        4,
+        "where",
+        "thank you"
+      ],
+      [
+        4,
+        "please",
+        "thank you"
+      ],
+      [
+        3,
+        "yes",
+        "water"
+      ],
+      [
+        2,
+        "you",
+        "yes"
+      ],
+      [
+        2,
+        "water",
+        "hello"
+      ],
+      [
+        1,
+        "you",
+        "where"
+      ],
+      [
+        1,
+        "yes",
+        "thank you"
+      ],
+      [
+        1,
+        "where",
+        "please"
+      ],
+      [
+        1,
+        "thank you",
+        "please"
+      ]
+    ],
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 50,
+        "coverage": 1.0,
+        "accuracy": 0.62
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 49,
+        "coverage": 0.98,
+        "accuracy": 0.6122448979591837
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 44,
+        "coverage": 0.88,
+        "accuracy": 0.6590909090909091
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 33,
+        "coverage": 0.66,
+        "accuracy": 0.7575757575757576
+      }
+    ],
+    "n_test": 50
+  },
+  "logreg": {
+    "acc_mean": 0.64,
+    "acc_std": 0.012649110640673528,
+    "mf1_mean": 0.5857584812847969,
+    "mf1_std": 0.011226508312720825,
+    "per_seed": [
+      {
+        "seed": 0,
+        "acc": 0.62,
+        "macro_f1": 0.5670199683357577
+      },
+      {
+        "seed": 1,
+        "acc": 0.64,
+        "macro_f1": 0.5878010878010879
+      },
+      {
+        "seed": 2,
+        "acc": 0.66,
+        "macro_f1": 0.6023374286532182
+      },
+      {
+        "seed": 3,
+        "acc": 0.64,
+        "macro_f1": 0.5858169608169608
+      },
+      {
+        "seed": 4,
+        "acc": 0.64,
+        "macro_f1": 0.5858169608169608
+      }
+    ],
+    "pooled_acc": 0.64,
+    "pooled_macro_f1": 0.5858169608169608,
+    "per_class": {
+      "hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "thank you": {
+        "precision": 0.5,
+        "recall": 0.2,
+        "f1": 0.28571428571428575
+      },
+      "please": {
+        "precision": 0.3333333333333333,
+        "recall": 1.0,
+        "f1": 0.5
+      },
+      "yes": {
+        "precision": 0.5,
+        "recall": 0.8,
+        "f1": 0.6153846153846154
+      },
+      "no": {
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "water": {
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "f1": 0.9090909090909091
+      },
+      "you": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "me": {
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "f1": 0.9090909090909091
+      },
+      "where": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "per_class_seed_mean": {
+      "hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "thank you": {
+        "precision": 0.4333333333333333,
+        "recall": 0.2,
+        "f1": 0.27142857142857146
+      },
+      "please": {
+        "precision": 0.3531135531135531,
+        "recall": 1.0,
+        "f1": 0.5216374269005848
+      },
+      "yes": {
+        "precision": 0.5,
+        "recall": 0.8,
+        "f1": 0.6153846153846154
+      },
+      "no": {
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7420634920634921
+      },
+      "water": {
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "f1": 0.909090909090909
+      },
+      "you": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "me": {
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "f1": 0.909090909090909
+      },
+      "where": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "top10": [
+      [
+        5,
+        "where",
+        "please"
+      ],
+      [
+        4,
+        "you",
+        "yes"
+      ],
+      [
+        4,
+        "thank you",
+        "please"
+      ],
+      [
+        1,
+        "you",
+        "where"
+      ],
+      [
+        1,
+        "yes",
+        "thank you"
+      ],
+      [
+        1,
+        "no",
+        "water"
+      ],
+      [
+        1,
+        "help",
+        "please"
+      ],
+      [
+        1,
+        "help",
+        "me"
+      ]
+    ],
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 50,
+        "coverage": 1.0,
+        "accuracy": 0.64
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 48,
+        "coverage": 0.96,
+        "accuracy": 0.6458333333333334
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 41,
+        "coverage": 0.82,
+        "accuracy": 0.6341463414634146
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 29,
+        "coverage": 0.58,
+        "accuracy": 0.6551724137931034
+      }
+    ],
+    "n_test": 50
+  }
+}

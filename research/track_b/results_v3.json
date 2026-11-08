@@ -1,0 +1,550 @@
+{
+  "results": {
+    "cnn-v3": {
+      "s1_cv_acc_mean": 0.8480681818181818,
+      "s1_cv_acc_std": 0.011348727593795014,
+      "s1_cv_mf1_mean": 0.8354891774891776,
+      "s1_cv_mf1_std": 0.015998688126724774,
+      "s1_pooled_acc": 0.8625954198473282,
+      "s1_pooled_mf1": 0.8622026122026122,
+      "s2_dev_acc_mean": 0.6120000000000001,
+      "s2_dev_acc_std": 0.04995998398718719,
+      "s2_dev_mf1_mean": 0.5981378033730975,
+      "s2_dev_mf1_std": 0.037544709406943995,
+      "s2_dev_pooled_acc": 0.6120000000000001,
+      "s2_dev_pooled_mf1": 0.5981378033730975,
+      "s2_per_class": {
+        "hello": {
+          "precision": 0.9666666666666668,
+          "recall": 0.9199999999999999,
+          "f1": 0.9318181818181819
+        },
+        "thank you": {
+          "precision": 0.11428571428571428,
+          "recall": 0.16,
+          "f1": 0.13333333333333333
+        },
+        "please": {
+          "precision": 0.6785714285714286,
+          "recall": 1.0,
+          "f1": 0.8076923076923077
+        },
+        "yes": {
+          "precision": 0.6666666666666666,
+          "recall": 0.2,
+          "f1": 0.29761904761904767
+        },
+        "no": {
+          "precision": 0.6916666666666667,
+          "recall": 0.6,
+          "f1": 0.5796037296037296
+        },
+        "help": {
+          "precision": 0.7933333333333333,
+          "recall": 0.71,
+          "f1": 0.7361904761904763
+        },
+        "water": {
+          "precision": 0.48984126984126986,
+          "recall": 0.8400000000000001,
+          "f1": 0.6029131652661064
+        },
+        "you": {
+          "precision": 1.0,
+          "recall": 0.48,
+          "f1": 0.6428571428571429
+        },
+        "me": {
+          "precision": 0.9666666666666668,
+          "recall": 1.0,
+          "f1": 0.9818181818181818
+        },
+        "where": {
+          "precision": 0.21428571428571425,
+          "recall": 0.36,
+          "f1": 0.2675324675324675
+        }
+      },
+      "s2_top10": [
+        [
+          5,
+          "thank you",
+          "where"
+        ],
+        [
+          3,
+          "yes",
+          "water"
+        ],
+        [
+          3,
+          "help",
+          "water"
+        ],
+        [
+          2,
+          "where",
+          "please"
+        ],
+        [
+          1,
+          "you",
+          "yes"
+        ],
+        [
+          1,
+          "you",
+          "water"
+        ],
+        [
+          1,
+          "you",
+          "help"
+        ],
+        [
+          1,
+          "yes",
+          "thank you"
+        ]
+      ],
+      "s2_thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 50,
+          "coverage": 1.0,
+          "accuracy": 0.64
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 48,
+          "coverage": 0.96,
+          "accuracy": 0.6458333333333334
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 37,
+          "coverage": 0.74,
+          "accuracy": 0.6756756756756757
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 25,
+          "coverage": 0.5,
+          "accuracy": 0.6
+        }
+      ],
+      "n_s1": 131,
+      "n_s2": 50
+    },
+    "logreg": {
+      "s1_cv_acc_mean": 0.7742424242424243,
+      "s1_cv_acc_std": 0.004925699085248771,
+      "s1_cv_mf1_mean": 0.7403276925095106,
+      "s1_cv_mf1_std": 0.005470775024492608,
+      "s1_pooled_acc": 0.7633587786259542,
+      "s1_pooled_mf1": 0.7653829350272038,
+      "s2_dev_acc_mean": 0.524,
+      "s2_dev_acc_std": 0.023323807579381222,
+      "s2_dev_mf1_mean": 0.49726051726051723,
+      "s2_dev_mf1_std": 0.02581150323894004,
+      "s2_dev_pooled_acc": 0.524,
+      "s2_dev_pooled_mf1": 0.49726051726051723,
+      "s2_per_class": {
+        "hello": {
+          "precision": 1.0,
+          "recall": 0.4,
+          "f1": 0.5714285714285715
+        },
+        "thank you": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "please": {
+          "precision": 0.5583333333333333,
+          "recall": 1.0,
+          "f1": 0.7157509157509158
+        },
+        "yes": {
+          "precision": 0.6833333333333333,
+          "recall": 0.52,
+          "f1": 0.5888888888888888
+        },
+        "no": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "help": {
+          "precision": 0.6533333333333332,
+          "recall": 0.76,
+          "f1": 0.7018181818181817
+        },
+        "water": {
+          "precision": 0.3454545454545454,
+          "recall": 1.0,
+          "f1": 0.5133333333333333
+        },
+        "you": {
+          "precision": 1.0,
+          "recall": 0.36,
+          "f1": 0.523809523809524
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "where": {
+          "precision": 0.32380952380952377,
+          "recall": 0.4,
+          "f1": 0.35757575757575755
+        }
+      },
+      "s2_top10": [
+        [
+          5,
+          "no",
+          "water"
+        ],
+        [
+          4,
+          "thank you",
+          "where"
+        ],
+        [
+          2,
+          "you",
+          "help"
+        ],
+        [
+          2,
+          "where",
+          "please"
+        ],
+        [
+          1,
+          "you",
+          "yes"
+        ],
+        [
+          1,
+          "yes",
+          "water"
+        ],
+        [
+          1,
+          "yes",
+          "thank you"
+        ],
+        [
+          1,
+          "where",
+          "no"
+        ],
+        [
+          1,
+          "help",
+          "please"
+        ],
+        [
+          1,
+          "hello",
+          "water"
+        ]
+      ],
+      "s2_thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 50,
+          "coverage": 1.0,
+          "accuracy": 0.54
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 40,
+          "coverage": 0.8,
+          "accuracy": 0.6
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 31,
+          "coverage": 0.62,
+          "accuracy": 0.5806451612903226
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 24,
+          "coverage": 0.48,
+          "accuracy": 0.5833333333333334
+        }
+      ],
+      "n_s1": 131,
+      "n_s2": 50
+    }
+  },
+  "mirror": {
+    "bad": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "doctor": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "father": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "food": {
+      "s1_clips": 12,
+      "s1_mirrored": 2,
+      "s1_frac": 0.16666666666666666,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "friend": {
+      "s1_clips": 12,
+      "s1_mirrored": 3,
+      "s1_frac": 0.25,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "good": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "hello": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    },
+    "help": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 5,
+      "s2_mirrored": 3,
+      "s2_frac": 0.6
+    },
+    "hospital": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "how": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "market": {
+      "s1_clips": 12,
+      "s1_mirrored": 5,
+      "s1_frac": 0.4166666666666667,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "me": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    },
+    "medicine": {
+      "s1_clips": 12,
+      "s1_mirrored": 10,
+      "s1_frac": 0.8333333333333334,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "morning": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "mother": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "name": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "night": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "no": {
+      "s1_clips": 12,
+      "s1_mirrored": 2,
+      "s1_frac": 0.16666666666666666,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    },
+    "please": {
+      "s1_clips": 11,
+      "s1_mirrored": 11,
+      "s1_frac": 1.0,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    },
+    "rest": {
+      "s1_clips": 12,
+      "s1_mirrored": 1,
+      "s1_frac": 0.08333333333333333,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "school": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "sorry": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "thank you": {
+      "s1_clips": 12,
+      "s1_mirrored": 11,
+      "s1_frac": 0.9166666666666666,
+      "s2_clips": 5,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "today": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "tomorrow": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 0,
+      "s2_mirrored": 0,
+      "s2_frac": 0.0
+    },
+    "water": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    },
+    "where": {
+      "s1_clips": 12,
+      "s1_mirrored": 5,
+      "s1_frac": 0.4166666666666667,
+      "s2_clips": 5,
+      "s2_mirrored": 4,
+      "s2_frac": 0.8
+    },
+    "yes": {
+      "s1_clips": 12,
+      "s1_mirrored": 12,
+      "s1_frac": 1.0,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    },
+    "you": {
+      "s1_clips": 12,
+      "s1_mirrored": 6,
+      "s1_frac": 0.5,
+      "s2_clips": 5,
+      "s2_mirrored": 5,
+      "s2_frac": 1.0
+    }
+  },
+  "vocabs": {
+    "train": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where",
+      "rest"
+    ],
+    "s2_words": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where"
+    ]
+  },
+  "n_s1": 131,
+  "n_s2": 50,
+  "note": "PRELIMINARY, OPTIMISTIC. S2 is a DEV SET (used to diagnose handedness), not a clean test."
+}

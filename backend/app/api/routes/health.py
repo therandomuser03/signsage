@@ -25,4 +25,5 @@ def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     return HealthResponse(
         status="ok", model_promoted=settings.model_promoted,
         model_bundle_found=found, model_loaded=is_loaded(),
+        word_recognition_enabled=settings.word_mode_enabled,
     )

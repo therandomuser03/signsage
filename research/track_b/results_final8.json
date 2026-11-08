@@ -1,0 +1,171 @@
+{
+  "eight_class": {
+    "acc_mean": 0.9349999999999999,
+    "acc_std": 0.012247448713915848,
+    "mf1_mean": 0.9330808080808082,
+    "mf1_std": 0.012767517939492838,
+    "per_seed": [
+      {
+        "seed": 0,
+        "acc": 0.95,
+        "macro_f1": 0.9494949494949495
+      },
+      {
+        "seed": 1,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 2,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 3,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 4,
+        "acc": 0.95,
+        "macro_f1": 0.9479166666666666
+      }
+    ],
+    "pooled_acc": 0.9349999999999999,
+    "pooled_macro_f1": 0.9330808080808082,
+    "per_class": {
+      "hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "me": {
+        "precision": 0.9666666666666668,
+        "recall": 1.0,
+        "f1": 0.9818181818181818
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.76,
+        "f1": 0.861111111111111
+      },
+      "yes": {
+        "precision": 0.8095238095238095,
+        "recall": 1.0,
+        "f1": 0.8939393939393939
+      },
+      "no": {
+        "precision": 0.8285714285714286,
+        "recall": 1.0,
+        "f1": 0.9
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9777777777777779
+      },
+      "water": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "where": {
+        "precision": 1.0,
+        "recall": 0.76,
+        "f1": 0.85
+      }
+    },
+    "top10": [
+      [
+        1,
+        "you",
+        "yes"
+      ],
+      [
+        1,
+        "help",
+        "me"
+      ]
+    ],
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 40,
+        "coverage": 1.0,
+        "accuracy": 0.95
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 39,
+        "coverage": 0.975,
+        "accuracy": 0.9487179487179487
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 36,
+        "coverage": 0.9,
+        "accuracy": 0.9722222222222222
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 33,
+        "coverage": 0.825,
+        "accuracy": 0.9696969696969697
+      }
+    ],
+    "n_test": 40
+  },
+  "ten_class_comparison": {
+    "acc_mean": 0.9400000000000001,
+    "acc_std": 0.012247448713915848,
+    "per_seed": [
+      0.925,
+      0.95,
+      0.95,
+      0.925,
+      0.95
+    ],
+    "n_test": 40
+  },
+  "vocab": {
+    "train8": [
+      "hello",
+      "me",
+      "you",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "where"
+    ],
+    "rest": "rest",
+    "excluded": [
+      "thank you",
+      "please"
+    ],
+    "train9": [
+      "hello",
+      "me",
+      "you",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "where",
+      "rest"
+    ],
+    "test8": [
+      "hello",
+      "me",
+      "you",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "where"
+    ]
+  },
+  "n_train": 148,
+  "n_test": 40,
+  "note": "VOCABULARY CHOSEN AFTER SEEING S3: slightly optimistic. Threshold kept at 0.7 (not re-selected from S3)."
+}

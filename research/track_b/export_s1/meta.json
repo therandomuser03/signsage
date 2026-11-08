@@ -1,0 +1,240 @@
+{
+  "export_type": "s1-only",
+  "trained_on": {
+    "sessions": [
+      "S1"
+    ]
+  },
+  "label_list": [
+    "hello",
+    "thank you",
+    "please",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "you",
+    "me",
+    "where",
+    "rest"
+  ],
+  "n_classes": 11,
+  "model": "1D-CNN (cnn-v2), dropout 0.3, Conv1d(122->32->64, AdaptiveAvgPool, Linear->n_classes)",
+  "hyperparameters": {
+    "epochs": 60,
+    "lr": 0.001,
+    "batch": 16,
+    "optimizer": "Adam",
+    "dropout": 0.3,
+    "augmentation": "none",
+    "seed": 0
+  },
+  "features": {
+    "spec": "features_v2.py / sign_features_v2.py",
+    "dim": 122,
+    "frames": 60,
+    "layout": "signsage",
+    "normalisation": "per-frame shoulder-centre + shoulder-width; per hand: wrist relative to shoulder centre / shoulder width; other 20 landmarks relative to wrist / hand size (hand_size = ||wrist - middle fingertip||); hand-to-face vectors scaled by shoulder width. Missing runs <=5 frames interpolated; longer/leading/trailing missing kept as zero coordinates with mask=0 and never normalised into shoulder space.",
+    "channels": [
+      "left hand 42 (wrist-rel-shoulder + 20 landmarks-rel-wrist)",
+      "right hand 42 (same)",
+      "left_mask, right_mask",
+      "hand-to-face 32 (L/R x wrist/index-tip x nose/chin/mouth/forehead)",
+      "wrist velocity 4"
+    ]
+  },
+  "extractor": {
+    "name": "@mediapipe/tasks-vision HolisticExtractor",
+    "version": "1.0.1",
+    "running_mode": "VIDEO",
+    "note": "Same options as the SignSage frontend (frontend/src/features/translate/landmarks.ts): pose numPoses=1, face numFaces=1, hands numHands=2, delegate GPU, no confidence thresholds set (MediaPipe defaults), no delegate fallback. Coordinates are NOT mirrored; only the preview is CSS-mirrored (scaleX(-1)) like the app.",
+    "options": {
+      "pose": {
+        "modelAssetPath": "assets/models/pose_landmarker_lite.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numPoses": 1
+      },
+      "face": {
+        "modelAssetPath": "assets/models/face_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numFaces": 1
+      },
+      "hands": {
+        "modelAssetPath": "assets/models/hand_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numHands": 2
+      }
+    }
+  },
+  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). Effective FPS varies per clip (S1 ~5-12 fps, S2 ~5-12 fps); the model is invariant to this because of resampling. Coordinates are NOT mirrored (only the app preview is CSS-mirrored).",
+  "recommended_confidence_threshold": 0.7,
+  "threshold_note": "Calibrated on the S2 cross-session test (train S1, test S2, cnn-v2, 50 clips, 10 CORE words, no rest). S2 max-softmax threshold table: 0.5 -> acc 0.612 coverage 98.0%; 0.7 -> acc 0.659 coverage 88.0% (recommended operating point); 0.9 -> acc 0.758 coverage 66.0%; argmax -> acc 0.620 coverage 100%. Stated as calibrated on S2 only; not validated on held-out data.",
+  "s2_test_metrics": {
+    "acc_mean": 0.5920000000000001,
+    "acc_std": 0.020396078054371124,
+    "macroF1_mean": 0.5544409869456309,
+    "macroF1_std": 0.026923606090554206,
+    "pooled_acc": 0.62,
+    "pooled_macro_f1": 0.5894660894660895,
+    "per_class": {
+      "hello": {
+        "precision": 0.7142857142857143,
+        "recall": 1.0,
+        "f1": 0.8333333333333333
+      },
+      "thank you": {
+        "precision": 0.3076923076923077,
+        "recall": 0.8,
+        "f1": 0.4444444444444444
+      },
+      "please": {
+        "precision": 0.3333333333333333,
+        "recall": 0.2,
+        "f1": 0.25
+      },
+      "yes": {
+        "precision": 0.3333333333333333,
+        "recall": 0.2,
+        "f1": 0.25
+      },
+      "no": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "water": {
+        "precision": 0.5,
+        "recall": 0.6,
+        "f1": 0.5454545454545454
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.4,
+        "f1": 0.5714285714285715
+      },
+      "me": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "where": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "top10": [
+      [
+        4,
+        "where",
+        "thank you"
+      ],
+      [
+        4,
+        "please",
+        "thank you"
+      ],
+      [
+        3,
+        "yes",
+        "water"
+      ],
+      [
+        2,
+        "you",
+        "yes"
+      ],
+      [
+        2,
+        "water",
+        "hello"
+      ],
+      [
+        1,
+        "you",
+        "where"
+      ],
+      [
+        1,
+        "yes",
+        "thank you"
+      ],
+      [
+        1,
+        "where",
+        "please"
+      ],
+      [
+        1,
+        "thank you",
+        "please"
+      ]
+    ],
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 50,
+        "coverage": 1.0,
+        "accuracy": 0.62
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 49,
+        "coverage": 0.98,
+        "accuracy": 0.6122448979591837
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 44,
+        "coverage": 0.88,
+        "accuracy": 0.6590909090909091
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 33,
+        "coverage": 0.66,
+        "accuracy": 0.7575757575757576
+      }
+    ],
+    "note": "from results_s1train_s2test.json (cnn-v2, train S1 test S2, 5 seeds)"
+  },
+  "cpu_latency_ms_per_clip": 0.3531523461626314,
+  "golden_test_vector": {
+    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_s1/golden_test_vector.npy",
+    "expected_logits": [
+      -14.430534362792969,
+      -5.720519542694092,
+      -17.81960678100586,
+      -0.08157172799110413,
+      -14.43958854675293,
+      -4.532290935516357,
+      -6.138669967651367,
+      -7.484612464904785,
+      4.440968990325928,
+      0.16893735527992249,
+      -7.297459125518799
+    ],
+    "expected_logits_labels": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where",
+      "rest"
+    ],
+    "note": "Run features_v2/sign_features_v2 on golden_test_vector.npy then the model; logits must match expected_logits (within float tolerance)."
+  }
+}

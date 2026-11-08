@@ -128,7 +128,32 @@ class Settings(BaseSettings):
     # Optional override; defaults to the packaged app/data/sign_vocabulary.json.
     avatar_vocabulary_path: Optional[str] = None
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            try:
+                parsed = json.loads(s)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                return [str(o).strip() for o in parsed if str(o).strip()]
+            if isinstance(parsed, str) and parsed.strip():
+                return [parsed.strip()]
+            return [o.strip() for o in s.split(",") if o.strip()]
+        return v
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_publishable_key)
     # --- Model labelling / WebSocket limits -----------------------------------
+    # Disabled by default; never enabled in production via render.yaml.
+    word_mode_enabled: bool = False
+    word_model_dir: Optional[str] = "models/word_v3"
+    word_debug: bool = False
     model_version: str = "signsage-s2t"
     max_message_bytes: int = 262144  # one 543x3 frame is ~30 KB of JSON
 

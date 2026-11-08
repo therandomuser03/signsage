@@ -1,0 +1,334 @@
+{
+  "results": {
+    "cnn-v3": {
+      "acc_mean": 0.8560000000000001,
+      "acc_std": 0.03878143885933062,
+      "mf1_mean": 0.854169164169164,
+      "mf1_std": 0.04239379100016163,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.86,
+          "macro_f1": 0.8607808857808857
+        },
+        {
+          "seed": 1,
+          "acc": 0.88,
+          "macro_f1": 0.8797979797979798
+        },
+        {
+          "seed": 2,
+          "acc": 0.88,
+          "macro_f1": 0.8797979797979798
+        },
+        {
+          "seed": 3,
+          "acc": 0.78,
+          "macro_f1": 0.7706709956709956
+        },
+        {
+          "seed": 4,
+          "acc": 0.88,
+          "macro_f1": 0.8797979797979798
+        }
+      ],
+      "pooled_acc": 0.8560000000000001,
+      "pooled_macro_f1": 0.854169164169164,
+      "per_class": {
+        "hello": {
+          "precision": 0.9111111111111111,
+          "recall": 1.0,
+          "f1": 0.9428571428571428
+        },
+        "thank you": {
+          "precision": 0.4428571428571429,
+          "recall": 0.64,
+          "f1": 0.523076923076923
+        },
+        "please": {
+          "precision": 0.5,
+          "recall": 0.4,
+          "f1": 0.4444444444444445
+        },
+        "yes": {
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "f1": 0.909090909090909
+        },
+        "no": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "water": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "you": {
+          "precision": 1.0,
+          "recall": 0.8,
+          "f1": 0.888888888888889
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "where": {
+          "precision": 1.0,
+          "recall": 0.7200000000000001,
+          "f1": 0.8333333333333334
+        }
+      },
+      "top10": [
+        [
+          3,
+          "please",
+          "thank you"
+        ],
+        [
+          1,
+          "you",
+          "yes"
+        ],
+        [
+          1,
+          "where",
+          "thank you"
+        ],
+        [
+          1,
+          "where",
+          "please"
+        ],
+        [
+          1,
+          "thank you",
+          "please"
+        ]
+      ],
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 50,
+          "coverage": 1.0,
+          "accuracy": 0.86
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 48,
+          "coverage": 0.96,
+          "accuracy": 0.875
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 41,
+          "coverage": 0.82,
+          "accuracy": 0.8780487804878049
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 32,
+          "coverage": 0.64,
+          "accuracy": 0.96875
+        }
+      ],
+      "n_test": 50
+    },
+    "logreg": {
+      "acc_mean": 0.744,
+      "acc_std": 0.008000000000000007,
+      "mf1_mean": 0.7307503607503608,
+      "mf1_std": 0.009682539682539694,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.74,
+          "macro_f1": 0.725909090909091
+        },
+        {
+          "seed": 1,
+          "acc": 0.74,
+          "macro_f1": 0.725909090909091
+        },
+        {
+          "seed": 2,
+          "acc": 0.74,
+          "macro_f1": 0.725909090909091
+        },
+        {
+          "seed": 3,
+          "acc": 0.74,
+          "macro_f1": 0.725909090909091
+        },
+        {
+          "seed": 4,
+          "acc": 0.76,
+          "macro_f1": 0.7501154401154402
+        }
+      ],
+      "pooled_acc": 0.744,
+      "pooled_macro_f1": 0.7307503607503608,
+      "per_class": {
+        "hello": {
+          "precision": 0.5111111111111111,
+          "recall": 1.0,
+          "f1": 0.6761904761904762
+        },
+        "thank you": {
+          "precision": 0.36666666666666664,
+          "recall": 0.24000000000000005,
+          "f1": 0.28888888888888886
+        },
+        "please": {
+          "precision": 0.6666666666666666,
+          "recall": 0.4,
+          "f1": 0.5
+        },
+        "yes": {
+          "precision": 0.8,
+          "recall": 0.8,
+          "f1": 0.8000000000000002
+        },
+        "no": {
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "f1": 0.909090909090909
+        },
+        "help": {
+          "precision": 0.8,
+          "recall": 0.8,
+          "f1": 0.8000000000000002
+        },
+        "water": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "you": {
+          "precision": 0.75,
+          "recall": 0.6,
+          "f1": 0.6666666666666665
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "where": {
+          "precision": 0.75,
+          "recall": 0.6,
+          "f1": 0.6666666666666665
+        }
+      },
+      "top10": [
+        [
+          4,
+          "thank you",
+          "hello"
+        ],
+        [
+          2,
+          "please",
+          "thank you"
+        ],
+        [
+          1,
+          "you",
+          "yes"
+        ],
+        [
+          1,
+          "you",
+          "help"
+        ],
+        [
+          1,
+          "yes",
+          "you"
+        ],
+        [
+          1,
+          "where",
+          "please"
+        ],
+        [
+          1,
+          "where",
+          "no"
+        ],
+        [
+          1,
+          "please",
+          "hello"
+        ],
+        [
+          1,
+          "help",
+          "where"
+        ]
+      ],
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 50,
+          "coverage": 1.0,
+          "accuracy": 0.74
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 49,
+          "coverage": 0.98,
+          "accuracy": 0.7551020408163265
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 41,
+          "coverage": 0.82,
+          "accuracy": 0.8536585365853658
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 34,
+          "coverage": 0.68,
+          "accuracy": 0.8823529411764706
+        }
+      ],
+      "n_test": 50
+    }
+  },
+  "train_labels": [
+    "hello",
+    "thank you",
+    "please",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "you",
+    "me",
+    "where",
+    "rest"
+  ],
+  "test_words": [
+    "hello",
+    "thank you",
+    "please",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "you",
+    "me",
+    "where"
+  ],
+  "n_train": 181,
+  "n_test": 50,
+  "note": "CLEAN HELD-OUT TEST on S3. Train S1+S2 only. S3 never used for tuning."
+}

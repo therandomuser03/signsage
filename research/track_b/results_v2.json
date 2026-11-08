@@ -1,0 +1,2021 @@
+{
+  "summary": {
+    "cnn-v2 CORE-10": {
+      "acc_mean": 0.8939772727272727,
+      "acc_std": 0.013054944986992752,
+      "mf1_mean": 0.8842164502164502,
+      "mf1_std": 0.015952920747180105,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.8933712121212121,
+          "macro_f1": 0.8798268398268398
+        },
+        {
+          "seed": 1,
+          "acc": 0.8691287878787879,
+          "macro_f1": 0.854978354978355
+        },
+        {
+          "seed": 2,
+          "acc": 0.9054924242424243,
+          "macro_f1": 0.8986147186147185
+        },
+        {
+          "seed": 3,
+          "acc": 0.8994318181818182,
+          "macro_f1": 0.892077922077922
+        },
+        {
+          "seed": 4,
+          "acc": 0.9024621212121213,
+          "macro_f1": 0.8955844155844155
+        }
+      ]
+    },
+    "logreg CORE-10": {
+      "acc_mean": 0.8216666666666667,
+      "acc_std": 0.0036363636363636155,
+      "mf1_mean": 0.8006060606060605,
+      "mf1_std": 0.0022310127665324648,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.8143939393939394,
+          "macro_f1": 0.7967965367965368
+        },
+        {
+          "seed": 1,
+          "acc": 0.8234848484848485,
+          "macro_f1": 0.8002597402597402
+        },
+        {
+          "seed": 2,
+          "acc": 0.8234848484848485,
+          "macro_f1": 0.8028571428571428
+        },
+        {
+          "seed": 3,
+          "acc": 0.8234848484848485,
+          "macro_f1": 0.8028571428571428
+        },
+        {
+          "seed": 4,
+          "acc": 0.8234848484848485,
+          "macro_f1": 0.8002597402597402
+        }
+      ]
+    },
+    "cnn-v1 CORE-10": {
+      "acc_mean": 0.6984469696969697,
+      "acc_std": 0.02247377565711874,
+      "mf1_mean": 0.6629164370982552,
+      "mf1_std": 0.026534476389635048,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.6833333333333332,
+          "macro_f1": 0.636136691591237
+        },
+        {
+          "seed": 1,
+          "acc": 0.6892045454545453,
+          "macro_f1": 0.6527744982290437
+        },
+        {
+          "seed": 2,
+          "acc": 0.7378787878787879,
+          "macro_f1": 0.7090476190476191
+        },
+        {
+          "seed": 3,
+          "acc": 0.7073863636363636,
+          "macro_f1": 0.6745887445887445
+        },
+        {
+          "seed": 4,
+          "acc": 0.6744318181818182,
+          "macro_f1": 0.6420346320346321
+        }
+      ]
+    },
+    "cnn-v2 CORE-9": {
+      "acc_mean": 0.9235402298850574,
+      "acc_std": 0.00396803185305938,
+      "mf1_mean": 0.9180285714285714,
+      "mf1_std": 0.00412696459091836,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.9264367816091953,
+          "macro_f1": 0.922
+        },
+        {
+          "seed": 1,
+          "acc": 0.9195402298850575,
+          "macro_f1": 0.9151428571428571
+        },
+        {
+          "seed": 2,
+          "acc": 0.9295402298850576,
+          "macro_f1": 0.924
+        },
+        {
+          "seed": 3,
+          "acc": 0.9228735632183908,
+          "macro_f1": 0.915
+        },
+        {
+          "seed": 4,
+          "acc": 0.9193103448275863,
+          "macro_f1": 0.914
+        }
+      ]
+    },
+    "logreg CORE-9": {
+      "acc_mean": 0.8605977011494252,
+      "acc_std": 0.005796751268956108,
+      "mf1_mean": 0.8466190476190476,
+      "mf1_std": 0.004102098351375089,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.8626436781609195,
+          "macro_f1": 0.8488095238095239
+        },
+        {
+          "seed": 1,
+          "acc": 0.8693103448275862,
+          "macro_f1": 0.8536190476190477
+        },
+        {
+          "seed": 2,
+          "acc": 0.8559770114942529,
+          "macro_f1": 0.8429523809523809
+        },
+        {
+          "seed": 3,
+          "acc": 0.8526436781609196,
+          "macro_f1": 0.8429523809523809
+        },
+        {
+          "seed": 4,
+          "acc": 0.8624137931034482,
+          "macro_f1": 0.8447619047619048
+        }
+      ]
+    },
+    "cnn-v1 CORE-9": {
+      "acc_mean": 0.8102758620689654,
+      "acc_std": 0.025790255338891826,
+      "mf1_mean": 0.7889619047619048,
+      "mf1_std": 0.027986738031948847,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.8457471264367816,
+          "macro_f1": 0.8207619047619046
+        },
+        {
+          "seed": 1,
+          "acc": 0.7824137931034482,
+          "macro_f1": 0.7603809523809524
+        },
+        {
+          "seed": 2,
+          "acc": 0.822183908045977,
+          "macro_f1": 0.8057619047619047
+        },
+        {
+          "seed": 3,
+          "acc": 0.7786206896551724,
+          "macro_f1": 0.7506190476190475
+        },
+        {
+          "seed": 4,
+          "acc": 0.8224137931034482,
+          "macro_f1": 0.8072857142857142
+        }
+      ]
+    },
+    "cnn-v2 FULL": {
+      "acc_mean": 0.8985565356856455,
+      "acc_std": 0.004798133905530817,
+      "mf1_mean": 0.8911330049261084,
+      "mf1_std": 0.00490181200435221,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.9008553862603581,
+          "macro_f1": 0.8955993431855502
+        },
+        {
+          "seed": 1,
+          "acc": 0.8973269179363808,
+          "macro_f1": 0.8902298850574712
+        },
+        {
+          "seed": 2,
+          "acc": 0.8939855653568565,
+          "macro_f1": 0.8854022988505748
+        },
+        {
+          "seed": 3,
+          "acc": 0.9066827051590483,
+          "macro_f1": 0.8978817733990148
+        },
+        {
+          "seed": 4,
+          "acc": 0.8939321037155841,
+          "macro_f1": 0.886551724137931
+        }
+      ]
+    },
+    "logreg FULL": {
+      "acc_mean": 0.8160010692328254,
+      "acc_std": 0.005211854735059564,
+      "mf1_mean": 0.7975982484948001,
+      "mf1_std": 0.0057449297545577255,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.8100240577385727,
+          "macro_f1": 0.7900328407224959
+        },
+        {
+          "seed": 1,
+          "acc": 0.8203688853247794,
+          "macro_f1": 0.800591133004926
+        },
+        {
+          "seed": 2,
+          "acc": 0.8123229083132852,
+          "macro_f1": 0.7927312534209086
+        },
+        {
+          "seed": 3,
+          "acc": 0.8238171611868484,
+          "macro_f1": 0.8062287903667216
+        },
+        {
+          "seed": 4,
+          "acc": 0.8134723336006415,
+          "macro_f1": 0.798407224958949
+        }
+      ]
+    },
+    "cnn-v1 FULL": {
+      "acc_mean": 0.7673295910184443,
+      "acc_std": 0.030042652176663895,
+      "mf1_mean": 0.746381250932975,
+      "mf1_std": 0.029487966012399808,
+      "per_seed": [
+        {
+          "seed": 0,
+          "acc": 0.8075380914194067,
+          "macro_f1": 0.7876518883415435
+        },
+        {
+          "seed": 1,
+          "acc": 0.7846297781341887,
+          "macro_f1": 0.763087027914614
+        },
+        {
+          "seed": 2,
+          "acc": 0.7708901363271852,
+          "macro_f1": 0.7500985221674877
+        },
+        {
+          "seed": 3,
+          "acc": 0.7557604918470998,
+          "macro_f1": 0.7305090311986865
+        },
+        {
+          "seed": 4,
+          "acc": 0.7178294573643411,
+          "macro_f1": 0.7005597850425437
+        }
+      ]
+    }
+  },
+  "pooled": {
+    "cnn-v2 CORE-10": {
+      "acc": 0.9007633587786259,
+      "macro_f1": 0.8987190894305518,
+      "baseline": 0.0916030534351145,
+      "per_class": {
+        "hello": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.888888888888889
+        },
+        "thank you": {
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727272
+        },
+        "please": {
+          "precision": 0.8333333333333334,
+          "recall": 0.9090909090909091,
+          "f1": 0.8695652173913043
+        },
+        "yes": {
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923
+        },
+        "no": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "water": {
+          "precision": 0.7857142857142857,
+          "recall": 0.9166666666666666,
+          "f1": 0.8461538461538461
+        },
+        "you": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "where": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "top10": [
+        [
+          2,
+          "you",
+          "yes"
+        ],
+        [
+          2,
+          "no",
+          "hello"
+        ],
+        [
+          2,
+          "thank you",
+          "please"
+        ],
+        [
+          1,
+          "where",
+          "thank you"
+        ],
+        [
+          1,
+          "you",
+          "water"
+        ],
+        [
+          1,
+          "water",
+          "hello"
+        ],
+        [
+          1,
+          "no",
+          "water"
+        ],
+        [
+          1,
+          "please",
+          "thank you"
+        ],
+        [
+          1,
+          "thank you",
+          "where"
+        ],
+        [
+          1,
+          "thank you",
+          "water"
+        ]
+      ],
+      "n": 131,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 655,
+          "coverage": 1.0,
+          "accuracy": 0.8931297709923665,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 640,
+          "coverage": 0.9770992366412213,
+          "accuracy": 0.8984375,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 615,
+          "coverage": 0.9389312977099237,
+          "accuracy": 0.9138211382113821,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 525,
+          "coverage": 0.8015267175572519,
+          "accuracy": 0.9447619047619048,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "logreg CORE-10": {
+      "acc": 0.816793893129771,
+      "macro_f1": 0.8105140358104787,
+      "baseline": 0.0916030534351145,
+      "per_class": {
+        "hello": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.888888888888889
+        },
+        "thank you": {
+          "precision": 0.7,
+          "recall": 0.5833333333333334,
+          "f1": 0.6363636363636365
+        },
+        "please": {
+          "precision": 0.75,
+          "recall": 0.8181818181818182,
+          "f1": 0.7826086956521738
+        },
+        "yes": {
+          "precision": 0.75,
+          "recall": 1.0,
+          "f1": 0.8571428571428571
+        },
+        "no": {
+          "precision": 0.75,
+          "recall": 0.75,
+          "f1": 0.75
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "water": {
+          "precision": 0.5714285714285714,
+          "recall": 0.6666666666666666,
+          "f1": 0.6153846153846153
+        },
+        "you": {
+          "precision": 0.8333333333333334,
+          "recall": 0.4166666666666667,
+          "f1": 0.5555555555555556
+        },
+        "me": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "where": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "top10": [
+        [
+          4,
+          "you",
+          "water"
+        ],
+        [
+          3,
+          "thank you",
+          "please"
+        ],
+        [
+          2,
+          "you",
+          "yes"
+        ],
+        [
+          2,
+          "please",
+          "thank you"
+        ],
+        [
+          1,
+          "where",
+          "thank you"
+        ],
+        [
+          1,
+          "me",
+          "no"
+        ],
+        [
+          1,
+          "you",
+          "no"
+        ],
+        [
+          1,
+          "water",
+          "you"
+        ],
+        [
+          1,
+          "water",
+          "no"
+        ],
+        [
+          1,
+          "water",
+          "yes"
+        ]
+      ],
+      "n": 131,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 655,
+          "coverage": 1.0,
+          "accuracy": 0.815267175572519,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 645,
+          "coverage": 0.9847328244274809,
+          "accuracy": 0.827906976744186,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 606,
+          "coverage": 0.9251908396946565,
+          "accuracy": 0.8448844884488449,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 518,
+          "coverage": 0.7908396946564885,
+          "accuracy": 0.8957528957528957,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "cnn-v1 CORE-10": {
+      "acc": 0.6946564885496184,
+      "macro_f1": 0.6673034401060931,
+      "baseline": 0.0916030534351145,
+      "per_class": {
+        "hello": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "thank you": {
+          "precision": 0.6,
+          "recall": 0.25,
+          "f1": 0.35294117647058826
+        },
+        "please": {
+          "precision": 0.6875,
+          "recall": 1.0,
+          "f1": 0.8148148148148148
+        },
+        "yes": {
+          "precision": 0.4230769230769231,
+          "recall": 0.9166666666666666,
+          "f1": 0.5789473684210527
+        },
+        "no": {
+          "precision": 0.7777777777777778,
+          "recall": 0.5833333333333334,
+          "f1": 0.6666666666666666
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571
+        },
+        "water": {
+          "precision": 0.5,
+          "recall": 0.4166666666666667,
+          "f1": 0.45454545454545453
+        },
+        "you": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "me": {
+          "precision": 0.6875,
+          "recall": 0.9166666666666666,
+          "f1": 0.7857142857142857
+        },
+        "where": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "rest": {
+          "precision": 0.9230769230769231,
+          "recall": 1.0,
+          "f1": 0.9600000000000001
+        }
+      },
+      "top10": [
+        [
+          6,
+          "you",
+          "yes"
+        ],
+        [
+          4,
+          "thank you",
+          "please"
+        ],
+        [
+          3,
+          "you",
+          "water"
+        ],
+        [
+          3,
+          "water",
+          "you"
+        ],
+        [
+          3,
+          "water",
+          "yes"
+        ],
+        [
+          2,
+          "you",
+          "no"
+        ],
+        [
+          2,
+          "no",
+          "water"
+        ],
+        [
+          2,
+          "no",
+          "yes"
+        ],
+        [
+          2,
+          "thank you",
+          "me"
+        ],
+        [
+          2,
+          "thank you",
+          "yes"
+        ]
+      ],
+      "n": 131,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 655,
+          "coverage": 1.0,
+          "accuracy": 0.6916030534351145,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 522,
+          "coverage": 0.7969465648854962,
+          "accuracy": 0.7816091954022989,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 393,
+          "coverage": 0.6,
+          "accuracy": 0.8854961832061069,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 279,
+          "coverage": 0.4259541984732824,
+          "accuracy": 0.956989247311828,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "cnn-v2 CORE-9": {
+      "acc": 0.907563025210084,
+      "macro_f1": 0.9064312064746847,
+      "baseline": 0.10084033613445378,
+      "per_class": {
+        "hello": {
+          "precision": 0.75,
+          "recall": 1.0,
+          "f1": 0.8571428571428571
+        },
+        "thank you": {
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727272
+        },
+        "please": {
+          "precision": 0.8333333333333334,
+          "recall": 0.9090909090909091,
+          "f1": 0.8695652173913043
+        },
+        "yes": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "no": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "water": {
+          "precision": 0.8461538461538461,
+          "recall": 0.9166666666666666,
+          "f1": 0.8799999999999999
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "where": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "top10": [
+        [
+          2,
+          "no",
+          "hello"
+        ],
+        [
+          2,
+          "thank you",
+          "please"
+        ],
+        [
+          1,
+          "where",
+          "thank you"
+        ],
+        [
+          1,
+          "water",
+          "hello"
+        ],
+        [
+          1,
+          "help",
+          "hello"
+        ],
+        [
+          1,
+          "no",
+          "water"
+        ],
+        [
+          1,
+          "please",
+          "thank you"
+        ],
+        [
+          1,
+          "thank you",
+          "where"
+        ],
+        [
+          1,
+          "thank you",
+          "water"
+        ]
+      ],
+      "n": 119,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 595,
+          "coverage": 1.0,
+          "accuracy": 0.9210084033613445,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 587,
+          "coverage": 0.9865546218487395,
+          "accuracy": 0.919931856899489,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 565,
+          "coverage": 0.9495798319327731,
+          "accuracy": 0.9345132743362832,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 498,
+          "coverage": 0.8369747899159664,
+          "accuracy": 0.9578313253012049,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "logreg CORE-9": {
+      "acc": 0.8571428571428571,
+      "macro_f1": 0.8548038772821382,
+      "baseline": 0.10084033613445378,
+      "per_class": {
+        "hello": {
+          "precision": 0.75,
+          "recall": 1.0,
+          "f1": 0.8571428571428571
+        },
+        "thank you": {
+          "precision": 0.6363636363636364,
+          "recall": 0.5833333333333334,
+          "f1": 0.6086956521739131
+        },
+        "please": {
+          "precision": 0.75,
+          "recall": 0.8181818181818182,
+          "f1": 0.7826086956521738
+        },
+        "yes": {
+          "precision": 0.9230769230769231,
+          "recall": 1.0,
+          "f1": 0.9600000000000001
+        },
+        "no": {
+          "precision": 0.8181818181818182,
+          "recall": 0.75,
+          "f1": 0.7826086956521738
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "water": {
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727272
+        },
+        "me": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "where": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "top10": [
+        [
+          3,
+          "thank you",
+          "please"
+        ],
+        [
+          2,
+          "no",
+          "hello"
+        ],
+        [
+          2,
+          "please",
+          "thank you"
+        ],
+        [
+          1,
+          "where",
+          "thank you"
+        ],
+        [
+          1,
+          "me",
+          "no"
+        ],
+        [
+          1,
+          "water",
+          "no"
+        ],
+        [
+          1,
+          "water",
+          "yes"
+        ],
+        [
+          1,
+          "water",
+          "thank you"
+        ],
+        [
+          1,
+          "water",
+          "hello"
+        ],
+        [
+          1,
+          "help",
+          "me"
+        ]
+      ],
+      "n": 119,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 595,
+          "coverage": 1.0,
+          "accuracy": 0.8554621848739495,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 586,
+          "coverage": 0.984873949579832,
+          "accuracy": 0.863481228668942,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 554,
+          "coverage": 0.9310924369747899,
+          "accuracy": 0.8862815884476535,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 479,
+          "coverage": 0.8050420168067227,
+          "accuracy": 0.9352818371607515,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "cnn-v1 CORE-9": {
+      "acc": 0.7983193277310925,
+      "macro_f1": 0.7933336093117715,
+      "baseline": 0.10084033613445378,
+      "per_class": {
+        "hello": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "thank you": {
+          "precision": 0.6666666666666666,
+          "recall": 0.3333333333333333,
+          "f1": 0.4444444444444444
+        },
+        "please": {
+          "precision": 0.7142857142857143,
+          "recall": 0.9090909090909091,
+          "f1": 0.8
+        },
+        "yes": {
+          "precision": 0.55,
+          "recall": 0.9166666666666666,
+          "f1": 0.6874999999999999
+        },
+        "no": {
+          "precision": 1.0,
+          "recall": 0.5833333333333334,
+          "f1": 0.7368421052631579
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091
+        },
+        "water": {
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727272
+        },
+        "me": {
+          "precision": 0.6470588235294118,
+          "recall": 0.9166666666666666,
+          "f1": 0.7586206896551724
+        },
+        "where": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "top10": [
+        [
+          3,
+          "water",
+          "yes"
+        ],
+        [
+          3,
+          "thank you",
+          "please"
+        ],
+        [
+          2,
+          "no",
+          "water"
+        ],
+        [
+          2,
+          "no",
+          "yes"
+        ],
+        [
+          2,
+          "thank you",
+          "me"
+        ],
+        [
+          2,
+          "thank you",
+          "yes"
+        ],
+        [
+          1,
+          "where",
+          "me"
+        ],
+        [
+          1,
+          "where",
+          "thank you"
+        ],
+        [
+          1,
+          "me",
+          "yes"
+        ],
+        [
+          1,
+          "water",
+          "me"
+        ]
+      ],
+      "n": 119,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 595,
+          "coverage": 1.0,
+          "accuracy": 0.8067226890756303,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 551,
+          "coverage": 0.9260504201680673,
+          "accuracy": 0.8366606170598911,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 429,
+          "coverage": 0.7210084033613445,
+          "accuracy": 0.916083916083916,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 293,
+          "coverage": 0.492436974789916,
+          "accuracy": 0.9658703071672355,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "cnn-v2 FULL": {
+      "acc": 0.9048991354466859,
+      "macro_f1": 0.9040678711593256,
+      "baseline": 0.0345821325648415,
+      "per_class": {
+        "bad": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "doctor": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "father": {
+          "precision": 0.8333333333333334,
+          "recall": 0.8333333333333334,
+          "f1": 0.8333333333333334
+        },
+        "food": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "friend": {
+          "precision": 0.8333333333333334,
+          "recall": 0.8333333333333334,
+          "f1": 0.8333333333333334
+        },
+        "good": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "hello": {
+          "precision": 0.9230769230769231,
+          "recall": 1.0,
+          "f1": 0.9600000000000001
+        },
+        "help": {
+          "precision": 0.9,
+          "recall": 0.75,
+          "f1": 0.8181818181818182
+        },
+        "hospital": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "how": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "f1": 0.8
+        },
+        "market": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "medicine": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "morning": {
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923
+        },
+        "mother": {
+          "precision": 0.8461538461538461,
+          "recall": 0.9166666666666666,
+          "f1": 0.8799999999999999
+        },
+        "name": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "night": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "no": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571
+        },
+        "please": {
+          "precision": 0.7142857142857143,
+          "recall": 0.9090909090909091,
+          "f1": 0.8
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "school": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "sorry": {
+          "precision": 0.9230769230769231,
+          "recall": 1.0,
+          "f1": 0.9600000000000001
+        },
+        "thank you": {
+          "precision": 0.7,
+          "recall": 0.5833333333333334,
+          "f1": 0.6363636363636365
+        },
+        "today": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "tomorrow": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "water": {
+          "precision": 0.8333333333333334,
+          "recall": 0.8333333333333334,
+          "f1": 0.8333333333333334
+        },
+        "where": {
+          "precision": 1.0,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091
+        },
+        "yes": {
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923
+        },
+        "you": {
+          "precision": 0.8888888888888888,
+          "recall": 0.6666666666666666,
+          "f1": 0.761904761904762
+        }
+      },
+      "top10": [
+        [
+          2,
+          "you",
+          "water"
+        ],
+        [
+          2,
+          "water",
+          "how"
+        ],
+        [
+          2,
+          "thank you",
+          "please"
+        ],
+        [
+          2,
+          "no",
+          "morning"
+        ],
+        [
+          2,
+          "friend",
+          "how"
+        ],
+        [
+          2,
+          "father",
+          "mother"
+        ],
+        [
+          1,
+          "you",
+          "name"
+        ],
+        [
+          1,
+          "you",
+          "father"
+        ],
+        [
+          1,
+          "where",
+          "market"
+        ],
+        [
+          1,
+          "where",
+          "friend"
+        ]
+      ],
+      "n": 347,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 1735,
+          "coverage": 1.0,
+          "accuracy": 0.8962536023054755,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 1653,
+          "coverage": 0.9527377521613832,
+          "accuracy": 0.9074410163339383,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 1506,
+          "coverage": 0.8680115273775216,
+          "accuracy": 0.9322709163346613,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 1277,
+          "coverage": 0.7360230547550433,
+          "accuracy": 0.9631949882537196,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "logreg FULL": {
+      "acc": 0.8213256484149856,
+      "macro_f1": 0.8148860201933664,
+      "baseline": 0.0345821325648415,
+      "per_class": {
+        "bad": {
+          "precision": 0.9230769230769231,
+          "recall": 1.0,
+          "f1": 0.9600000000000001
+        },
+        "doctor": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "father": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "food": {
+          "precision": 0.75,
+          "recall": 0.75,
+          "f1": 0.75
+        },
+        "friend": {
+          "precision": 0.6428571428571429,
+          "recall": 0.75,
+          "f1": 0.6923076923076924
+        },
+        "good": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.888888888888889
+        },
+        "hello": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.888888888888889
+        },
+        "help": {
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8
+        },
+        "hospital": {
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923
+        },
+        "how": {
+          "precision": 0.6153846153846154,
+          "recall": 0.6666666666666666,
+          "f1": 0.64
+        },
+        "market": {
+          "precision": 0.8888888888888888,
+          "recall": 0.6666666666666666,
+          "f1": 0.761904761904762
+        },
+        "me": {
+          "precision": 1.0,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091
+        },
+        "medicine": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "morning": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "mother": {
+          "precision": 0.6875,
+          "recall": 0.9166666666666666,
+          "f1": 0.7857142857142857
+        },
+        "name": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "night": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "no": {
+          "precision": 0.7272727272727273,
+          "recall": 0.6666666666666666,
+          "f1": 0.6956521739130435
+        },
+        "please": {
+          "precision": 0.6153846153846154,
+          "recall": 0.7272727272727273,
+          "f1": 0.6666666666666667
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "school": {
+          "precision": 0.8461538461538461,
+          "recall": 0.9166666666666666,
+          "f1": 0.8799999999999999
+        },
+        "sorry": {
+          "precision": 0.8461538461538461,
+          "recall": 0.9166666666666666,
+          "f1": 0.8799999999999999
+        },
+        "thank you": {
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1": 0.5
+        },
+        "today": {
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923
+        },
+        "tomorrow": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "water": {
+          "precision": 0.42857142857142855,
+          "recall": 0.5,
+          "f1": 0.4615384615384615
+        },
+        "where": {
+          "precision": 1.0,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091
+        },
+        "yes": {
+          "precision": 0.9230769230769231,
+          "recall": 1.0,
+          "f1": 0.9600000000000001
+        },
+        "you": {
+          "precision": 0.6666666666666666,
+          "recall": 0.16666666666666666,
+          "f1": 0.26666666666666666
+        }
+      },
+      "top10": [
+        [
+          5,
+          "you",
+          "water"
+        ],
+        [
+          4,
+          "thank you",
+          "please"
+        ],
+        [
+          3,
+          "water",
+          "how"
+        ],
+        [
+          3,
+          "please",
+          "thank you"
+        ],
+        [
+          2,
+          "you",
+          "mother"
+        ],
+        [
+          2,
+          "no",
+          "water"
+        ],
+        [
+          2,
+          "how",
+          "hello"
+        ],
+        [
+          2,
+          "help",
+          "good"
+        ],
+        [
+          2,
+          "friend",
+          "food"
+        ],
+        [
+          2,
+          "father",
+          "mother"
+        ]
+      ],
+      "n": 347,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 1735,
+          "coverage": 1.0,
+          "accuracy": 0.8178674351585015,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 1662,
+          "coverage": 0.9579250720461095,
+          "accuracy": 0.8423586040914561,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 1554,
+          "coverage": 0.8956772334293948,
+          "accuracy": 0.87001287001287,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 1323,
+          "coverage": 0.7625360230547551,
+          "accuracy": 0.9145880574452003,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    },
+    "cnn-v1 FULL": {
+      "acc": 0.7838616714697406,
+      "macro_f1": 0.7775467424061231,
+      "baseline": 0.0345821325648415,
+      "per_class": {
+        "bad": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "doctor": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "father": {
+          "precision": 0.6428571428571429,
+          "recall": 0.75,
+          "f1": 0.6923076923076924
+        },
+        "food": {
+          "precision": 0.7692307692307693,
+          "recall": 0.8333333333333334,
+          "f1": 0.8
+        },
+        "friend": {
+          "precision": 0.8181818181818182,
+          "recall": 0.75,
+          "f1": 0.7826086956521738
+        },
+        "good": {
+          "precision": 0.7857142857142857,
+          "recall": 0.9166666666666666,
+          "f1": 0.8461538461538461
+        },
+        "hello": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "help": {
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727272
+        },
+        "hospital": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "how": {
+          "precision": 0.47058823529411764,
+          "recall": 0.6666666666666666,
+          "f1": 0.5517241379310345
+        },
+        "market": {
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727272
+        },
+        "me": {
+          "precision": 0.75,
+          "recall": 0.75,
+          "f1": 0.75
+        },
+        "medicine": {
+          "precision": 1.0,
+          "recall": 0.9166666666666666,
+          "f1": 0.9565217391304348
+        },
+        "morning": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "mother": {
+          "precision": 0.5384615384615384,
+          "recall": 0.5833333333333334,
+          "f1": 0.5599999999999999
+        },
+        "name": {
+          "precision": 0.8461538461538461,
+          "recall": 0.9166666666666666,
+          "f1": 0.8799999999999999
+        },
+        "night": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "no": {
+          "precision": 0.7,
+          "recall": 0.5833333333333334,
+          "f1": 0.6363636363636365
+        },
+        "please": {
+          "precision": 0.8333333333333334,
+          "recall": 0.9090909090909091,
+          "f1": 0.8695652173913043
+        },
+        "rest": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "school": {
+          "precision": 0.8333333333333334,
+          "recall": 0.8333333333333334,
+          "f1": 0.8333333333333334
+        },
+        "sorry": {
+          "precision": 0.6875,
+          "recall": 0.9166666666666666,
+          "f1": 0.7857142857142857
+        },
+        "thank you": {
+          "precision": 0.625,
+          "recall": 0.4166666666666667,
+          "f1": 0.5
+        },
+        "today": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "tomorrow": {
+          "precision": 0.9166666666666666,
+          "recall": 0.9166666666666666,
+          "f1": 0.9166666666666666
+        },
+        "water": {
+          "precision": 0.5384615384615384,
+          "recall": 0.5833333333333334,
+          "f1": 0.5599999999999999
+        },
+        "where": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8333333333333334,
+          "f1": 0.8695652173913043
+        },
+        "yes": {
+          "precision": 0.5882352941176471,
+          "recall": 0.8333333333333334,
+          "f1": 0.6896551724137931
+        },
+        "you": {
+          "precision": 0.25,
+          "recall": 0.08333333333333333,
+          "f1": 0.125
+        }
+      },
+      "top10": [
+        [
+          5,
+          "mother",
+          "father"
+        ],
+        [
+          4,
+          "you",
+          "yes"
+        ],
+        [
+          3,
+          "father",
+          "mother"
+        ],
+        [
+          2,
+          "you",
+          "water"
+        ],
+        [
+          2,
+          "you",
+          "no"
+        ],
+        [
+          2,
+          "you",
+          "how"
+        ],
+        [
+          2,
+          "water",
+          "how"
+        ],
+        [
+          2,
+          "thank you",
+          "please"
+        ],
+        [
+          2,
+          "thank you",
+          "how"
+        ],
+        [
+          2,
+          "thank you",
+          "friend"
+        ]
+      ],
+      "n": 347,
+      "thresholds": [
+        {
+          "threshold": "argmax",
+          "n_accepted": 1735,
+          "coverage": 1.0,
+          "accuracy": 0.7654178674351585,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.5,
+          "n_accepted": 1463,
+          "coverage": 0.8432276657060519,
+          "accuracy": 0.8359535201640464,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "n_accepted": 1137,
+          "coverage": 0.6553314121037463,
+          "accuracy": 0.9155672823218998,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "n_accepted": 769,
+          "coverage": 0.4432276657060519,
+          "accuracy": 0.9570871261378413,
+          "rest_clips": 60,
+          "rest_wrong_as_word": 0,
+          "rest_wrong_as_word_rate": 0.0
+        }
+      ]
+    }
+  },
+  "vocabs": {
+    "CORE-10": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where",
+      "rest"
+    ],
+    "CORE-9": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "me",
+      "where",
+      "rest"
+    ],
+    "FULL": [
+      "bad",
+      "doctor",
+      "father",
+      "food",
+      "friend",
+      "good",
+      "hello",
+      "help",
+      "hospital",
+      "how",
+      "market",
+      "me",
+      "medicine",
+      "morning",
+      "mother",
+      "name",
+      "night",
+      "no",
+      "please",
+      "rest",
+      "school",
+      "sorry",
+      "thank you",
+      "today",
+      "tomorrow",
+      "water",
+      "where",
+      "yes",
+      "you"
+    ]
+  },
+  "n_clips": 347,
+  "labels": [
+    "bad",
+    "doctor",
+    "father",
+    "food",
+    "friend",
+    "good",
+    "hello",
+    "help",
+    "hospital",
+    "how",
+    "market",
+    "me",
+    "medicine",
+    "morning",
+    "mother",
+    "name",
+    "night",
+    "no",
+    "please",
+    "rest",
+    "school",
+    "sorry",
+    "thank you",
+    "today",
+    "tomorrow",
+    "water",
+    "where",
+    "yes",
+    "you"
+  ],
+  "note": "PRELIMINARY, OPTIMISTIC (same session S1). Not a final result."
+}

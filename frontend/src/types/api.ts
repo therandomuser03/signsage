@@ -15,6 +15,7 @@ export interface HealthResponse {
   model_promoted: boolean;
   model_bundle_found: boolean;
   model_loaded: boolean;
+  word_recognition_enabled?: boolean | null;
 }
 
 export interface CapabilitiesResponse {
@@ -31,6 +32,31 @@ export interface CapabilitiesResponse {
   avatar_vocabulary_size: number;
   landmark_count: number;
   max_frames_per_sequence: number;
+  // Word-level recognition (demo vocabulary, behind SIGNSAGE_WORD_MODE_ENABLED)
+  word_recognition_enabled?: boolean | null;
+  word_recognition_vocabulary?: string[] | null;
+  word_recognition_threshold?: number | null;
+  word_recognition_model_version?: string | null;
+  word_recognition_label?: string;
+}
+
+export interface WordRecognitionResponse {
+  word: string | null;
+  confidence: number;
+  accepted: boolean;
+  top3: Array<{ label: string; probability: number }>;
+  threshold: number;
+  model_version: string;
+  status: string; // "ok" | "no_hands" | "disabled" | "error"
+}
+
+export interface ComposeRequest {
+  words: string[];
+}
+
+export interface ComposeResponse {
+  sentence: string;
+  method: string; // "llm" | "fallback"
 }
 
 export interface ModelInfo {

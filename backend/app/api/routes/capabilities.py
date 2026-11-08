@@ -3,6 +3,7 @@ show, hide or label. The frontend reads these instead of guessing."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Dict
 
 from fastapi import APIRouter, Depends
@@ -15,6 +16,7 @@ from app.infrastructure.storage.model_storage import (
 )
 from app.ml.models.registry import is_loaded
 from app.ml.preprocessing.landmarks import TOTAL_LANDMARKS
+from app.ml.word_classifier_adapter import WordClassifierAdapter
 from app.schemas.common import CapabilitiesResponse, ModelInfo, ModelsResponse
 from app.services.avatar_gloss_service import load_vocabulary
 from app.services.history_service import build_history_service
@@ -67,6 +69,18 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         avatar_vocabulary_size=len(load_vocabulary(settings)),
         landmark_count=TOTAL_LANDMARKS,
         max_frames_per_sequence=settings.max_frames_per_sequence,
+        word_recognition_enabled=settings.word_mode_enabled,
+        word_recognition_vocabulary=(
+            ["hello", "me", "you", "yes", "no", "help", "water", "where", "rest"]
+            if settings.word_mode_enabled else None
+        ),
+        word_recognition_threshold=(
+            0.7 if settings.word_mode_enabled else None
+        ),
+        word_recognition_model_version=(
+            "word_v3_8w_s123" if settings.word_mode_enabled else None
+        ),
+        word_recognition_label="word-level recognition; not sentence translation",
     )
 
 

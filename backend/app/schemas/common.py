@@ -16,6 +16,7 @@ class HealthResponse(BaseModel):
     model_promoted: bool
     model_bundle_found: bool  # a bundle directory exists at SIGNSAGE_MODEL_BUNDLE_DIR
     model_loaded: bool  # the checkpoint is loaded in this process
+    word_recognition_enabled: Optional[bool] = None  # word-level recognition behind a feature flag
 
 
 class CapabilitiesResponse(BaseModel):
@@ -34,6 +35,12 @@ class CapabilitiesResponse(BaseModel):
     avatar_vocabulary_size: int
     landmark_count: int
     max_frames_per_sequence: int
+    # Word-level recognition (demo vocabulary, behind SIGNSAGE_WORD_MODE_ENABLED)
+    word_recognition_enabled: Optional[bool] = None
+    word_recognition_vocabulary: Optional[List[str]] = None
+    word_recognition_threshold: Optional[float] = None
+    word_recognition_model_version: Optional[str] = None
+    word_recognition_label: str = "word-level recognition; not sentence translation"
 
 
 class ModelInfo(BaseModel):

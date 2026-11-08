@@ -1,7 +1,8 @@
 import type {
   AvatarGlossRequest, AvatarGlossResponse, AvatarVocabularyResponse, CapabilitiesResponse,
-  DeletedResponse, HealthResponse, HistoryListResponse, ImageClassifyRequest, ImageClassifyResponse,
-  MeResponse, ModelsResponse, SignToTextRequest, SignToTextResponse, VideoTranslationResponse,
+  ComposeRequest, ComposeResponse, DeletedResponse, HealthResponse, HistoryListResponse,
+  ImageClassifyRequest, ImageClassifyResponse, LandmarkFramePayload, MeResponse, ModelsResponse,
+  SignToTextRequest, SignToTextResponse, VideoTranslationResponse, WordRecognitionResponse,
 } from "../../types/api";
 import { endpoints } from "./endpoints";
 import { ApiError, NetworkError } from "./errors";
@@ -69,6 +70,12 @@ export class ApiClient {
     if (!res.ok) throw await ApiError.fromResponse(res);
     return (await res.json()) as VideoTranslationResponse;
   };
+
+  word = (req: { frames: LandmarkFramePayload[] }) =>
+    this.request<WordRecognitionResponse>("POST", endpoints.word, req);
+
+  compose = (req: ComposeRequest) =>
+    this.request<ComposeResponse>("POST", endpoints.compose, req);
 
   listHistory = (limit = 20, offset = 0) =>
     this.request<HistoryListResponse>("GET", `${endpoints.history}?limit=${limit}&offset=${offset}`);

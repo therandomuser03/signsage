@@ -1,0 +1,109 @@
+{
+  "export_type": "s1+s2-final-unevaluated",
+  "trained_on": {
+    "sessions": [
+      "S1",
+      "S2"
+    ]
+  },
+  "label_list": [
+    "hello",
+    "thank you",
+    "please",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "you",
+    "me",
+    "where",
+    "rest"
+  ],
+  "n_classes": 11,
+  "model": "1D-CNN (cnn-v3), dropout 0.3: Conv1d(122->32->64, ReLU, Dropout) x2, AdaptiveAvgPool1d, Linear->n_classes. Trained WITH frame-level augmentation (hand-frame dropout 0-50%, scale +/-10%, rotation +/-10 deg, time-warp +/-15%).",
+  "hyperparameters": {
+    "epochs": 60,
+    "lr": 0.001,
+    "batch": 16,
+    "optimizer": "Adam",
+    "dropout": 0.3,
+    "seed": 0
+  },
+  "features": {
+    "spec": "features_v3.py / sign_features_v3.py",
+    "dim": 122,
+    "frames": 60,
+    "layout": "signsage (pose 0-32 | face 33-500 | hand slots 501-542)",
+    "normalisation": "MediaPipe Left/Right labels IGNORED. Hands assigned to two stable physical slots by temporal tracking (nearest wrist to previous frame; two hands in one frame ordered by image x, then continuity). ACTIVE slot = hand with larger total wrist travel (tie: more frames present); other = SECONDARY. Per-frame: wrist - shoulder_centre / shoulder_width; other 20 landmarks - wrist / hand_size (hand_size = ||wrist - middle fingertip||). If the active hand's mean wrist x is image-left of the shoulder midpoint, all x coords (hands + face) are mirrored about the per-frame shoulder midpoint so the active hand is right-hand-active. Missing runs <=5 frames interpolated; longer/leading/trailing missing kept as zero coords with mask=0, never normalised into shoulder space.",
+    "channels": [
+      "active hand 42",
+      "secondary hand 42",
+      "active_mask",
+      "secondary_mask",
+      "hand-to-face 32",
+      "wrist velocity 4"
+    ]
+  },
+  "extractor": {
+    "name": "@mediapipe/tasks-vision HolisticExtractor",
+    "version": "1.0.1",
+    "running_mode": "VIDEO",
+    "note": "Same options as the SignSage frontend (frontend/src/features/translate/landmarks.ts): pose numPoses=1, face numFaces=1, hands numHands=2, delegate GPU, no confidence thresholds set (MediaPipe defaults), no delegate fallback. Coordinates are NOT mirrored; only the preview is CSS-mirrored (scaleX(-1)) like the app.",
+    "options": {
+      "pose": {
+        "modelAssetPath": "assets/models/pose_landmarker_lite.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numPoses": 1
+      },
+      "face": {
+        "modelAssetPath": "assets/models/face_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numFaces": 1
+      },
+      "hands": {
+        "modelAssetPath": "assets/models/hand_landmarker.task",
+        "delegate": "GPU",
+        "runningMode": "VIDEO",
+        "numHands": 2
+      }
+    }
+  },
+  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). Effective FPS varies per clip; the model is invariant to this via resampling. Coordinates are NOT mirrored (only the app preview is CSS-mirrored); canonicalisation mirroring is applied inside features_v3.",
+  "recommended_confidence_threshold": 0.7,
+  "threshold_note": "Calibrated on the S2 DEV set (train S1, test S2, cnn-v3, 50 clips, 10 CORE words, no rest). S2 max-softmax threshold table: 0.5 -> acc 0.6458333333333334 coverage 0.96; 0.7 -> acc 0.6756756756756757 coverage 0.74 (recommended operating point); 0.9 -> acc 0.6 coverage 0.5; argmax -> acc 0.64 coverage 100%. Stated as calibrated on S2 only; S2 was used to diagnose the handedness problem, so this is NOT a clean held-out test. This combined model is FINAL-UNEVALUATED (no held-out test).",
+  "s2_dev_metrics": null,
+  "cpu_latency_ms_per_clip": 0.41650332783607846,
+  "golden_test_vector": {
+    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_v3_final/golden_test_vector.npy",
+    "expected_logits": [
+      -26.941587448120117,
+      -8.568246841430664,
+      -5.577286243438721,
+      4.164345741271973,
+      -25.70600700378418,
+      -2.5249438285827637,
+      -7.598876476287842,
+      -2.7412784099578857,
+      7.246233940124512,
+      -6.631638050079346,
+      -4.982583522796631
+    ],
+    "expected_logits_labels": [
+      "hello",
+      "thank you",
+      "please",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "you",
+      "me",
+      "where",
+      "rest"
+    ],
+    "note": "Run features_v3/sign_features_v3 on golden_test_vector.npy then the model; logits must match expected_logits (within float tolerance)."
+  },
+  "note": "FINAL-UNEVALUATED: trained on S1+S2 combined. S2 was already used as the dev set for export_v3_s1, so this model has NO held-out test set. Do not promote without S2-independent validation."
+}
