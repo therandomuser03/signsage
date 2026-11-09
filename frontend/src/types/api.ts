@@ -52,6 +52,8 @@ export interface WordRecognitionResponse {
 
 export interface ComposeRequest {
   words: string[];
+  confidences?: number[];
+  save_history?: boolean;
 }
 
 export interface ComposeResponse {
@@ -123,6 +125,7 @@ export interface HistoryItem {
   model_version: string;
   result_type: ResultType;
   created_at: string;
+  title?: string | null;
 }
 
 export interface HistoryListResponse {

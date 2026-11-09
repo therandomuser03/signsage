@@ -33,6 +33,14 @@ class HistoryService:
             logger.warning("Could not save history for user %s: %s", user.id, exc)
             return None
 
+    async def try_record_word(self, user: AuthenticatedUser, record: NewHistoryRecord) -> Optional[str]:
+        """Save a session + message row; return the session id or None (never raises)."""
+        try:
+            return await self._repo.add_word_recognition(user, record)
+        except Exception as exc:  # noqa: BLE001 -- history must not break translation
+            logger.warning("Could not save word-recognition history for user %s: %s", user.id, exc)
+            return None
+
     async def list(self, user: AuthenticatedUser, limit: int, offset: int) -> Tuple[List[HistoryRecord], int]:
         return await self._repo.list(user, limit, offset)
 

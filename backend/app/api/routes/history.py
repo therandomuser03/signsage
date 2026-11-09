@@ -24,7 +24,7 @@ async def list_history(
         items=[HistoryItem(
             id=r.id, direction=r.direction.value, input_text=r.input_text, output_text=r.output_text,
             confidence=r.confidence, model_version=r.model_version, result_type=r.result_type.value,
-            created_at=r.created_at,
+            created_at=r.created_at, title=r.title,
         ) for r in records],
         total=total, limit=limit, offset=offset,
     )

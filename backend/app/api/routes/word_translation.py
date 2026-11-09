@@ -27,12 +27,14 @@ import numpy as np
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
+from app.core.dependencies import get_optional_history_service, get_request_user
 from app.core.errors import SignSageError
-from app.core.dependencies import get_request_user
 from app.core.ratelimit import rate_limit_dependency
 from app.core.security import AuthenticatedUser
+from app.domain.translation.entities import Direction, NewHistoryRecord, ResultType
 from app.ml.word_classifier_adapter import WordClassifierAdapter
 from app.ml.word_composer import compose_fallback, guard_llm_output
+from app.services.history_service import HistoryService
 
 logger = logging.getLogger("signsage.word_debug")
 DEBUG_CAPTURES_DIR = Path(__file__).resolve().parents[3] / "debug_captures"
@@ -270,6 +272,7 @@ async def compose_sentence(
     payload: dict,
     settings: Settings = Depends(get_settings),
     user: Optional[AuthenticatedUser] = Depends(get_request_user),
+    history: Optional[HistoryService] = Depends(get_optional_history_service),
 ) -> dict:
     if not settings.word_mode_enabled:
         raise WordModeDisabledError(
@@ -297,6 +300,36 @@ async def compose_sentence(
         )
 
     sentence, method = _compose(words, vocab, settings)
+
+    # --- Best-effort history save for signed-in users only ---
+    save_history = bool(payload.get("save_history", True))
+    if user and history and save_history and words:
+        confidences = payload.get("confidences")
+        confidence = None
+        if isinstance(confidences, list) and confidences:
+            try:
+                vals = [float(c) for c in confidences if isinstance(c, (int, float)) and not isinstance(c, bool)]
+                if vals:
+                    mean = sum(vals) / len(vals)
+                    confidence = max(0.0, min(1.0, mean))
+            except (TypeError, ValueError):
+                confidence = None
+        accepted_words = [w for w in words if w != "rest"]
+        joined_words = " ".join(accepted_words)
+        title = f"Word recognition: {sentence[:60]}" if sentence else "Word recognition"
+        await history.try_record_word(user, NewHistoryRecord(
+            direction=Direction.SIGN_TO_TEXT,
+            output_text=sentence,
+            result_type=ResultType.MODEL,
+            model_version=adapter.model_version,
+            input_text=joined_words,
+            gloss=joined_words,
+            confidence=confidence,
+            sequence=1,
+            title=title,
+            status="completed",
+        ))
+
     return {"sentence": sentence, "method": method}
 
 

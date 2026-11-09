@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -321,6 +322,12 @@ export default function HistoryPage() {
                           {item.direction === "sign_to_text" ? "Sign → Text" : "Text → Sign"}
                           {" · "}
                           {item.result_type}
+                          {(item.model_version?.startsWith("word_v3") ||
+                            (item.title?.startsWith("Word recognition"))) && (
+                            <Badge variant="outline" className="ml-1">
+                              Word recognition
+                            </Badge>
+                          )}
                           {item.confidence != null &&
                             ` · ${Math.round(item.confidence * 100)}% confidence`}
                           {" · "}

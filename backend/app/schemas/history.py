@@ -16,6 +16,7 @@ class HistoryItem(BaseModel):
     model_version: str
     result_type: str
     created_at: datetime
+    title: Optional[str] = None
 
 
 class HistoryListResponse(BaseModel):

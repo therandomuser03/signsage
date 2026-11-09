@@ -131,6 +131,7 @@ export default function TranslatePage() {
   const [wordProcessing, setWordProcessing] = useState(false);
   const [wordError, setWordError] = useState<string | null>(null);
   const [wordList, setWordList] = useState<string[]>([]);
+  const [wordConfidences, setWordConfidences] = useState<number[]>([]);
   const [wordCountdown, setWordCountdown] = useState(0);
   const [composedSentence, setComposedSentence] = useState<string | null>(null);
   const wordRafRef = useRef(0);
@@ -630,6 +631,7 @@ export default function TranslatePage() {
         setWordResult(result);
         if (result.accepted && result.word) {
           setWordList((prev) => [...prev, result.word!]);
+          setWordConfidences((prev) => [...prev, result.confidence]);
         }
         console.log(
           "[word-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f",
@@ -679,10 +681,12 @@ export default function TranslatePage() {
 
   const removeWordFromList = useCallback((index: number) => {
     setWordList((prev) => prev.filter((_, i) => i !== index));
+    setWordConfidences((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const clearWordList = useCallback(() => {
     setWordList([]);
+    setWordConfidences([]);
     setWordResult(null);
     setWordError(null);
     setComposedSentence(null);
@@ -729,7 +733,11 @@ export default function TranslatePage() {
     if (wordList.length === 0) return;
     setComposedSentence(null);
     try {
-      const result = await apiClient.compose({ words: wordList }, {
+      const result = await apiClient.compose({
+        words: wordList,
+        confidences: wordConfidences,
+        save_history: loadPrefs().saveHistory,
+      }, {
         retries: 1,
         timeoutMs: 60_000,
       });
@@ -741,7 +749,7 @@ export default function TranslatePage() {
           : err?.message ?? "Failed to compose sentence.",
       );
     }
-  }, [wordList]);
+  }, [wordList, wordConfidences]);
 
   // Teardown word mode on unmount
   useEffect(() => {

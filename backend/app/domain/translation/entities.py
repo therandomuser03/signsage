@@ -43,6 +43,11 @@ class NewHistoryRecord:
     model_version: str
     input_text: Optional[str] = None
     confidence: Optional[float] = None
+    # Word-recognition session/message fields (optional; existing flows leave them unset).
+    gloss: Optional[str] = None
+    sequence: Optional[int] = None
+    title: Optional[str] = None
+    status: Optional[str] = None
 
 
 @dataclass
@@ -56,3 +61,4 @@ class HistoryRecord:
     created_at: datetime
     input_text: Optional[str] = None
     confidence: Optional[float] = None
+    title: Optional[str] = None

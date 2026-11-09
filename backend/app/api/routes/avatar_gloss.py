@@ -32,9 +32,10 @@ async def avatar_gloss(
     result = await generate_gloss(payload.text, settings)
     history_id = None
     if user and history and payload.save_history and result.gloss:
-        history_id = await history.try_record(user, NewHistoryRecord(
+        history_id = await history.try_record_word(user, NewHistoryRecord(
             direction=Direction.TEXT_TO_SIGN, input_text=payload.text, output_text=" ".join(result.gloss),
             result_type=ResultType.AVATAR_GLOSS, model_version="avatar-gloss-v1",
+            sequence=1, title=f"Text to sign: {payload.text[:50]}", status="completed",
         ))
     return AvatarGlossResponse(
         gloss=result.gloss, unmatched_words=result.unmatched_words,
