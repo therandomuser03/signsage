@@ -113,7 +113,11 @@ class Settings(BaseSettings):
     # Both optional: unset means that stage is skipped and the deterministic
     # word-lookup fallback is used, which is what actually ships first.
     groq_api_key: Optional[str] = None
-    groq_model: str = "llama-3.3-70b-versatile"
+    # Smallest stable, non-preview instruct model available to this account's
+    # key (verified via the Groq /models endpoint). llama-3.3-70b-versatile
+    # 404s for this key; gpt-oss-20b puts its output in the `reasoning` field
+    # (empty `content`) so it cannot be used by the simple compose path.
+    groq_model: str = "allam-2-7b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_timeout_seconds: float = 6.0
     # On 429, Groq returns Retry-After; if it's under this, wait once and retry.
@@ -170,6 +174,14 @@ class Settings(BaseSettings):
     # --- History ------------------------------------------------------------------
     history_enabled: bool = True
     history_backend: str = "supabase"  # "supabase" | "memory" (dev/tests only)
+
+    # --- Rate limiting (demo-grade, single-process sliding windows) -----------
+    rate_limit_enabled: bool = True
+    rate_limit_word: str = "30/min"
+    rate_limit_compose: str = "20/min"
+    rate_limit_history_write: str = "30/min"
+    # Generous defaults on purpose: a live demo should never trip them.
+    # tune per deployment via SIGNSAGE_RATE_LIMIT_*
 
     @field_validator("cors_origins", mode="before")
     @classmethod

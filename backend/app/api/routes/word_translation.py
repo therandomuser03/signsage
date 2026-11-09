@@ -29,8 +29,10 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from app.core.config import Settings, get_settings
 from app.core.errors import SignSageError
 from app.core.dependencies import get_request_user
+from app.core.ratelimit import rate_limit_dependency
 from app.core.security import AuthenticatedUser
 from app.ml.word_classifier_adapter import WordClassifierAdapter
+from app.ml.word_composer import compose_fallback, guard_llm_output
 
 logger = logging.getLogger("signsage.word_debug")
 DEBUG_CAPTURES_DIR = Path(__file__).resolve().parents[3] / "debug_captures"
@@ -48,26 +50,49 @@ class WordModeDisabledError(SignSageError):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
 
+def _warmup_golden_inference(adapter: WordClassifierAdapter, model_dir: str) -> None:
+    """Run one dummy inference on the golden test vector so the model is warm.
+
+    Silently skipped if the vector file is absent (e.g. a custom
+    SIGNSAGE_WORD_MODEL_DIR without the golden vector next to it).
+    """
+    golden = Path(model_dir) / "golden_test_vector.npy"
+    if not golden.is_file():
+        logger.warning("WORD_MODE: golden test vector not found: %s", golden)
+        return
+    arr = np.load(golden).astype(np.float32)
+    adapter.classify(arr)
+
+
 def load_word_adapter_at_startup(settings: Settings) -> None:
     """Load the word classifier model at startup (avoids first-request latency).
 
-    Only engaged when SIGNSAGE_WORD_DEBUG=true so production behaviour is
-    unchanged (lazy first-request load otherwise).
+    Engaged whenever SIGNSAGE_WORD_MODE_ENABLED=true -- independent of
+    SIGNSAGE_WORD_DEBUG. Runs one dummy inference with the golden test vector
+    (models/word_v3/golden_test_vector.npy) so the first real request is
+    already warm. A failure is logged, not fatal: the first request still
+    triggers a lazy load via _get_word_adapter().
     """
     global _word_adapter, _word_adapter_loaded
-    if not settings.word_mode_enabled or not settings.word_debug:
+    if not settings.word_mode_enabled:
         return
     if _word_adapter_loaded:
         return
     model_dir = _resolve_word_model_dir(settings)
     t0 = time.perf_counter()
-    _word_adapter = WordClassifierAdapter.load(model_dir, device=settings.device)
-    _word_adapter_loaded = True
-    logger.info(
-        "WORD_DEBUG: model loaded at startup in %.3f ms (dir=%s)",
-        (time.perf_counter() - t0) * 1000,
-        model_dir,
-    )
+    try:
+        _word_adapter = WordClassifierAdapter.load(model_dir, device=settings.device)
+        _warmup_golden_inference(_word_adapter, model_dir)
+        _word_adapter_loaded = True
+        warm_ms = (time.perf_counter() - t0) * 1000
+        logger.info(
+            "WORD_MODE: word model warmed at startup in %.1f ms (dir=%s; golden "
+            "inference included) -- first real request should not pay the load cost",
+            warm_ms,
+            model_dir,
+        )
+    except Exception as exc:  # noqa: BLE001 -- never fail startup because of word mode
+        logger.error("WORD_MODE: word model warm-up failed (dir=%s): %s", model_dir, exc)
 
 
 @router.on_event("startup")
@@ -76,18 +101,34 @@ async def _startup_load_word_model() -> None:
 
 
 def _resolve_word_model_dir(settings: Settings) -> str:
-    """Resolve word_model_dir relative to the repo root when relative.
+    """Resolve the word model directory.
 
-    The default ``models/word_v3`` lives next to ``research/`` and ``backend/``
-    at the repository root, so a relative value is resolved against the
-    repository root (not the ``backend/`` package directory).
+    Resolution order:
+      1. An absolute ``SIGNSAGE_WORD_MODEL_DIR`` env var wins outright.
+      2. ``<backend root>/word_model`` — the model folder baked into the
+         backend image next to ``app/`` (docker build context: backend/).
+      3. ``<repo root>/models/word_v3`` — local dev layout.
+      4. ``<cwd>/<word_model_dir>`` — fallback for custom relative values.
+    The resolved path is logged at startup so a mis-deploy is visible in the
+    startup logs instead of failing on the first request.
     """
     d = settings.word_model_dir or "models/word_v3"
     p = Path(d)
-    if not p.is_absolute():
-        repo_root = Path(__file__).resolve().parents[4]
-        p = repo_root / d
-    return str(p)
+    if p.is_absolute():
+        return str(p)
+    backend_root = Path(__file__).resolve().parents[3]  # .../backend (contains app/)
+    repo_root = backend_root.parent  # repository root
+    candidates = [
+        backend_root / "word_model",
+        repo_root / "models" / "word_v3",
+        Path.cwd() / d,
+    ]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return str(candidate)
+    # Nothing staged: fall back to the baked-in candidate so the startup log
+    # shows the expected path; callers get a clear file-not-found error.
+    return str(backend_root / "word_model")
 
 
 def _get_word_adapter(settings: Settings) -> WordClassifierAdapter:
@@ -106,7 +147,7 @@ def _reset_word_adapter() -> None:
     _word_adapter_loaded = False
 
 
-@router.post("/word")
+@router.post("/word", dependencies=[Depends(rate_limit_dependency("word"))])
 async def word_recognition(
     payload: dict,
     settings: Settings = Depends(get_settings),
@@ -224,7 +265,7 @@ async def word_recognition(
     }
 
 
-@router.post("/compose")
+@router.post("/compose", dependencies=[Depends(rate_limit_dependency("compose"))])
 async def compose_sentence(
     payload: dict,
     settings: Settings = Depends(get_settings),
@@ -255,30 +296,38 @@ async def compose_sentence(
             },
         )
 
-    sentence, method = _compose(words, settings)
+    sentence, method = _compose(words, vocab, settings)
     return {"sentence": sentence, "method": method}
 
 
-def _compose(words: list[str], settings: Settings) -> tuple[str, str]:
+def _compose(words: list[str], vocab: set[str], settings: Settings) -> tuple[str, str]:
     """Compose a sentence from recognised words.
 
-    Tries Groq with a strict prompt when configured; falls back to a
-    deterministic join (capitalised, ending punctuation) when the LLM is
-    unavailable or the output fails the sanity check.
+    Rules run first (deterministic, vocabulary from meta.json). Groq is
+    called only for 2+ word sequences that match no explicit rule: one
+    attempt, temperature 0, max_tokens 64, 4 s timeout, strict output guard;
+    anything that fails the guard falls back to the comma-join.
     """
-    joined = " ".join(w for w in words if w != "rest").strip()
-    if not joined:
+    cleaned = [w for w in words if w != "rest"]
+    if not cleaned:
         return "", "fallback"
 
-    # --- LLM path (Groq) when configured ---
-    if settings.groq_api_key:
+    # --- Rules first: explicit patterns (deterministic, never Groq) ---
+    if _rule_matched(cleaned):
+        return compose_fallback(cleaned, vocab), "fallback"
+
+    # --- LLM path (Groq): only 2+ words with no explicit pattern ---
+    if len(cleaned) >= 2 and settings.groq_api_key:
         try:
             import httpx
 
+            joined = ", ".join(cleaned)
             system = (
-                "Use only the meaning of these words, one short natural English "
-                "sentence, add no new facts, names or details. "
-                "Reply with only the sentence, nothing else."
+                "Compose ONE short English sentence using only these words: "
+                f"{joined}. You may add only the function words is, are, "
+                "am, the, a, I, and punctuation. Do not add any other words, "
+                "names, facts, or details. Reply with only the sentence, "
+                "nothing else."
             )
             body = {
                 "model": settings.groq_model,
@@ -294,18 +343,30 @@ def _compose(words: list[str], settings: Settings) -> tuple[str, str]:
                 "Content-Type": "application/json",
             }
             url = f"{settings.groq_base_url.rstrip('/')}/chat/completions"
-            with httpx.Client(timeout=settings.groq_timeout_seconds) as client:
+            with httpx.Client(timeout=4.0) as client:
                 resp = client.post(url, json=body, headers=headers)
                 resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"].strip()
-            if content and len(content) <= 200 and not any(ch in content for ch in "<>{}"):
-                return content, "llm"
+            guarded = guard_llm_output(content, cleaned)
+            if guarded is not None:
+                return guarded, "llm"
         except Exception:
-            # fall through to deterministic
+            # fall through to deterministic comma-join fallback
             pass
 
-    # --- Deterministic fallback ---
-    sentence = joined[0].upper() + joined[1:]
-    if not sentence.endswith((".", "!", "?")):
-        sentence += "."
-    return sentence, "fallback"
+    # --- Rule-based fallback: comma-join, no function words added ---
+    return compose_fallback(cleaned, vocab), "fallback"
+
+
+def _rule_matched(cleaned: list[str]) -> bool:
+    """True when `cleaned` matches an explicit deterministic pattern."""
+    if not cleaned:
+        return True  # empty -> "" handled by caller
+    if len(cleaned) == 1:
+        return True
+    w = cleaned
+    if w in (["where", "water"], ["where", "you"], ["where", "me"], ["help", "me"]):
+        return True
+    if len(w) == 2 and w[0] == "hello":
+        return True
+    return False

@@ -71,13 +71,27 @@ class NotFoundError(SignSageError):
     status_code = 404
 
 
+class RateLimitedError(SignSageError):
+    code = "RATE_LIMITED"
+    status_code = 429
+
+    def __init__(self, message: str, retry_after: int):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(SignSageError)
     async def _handle_signsage_error(request: Request, exc: SignSageError) -> JSONResponse:
         logger.warning("%s: %s", exc.code, exc.message)
-        headers = {"WWW-Authenticate": "Bearer"} if isinstance(exc, AuthError) else None
+        headers: dict[str, str] = {}
+        if isinstance(exc, AuthError):
+            headers["WWW-Authenticate"] = "Bearer"
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after is not None:
+            headers["Retry-After"] = str(retry_after)
         return JSONResponse(
             status_code=exc.status_code,
             content={"code": exc.code, "message": exc.message},
-            headers=headers,
+            headers=headers or None,
         )

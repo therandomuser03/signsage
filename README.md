@@ -125,6 +125,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+# pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 cp .env.example .env           # defaults work out of the box for a local demo
 uvicorn app.main:app --reload
 ```

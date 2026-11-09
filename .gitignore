@@ -52,6 +52,7 @@ backend/backend.egg-info/
 *.pth
 *.ptl
 !models/word_v3/model.pt
+!backend/word_model/model.pt
 models/checkpoints/*.pt
 models/iSign_t5_small_motion/**/*.pt
 models/isl_bundle/

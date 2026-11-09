@@ -6,7 +6,10 @@ import {
   Pause,
   Play,
   PlugZap,
+  Speaker,
   Square,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import {
   Alert,
@@ -17,8 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { config } from "@/app/config";
-import { apiClient } from "@/services/api/instance";
-import { getAccessToken } from "@/services/supabase/auth";
+import { apiClient, NetworkError } from "@/services/api/instance";
+import { getAccessToken, onAuthChange } from "@/services/supabase/auth";
 import { TranslationSocket } from "@/services/websocket/client";
 import type { ConnectionStatus } from "@/services/websocket/connection";
 import type { TranslationTextMessage } from "@/services/websocket/protocol";
@@ -96,6 +99,7 @@ export default function TranslatePage() {
   const [capabilities, setCapabilities] =
     useState<CapabilitiesResponse | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [capabilitiesWaking, setCapabilitiesWaking] = useState(false);
   const [socketStatus, setSocketStatus] = useState<ConnectionStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
   // Model/backend outage, kept separate from recognition outcomes: a dead
@@ -123,6 +127,8 @@ export default function TranslatePage() {
   // Reuses the same camera + HolisticExtractor as the live interpreter.
   const [wordPhase, setWordPhase] = useState<WordPhase>("idle");
   const [wordResult, setWordResult] = useState<WordRecognitionResponse | null>(null);
+  /** True from the moment capture ends until the recognition response lands. */
+  const [wordProcessing, setWordProcessing] = useState(false);
   const [wordError, setWordError] = useState<string | null>(null);
   const [wordList, setWordList] = useState<string[]>([]);
   const [wordCountdown, setWordCountdown] = useState(0);
@@ -132,6 +138,14 @@ export default function TranslatePage() {
   const wordFramesRef = useRef<HolisticFrame[]>([]);
   const wordRecStartRef = useRef(0);
   const wordStopTimeRef = useRef(0);
+
+  // --- Voice output for the composed sentence (browser speech synthesis) ---
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  /** True once window.speechSynthesis is present and voices are loaded. */
+  const [speechReady, setSpeechReady] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
 
   // --- Static image classification (REST, alphabet / word) ---
   const [imageClassifyMode, setImageClassifyMode] = useState(false);
@@ -159,10 +173,25 @@ export default function TranslatePage() {
       .health()
       .then(() => live && setBackendOnline(true))
       .catch(() => live && setBackendOnline(false));
-    apiClient
-      .capabilities()
-      .then((caps) => live && setCapabilities(caps))
-      .catch(() => live && setCapabilities(null));
+    // One explicit retry on network failure: a cold/sleeping backend gets a
+    // second chance while the user sees an honest "waking up" message.
+    const fetchCapabilities = async () => {
+      try {
+        const caps = await apiClient.capabilities({ timeoutMs: 60_000 });
+        live && setCapabilities(caps);
+      } catch {
+        live && setCapabilitiesWaking(true);
+        try {
+          const caps = await apiClient.capabilities({ timeoutMs: 60_000 });
+          live && setCapabilities(caps);
+        } catch {
+          live && setCapabilities(null);
+        } finally {
+          live && setCapabilitiesWaking(false);
+        }
+      }
+    };
+    void fetchCapabilities();
     return () => {
       live = false;
     };
@@ -590,8 +619,12 @@ export default function TranslatePage() {
     const t0Request = performance.now();
 
     if (frames && frames.length > 0) {
+      setWordProcessing(true);
       try {
-        const result = await apiClient.word(requestPayload);
+        const result = await apiClient.word(requestPayload, {
+          retries: 1,
+          timeoutMs: 60_000,
+        });
         const roundTripMs = performance.now() - t0Request;
         const totalMs = performance.now() - captureEndMs;
         setWordResult(result);
@@ -621,7 +654,13 @@ export default function TranslatePage() {
           roundTripMs,
           totalMs,
         );
-        setWordError(err?.message ?? "Word recognition failed.");
+        setWordError(
+          err instanceof NetworkError
+            ? "Server is waking up, please wait — try again."
+            : err?.message ?? "Word recognition failed.",
+        );
+      } finally {
+        setWordProcessing(false);
       }
     } else {
       const totalMs = performance.now() - captureEndMs;
@@ -649,14 +688,58 @@ export default function TranslatePage() {
     setComposedSentence(null);
   }, []);
 
+  const speak = useCallback(
+    (text: string) => {
+      const synth = synthRef.current;
+      if (!synth || !speechReady) return;
+      synth.cancel(); // cancel anything in progress first
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      const voices = synth.getVoices();
+      for (const pref of ["en-IN", "en-GB", "en-US"]) {
+        const voice = voices.find((v) => v.lang.startsWith(pref));
+        if (voice) {
+          utterance.lang = voice.lang;
+          break;
+        }
+      }
+      utteranceRef.current = utterance;
+      utterance.onend = () => {
+        setSpeaking(false);
+        utteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setSpeaking(false);
+        utteranceRef.current = null;
+      };
+      setSpeaking(true);
+      synth.speak(utterance);
+    },
+    [speechReady],
+  );
+
+  const stopSpeaking = useCallback(() => {
+    const synth = synthRef.current;
+    if (synth) synth.cancel();
+    setSpeaking(false);
+    utteranceRef.current = null;
+  }, []);
+
   const makeSentence = useCallback(async () => {
     if (wordList.length === 0) return;
     setComposedSentence(null);
     try {
-      const result = await apiClient.compose({ words: wordList });
+      const result = await apiClient.compose({ words: wordList }, {
+        retries: 1,
+        timeoutMs: 60_000,
+      });
       setComposedSentence(result.sentence);
     } catch (err: any) {
-      setWordError(err?.message ?? "Failed to compose sentence.");
+      setWordError(
+        err instanceof NetworkError
+          ? "Server is waking up, please wait — try again."
+          : err?.message ?? "Failed to compose sentence.",
+      );
     }
   }, [wordList]);
 
@@ -666,6 +749,47 @@ export default function TranslatePage() {
       cancelAnimationFrame(wordRafRef.current);
     };
   }, []);
+
+  // Sign-out must not leave the previous account's recognised words or
+  // composed sentence on screen.
+  useEffect(() => {
+    return onAuthChange((signedIn) => {
+      if (!signedIn) {
+        setWordList([]);
+        setComposedSentence(null);
+        setWordResult(null);
+        setWordError(null);
+        setWordCountdown(0);
+      }
+    });
+  }, []);
+
+  // Voice output: feature-detect and load voices asynchronously.
+  useEffect(() => {
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    synthRef.current = synth ?? null;
+    if (!synth) {
+      setSpeechReady(false);
+      return undefined;
+    }
+    const onVoicesChanged = () => {
+      setSpeechReady(synth.getVoices().length > 0);
+    };
+    onVoicesChanged();
+    if (synth.getVoices().length === 0) {
+      synth.addEventListener("voiceschanged", onVoicesChanged);
+    }
+    return () => {
+      synth.cancel();
+      synth.removeEventListener("voiceschanged", onVoicesChanged);
+    };
+  }, []);
+
+  // Auto-speak the composed sentence when toggled on (default off).
+  useEffect(() => {
+    if (!autoSpeak || !composedSentence || !speechReady) return;
+    speak(composedSentence);
+  }, [autoSpeak, composedSentence, speechReady]);
 
   return (
     <div className="space-y-5">
@@ -1090,6 +1214,11 @@ export default function TranslatePage() {
                 ? "Online"
                 : "Offline"}
           </span>
+          {capabilitiesWaking && (
+            <span className="text-foreground/60">
+              Server is waking up, please wait…
+            </span>
+          )}
         </span>
         {socketError && (
           <span className="text-destructive">{socketError}</span>
@@ -1229,6 +1358,7 @@ export default function TranslatePage() {
               disabled={
                 wordPhase === "countdown" ||
                 wordPhase === "recording" ||
+                wordProcessing ||
                 phase === "starting-camera" ||
                 phase === "loading-detector" ||
                 phase === "error"
@@ -1263,6 +1393,16 @@ export default function TranslatePage() {
           </div>
 
           {wordError && <p className="mt-1 text-xs text-destructive">{wordError}</p>}
+
+          {/* Shown between the end of capture and the result chip landing. */}
+          {wordProcessing && !wordResult && (
+            <div className="mt-3 rounded-md bg-foreground/5 px-3 py-2">
+              <div className="flex items-center gap-3 text-xs text-foreground/60">
+                <Spinner className="h-3 w-3" />
+                <span>Processing…</span>
+              </div>
+            </div>
+          )}
 
           {/* Last recognition result */}
           {wordResult && (
@@ -1340,7 +1480,41 @@ export default function TranslatePage() {
               <p className="text-xs font-semibold text-green-700 mb-1">
                 Interpretation of recognised words
               </p>
-              <p className="text-sm text-green-900">{composedSentence}</p>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <p className="text-sm text-green-900 flex-1">{composedSentence}</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!speechReady}
+                  onClick={() => {
+                    stopSpeaking();
+                    speak(composedSentence);
+                  }}
+                  title={
+                    speechReady
+                      ? undefined
+                      : "Voice not available in this browser"
+                  }
+                >
+                  {speaking ? <VolumeX size={14} /> : <Speaker size={14} />}
+                  {speaking ? "Stopping…" : "Speak"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={autoSpeak ? "default" : "outline"}
+                  onClick={() => setAutoSpeak((prev) => !prev)}
+                  aria-pressed={autoSpeak}
+                  title={
+                    speechReady
+                      ? undefined
+                      : "Voice not available in this browser"
+                  }
+                >
+                  {autoSpeak ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                  {autoSpeak ? "Auto-speak on" : "Auto-speak off"}
+                </Button>
+              </div>
               <p className="mt-1 text-xs text-green-700/70">
                 Method: composed from {wordList.length} recognised word(s)
               </p>

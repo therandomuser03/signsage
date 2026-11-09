@@ -21,7 +21,6 @@ from app.ml.preprocessing.islim_landmarks import (
     MAX_FRAMES as ISLI_MAX_FRAMES,
     convert_landmarks_543_to_islim,
 )
-from app.services.video_processing.video_pipeline import process_video_file
 
 router = APIRouter(prefix="/translation", tags=["translation"])
 
@@ -123,7 +122,10 @@ async def translate_islim_video(file: UploadFile = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
 
-        # Real video -> (T, 543, 3) MediaPipe landmarks.
+        # cv2/mediapipe (via video_pipeline) are heavy and only needed for
+        # video uploads: import lazily so word-mode startup stays light.
+        from app.services.video_processing.video_pipeline import process_video_file  # noqa: PLC0415
+
         landmarks_543 = process_video_file(tmp_path, max_frames=ISLI_MAX_FRAMES)
 
         # Convert to ISLiM contract (T, 94, 4) [x, y, z, visibility].

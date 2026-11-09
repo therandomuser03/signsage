@@ -28,9 +28,18 @@ services:
         value: cpu
       - key: SIGNSAGE_LOG_LEVEL
         value: INFO
+      # Word-recognition demo mode (model shipped inside the image at
+      # backend/word_model/; resolved via SIGNSAGE_WORD_MODEL_DIR if set).
+      - key: SIGNSAGE_WORD_MODE_ENABLED
+        value: "true"
+      # Trust Render proxy's X-Forwarded-For so per-client rate limiting and
+      # CORS origin checks see the real client IP.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
       # Production browser origin(s), JSON list. No wildcard (credentials on).
+      # NOTE: no trailing slash -- browsers send Origin without one.
       - key: SIGNSAGE_CORS_ORIGINS
-        value: '["https://signsage.vercel.app/"]'
+        value: '["https://signsage.vercel.app"]'
       # Deployment-bundle download (set in dashboard; required for inference):
       - key: SIGNSAGE_BUNDLE_URL
         sync: false

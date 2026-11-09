@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from app.core.dependencies import get_current_user, get_history_service
+from app.core.ratelimit import rate_limit_dependency
 from app.core.security import AuthenticatedUser
 from app.schemas.history import DeletedResponse, HistoryItem, HistoryListResponse
 from app.services.history_service import HistoryService
@@ -29,7 +30,10 @@ async def list_history(
     )
 
 
-@router.delete("", response_model=DeletedResponse)
+@router.delete(
+    "", response_model=DeletedResponse,
+    dependencies=[Depends(rate_limit_dependency("history_write"))],
+)
 async def clear_history(
     user: AuthenticatedUser = Depends(get_current_user),
     service: HistoryService = Depends(get_history_service),
@@ -37,7 +41,10 @@ async def clear_history(
     return DeletedResponse(deleted=await service.clear(user))
 
 
-@router.delete("/{record_id}", response_model=DeletedResponse)
+@router.delete(
+    "/{record_id}", response_model=DeletedResponse,
+    dependencies=[Depends(rate_limit_dependency("history_write"))],
+)
 async def delete_history_entry(
     record_id: str,
     user: AuthenticatedUser = Depends(get_current_user),
