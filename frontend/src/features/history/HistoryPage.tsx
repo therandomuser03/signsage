@@ -295,7 +295,7 @@ export default function HistoryPage() {
               </EmptyHeader>
               {items.length === 0 && !filtering && (
                 <EmptyContent>
-                  <Button render={<a href="/app/translate" />}>Start translating</Button>
+                  <Button render={<a href="/app/interpreter" />}>Start interpreting</Button>
                 </EmptyContent>
               )}
             </Empty>

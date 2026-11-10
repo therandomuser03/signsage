@@ -1,4 +1,4 @@
-"""Word-level recognition adapter for the demo vocabulary (8 words + rest).
+"""Word-level recognition adapter for the isolated-word vocabulary (8 words + rest).
 
 Loads the FINAL-UNEVALUATED cnn-v3 bundle once per process and classifies a
 (T, 543, 3) landmark array into top-3 labels with probabilities.

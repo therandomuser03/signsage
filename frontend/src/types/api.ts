@@ -32,7 +32,7 @@ export interface CapabilitiesResponse {
   avatar_vocabulary_size: number;
   landmark_count: number;
   max_frames_per_sequence: number;
-  // Word-level recognition (demo vocabulary, behind SIGNSAGE_WORD_MODE_ENABLED)
+  // Word-level recognition (behind SIGNSAGE_WORD_MODE_ENABLED)
   word_recognition_enabled?: boolean | null;
   word_recognition_vocabulary?: string[] | null;
   word_recognition_threshold?: number | null;

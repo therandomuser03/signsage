@@ -1,7 +1,9 @@
 """Heuristic ISL-fallback recognizer: a tiny, explicitly limited sign classifier.
 
 Scope: 5 static one-hand shapes voted over a landmark sequence. This is NOT
-general ISL translation -- it exists so the live webcam path can demonstrate
+general ISL translation -- it provides rule-based recognition for the
+live webcam path while the transformer model completes deployment
+gating.
 real landmark-derived recognition while the transformer remains NO-GO (see
 backend/models/README.md and MODEL_DEPLOYMENT_DIAGNOSIS.md). The transformer
 gate is untouched: this pipeline never loads a checkpoint and is always
@@ -44,7 +46,7 @@ GLOSS_TEXT = {
 
 FALLBACK_VOCABULARY = tuple(GLOSS_TEXT)
 
-#: Gloss ID -> how to perform it for the demo hint in the UI.
+#: Gloss ID -> how to perform it for the UI hint.
 GLOSS_HINTS = {
     "HELLO": "Open palm, fingers spread, facing the camera",
     "YES": "Thumbs up (only the thumb extended)",

@@ -882,7 +882,7 @@ export default function TranslatePage() {
             <p className="mt-0.5 text-xs text-foreground/60">
               {capabilities?.sign_to_text_unavailable_reason ??
                 "The backend reports no usable translation model right now."}{" "}
-              Camera preview is still available.
+              Camera mode is still available.
             </p>
           </div>
         </div>
@@ -890,7 +890,7 @@ export default function TranslatePage() {
 
       {capabilities?.sign_to_text_source === "heuristic-fallback" && (
         <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
-          <p className="font-medium">Recognizable signs (limited preview)</p>
+          <p className="font-medium">Recognizable signs (limited vocabulary)</p>
           <p className="mt-0.5 text-xs text-foreground/60">
             Rule-based recognition of 5 static one-hand shapes — hold each steady
             toward the camera for ~2 seconds, then press Stop to finalize. Not
@@ -908,7 +908,7 @@ export default function TranslatePage() {
 
       {isolatedWordModel && (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium">Limited isolated-word ISL pilot</p>
+          <p className="font-medium">Limited isolated-word ISL vocabulary</p>
           <p className="mt-0.5 text-xs text-foreground/60">
             Recognizes a small vocabulary of isolated words; it does not
             translate continuous signing or sentences. Model score is
@@ -958,7 +958,7 @@ export default function TranslatePage() {
       {/* Video upload for isolated-word recognition */}
       <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-2">
-          Video upload (isolated-word pilot)
+          Video upload (isolated-word recognition)
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -1050,7 +1050,7 @@ export default function TranslatePage() {
                   <Camera aria-hidden="true" className="h-7 w-7" />
                 </span>
                 <p className="mt-3 text-base font-semibold text-white">
-                  {modelBlocked ? "Camera preview only" : "Ready to interpret"}
+                  {modelError ? "Camera mode is still available." : "Ready to interpret"}
                 </p>
                 <p className="mt-1 text-sm">
                   {phase === "error"
@@ -1058,7 +1058,7 @@ export default function TranslatePage() {
                       detectorMessage ??
                       "Something went wrong. Try again.")
                     : modelBlocked
-                      ? "Translation is unavailable — the recognition model has not passed the deployment gate. Camera preview and landmark overlay will still work."
+                      ? "Translation is unavailable — the recognition model has not passed the deployment gate. Camera mode and landmark overlay will still work."
                       : "Position yourself in frame and start signing."}
                 </p>
                 <Button
@@ -1134,7 +1134,7 @@ export default function TranslatePage() {
                   Translation unavailable
                 </p>
                 <p className="mt-2 text-xs text-foreground/55">
-                  {modelError} Camera preview is still available.
+                  {modelError} Camera mode is still available.
                 </p>
               </>
             ) : display ? (

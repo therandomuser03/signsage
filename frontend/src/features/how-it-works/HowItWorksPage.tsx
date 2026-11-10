@@ -61,7 +61,7 @@ export default function HowItWorksPage() {
             lightMode={theme === "light"}
           />
         </div>
-        <div className="relative z-10 mx-auto max-w-4xl">
+        <div className="relative z-10 mx-auto max-w-6xl">
           <p className="animate-rise text-sm font-semibold uppercase tracking-[0.2em] text-foreground/40">
             How it works
           </p>
@@ -82,7 +82,7 @@ export default function HowItWorksPage() {
       </section>
 
       <section className="px-6 pb-8">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <Card>
               <CardContent className="flex flex-wrap items-center gap-3 px-6 py-6">
@@ -103,7 +103,7 @@ export default function HowItWorksPage() {
       </section>
 
       <section className="px-6 py-16">
-        <div className="mx-auto max-w-4xl space-y-6">
+        <div className="mx-auto max-w-6xl space-y-6">
           {STEPS.map((step, i) => (
             <Reveal key={step.number} delay={i * 70}>
               <Card>
@@ -131,7 +131,7 @@ export default function HowItWorksPage() {
       </section>
 
       <section className="px-6 py-20">
-        <div className="mx-auto max-w-4xl text-center">
+        <div className="mx-auto max-w-6xl text-center">
           <Reveal>
             <ArrowDown aria-hidden="true" className="mx-auto h-5 w-5 text-foreground/25" />
             <h2 className="mt-6 text-3xl font-semibold tracking-tight md:text-4xl">

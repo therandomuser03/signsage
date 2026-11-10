@@ -158,7 +158,7 @@ async def word_recognition(
     if not settings.word_mode_enabled:
         raise WordModeDisabledError(
             "Word recognition is disabled. Set SIGNSAGE_WORD_MODE_ENABLED=true "
-            "to enable the demo word-level recognition path."
+            "to enable the word-level recognition path."
         )
 
     t0_total = time.perf_counter()
@@ -277,7 +277,7 @@ async def compose_sentence(
     if not settings.word_mode_enabled:
         raise WordModeDisabledError(
             "Word composition is disabled. Set SIGNSAGE_WORD_MODE_ENABLED=true "
-            "to enable the demo word-level recognition path."
+            "to enable the word-level recognition path."
         )
 
     words = payload.get("words")

@@ -65,7 +65,7 @@ export default function PrivacyPage() {
             lightMode={theme === "light"}
           />
         </div>
-        <div className="relative z-10 mx-auto max-w-4xl">
+        <div className="relative z-10 mx-auto max-w-6xl">
           <p className="animate-rise text-sm font-semibold uppercase tracking-[0.2em] text-foreground/40">
             Privacy
           </p>
@@ -87,7 +87,7 @@ export default function PrivacyPage() {
       </section>
 
       <section className="px-6 pb-16">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <Alert>
               <ShieldCheck aria-hidden="true" />
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
       </section>
 
       <section className="px-6 pb-24">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <Accordion
               value={openSections}
@@ -125,8 +125,8 @@ export default function PrivacyPage() {
           <Reveal delay={80}>
             <p className="mt-10 text-sm leading-6 text-foreground/50">
               Questions about your data? Manage it directly in{" "}
-              <Link to="/app/history" className="font-medium text-foreground underline underline-offset-4">
-                History
+              <Link to="/app/translation-log" className="font-medium text-foreground underline underline-offset-4">
+                Translation Log
               </Link>{" "}
               and{" "}
               <Link to="/app/settings" className="font-medium text-foreground underline underline-offset-4">

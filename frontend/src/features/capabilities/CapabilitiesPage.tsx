@@ -26,9 +26,9 @@ const CAPABILITIES = [
   {
     icon: Languages,
     title: "Sign → Text",
-    status: "Research preview",
+    status: "Research stage",
     text: "Open the camera and sign. Capture, landmark streaming, and status handling work; the translation model is currently gated with no supported vocabulary yet, so the app reports availability honestly instead of guessing.",
-    to: "/app/translate",
+    to: "/app/interpreter",
     action: "Open Translate",
   },
   {
@@ -36,7 +36,7 @@ const CAPABILITIES = [
     title: "Text → Sign",
     status: "Live",
     text: "Type English and get a gloss sequence mapped against the sign library, performed on the signing avatar where assets are bundled.",
-    to: "/app/text-to-sign",
+    to: "/app/generator",
     action: "Open Text → Sign",
   },
   {
@@ -44,7 +44,7 @@ const CAPABILITIES = [
     title: "Translation History",
     status: "Account",
     text: "Translations you choose to save are kept per account. Search, filter, review details, and delete anything — individually or all at once.",
-    to: "/app/history",
+    to: "/app/translation-log",
     action: "Open History",
   },
   {
@@ -52,7 +52,7 @@ const CAPABILITIES = [
     title: "Saved Signs",
     status: "Account",
     text: "Keep useful signs close at hand. Saved signs are your stored translations, browsable as cards with detail and removal.",
-    to: "/app/saved-signs",
+    to: "/app/custom-glossary",
     action: "Open Saved Signs",
   },
   {
@@ -99,7 +99,7 @@ export default function CapabilitiesPage() {
             className="animate-rise mt-8 max-w-2xl text-lg font-medium leading-8 text-foreground/55"
             style={{ animationDelay: "180ms" }}
           >
-            Everything below exists in the application today. Research-preview
+            Everything below exists in the application today. Items below
             items are labelled as such — nothing here promises accuracy the
             models have not earned.
           </p>
@@ -139,7 +139,7 @@ export default function CapabilitiesPage() {
       </section>
 
       <section className="px-6 pb-28">
-        <div className="mx-auto max-w-4xl text-center">
+        <div className="mx-auto max-w-6xl text-center">
           <Reveal>
             <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
               Try them yourself.

@@ -11,6 +11,7 @@ import TextToSignPage from "@/features/text-to-sign/TextToSignPage";
 import HistoryPage from "@/features/history/HistoryPage";
 import SavedSignsPage from "@/features/saved/SavedSignsPage";
 import SettingsPage from "@/features/settings/SettingsPage";
+import HelpPage from "@/features/help/HelpPage";
 
 export const router = createBrowserRouter([
   {
@@ -24,6 +25,10 @@ export const router = createBrowserRouter([
   {
     path: "/how-it-works",
     element: <HowItWorksPage />,
+  },
+  {
+    path: "/help",
+    element: <HelpPage />,
   },
   {
     path: "/capabilities",
@@ -50,22 +55,22 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [      {
         index: true,
-        element: <Navigate to="translate" replace />,
+        element: <Navigate to="interpreter" replace />,
       },
       {
-        path: "translate",
+        path: "interpreter",
         element: <TranslatePage />,
       },
       {
-        path: "text-to-sign",
+        path: "generator",
         element: <TextToSignPage />,
       },
       {
-        path: "history",
+        path: "translation-log",
         element: <HistoryPage />,
       },
       {
-        path: "saved-signs",
+        path: "custom-glossary",
         element: <SavedSignsPage />,
       },
       {

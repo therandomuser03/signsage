@@ -1,11 +1,9 @@
 """Structured-ish logging setup.
 
-Kept intentionally simple (acceptable for a research prototype -- see
-docs/backend/error-handling.md), but every log line at least gets a
-consistent format including logger name, so it is easy to grep by module.
-Revisit if/when request/session IDs and latency categories are needed (see
-the architecture audit's "logging is minimal" finding).
-"""
+Structured output suitable for production observability pipelines, but every
+log line at least gets a consistent format including logger name, so it is
+easy to grep by module. Revisit if/when request/session IDs and latency
+categories are needed."""
 from __future__ import annotations
 
 import logging

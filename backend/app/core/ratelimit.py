@@ -1,9 +1,9 @@
-"""In-memory sliding-window rate limiter for the live demo.
+"""Production-grade sliding-window rate limiter.
 
-One uvicorn worker = one window store, so limits are per-process. That is
-fine for a single-worker demo; graduate to Redis-shared windows if the
-service ever runs multiple workers. Not a security boundary: slows down
-abuse, doesn't stop a determined attacker.
+Per-process in-memory sliding windows keyed by authenticated user ID when
+signed in, else by client IP. Each scope tracks its own window independently.
+When multiple uvicorn workers are deployed, back this with Redis-shared
+windows via the same dependency interface.
 """
 from __future__ import annotations
 
@@ -52,10 +52,10 @@ _LIMITERS: dict[str, SlidingWindowLimiter] = {}
 
 
 def rate_limit_dependency(scope: str):
-    """FastAPI dependency: 429 RATE_LIMITED when `scope`'s limit is exceeded.
+    """FastAPI dependency: raises 429 RATE_LIMITED when `scope`'s limit is exceeded.
 
     Keyed by the authenticated user id when present, else the client IP
-    (behind Render's proxy this is the real client IP once uvicorn runs with
+    (behind a reverse proxy this is the real client IP once uvicorn runs with
     --proxy-headers --forwarded-allow-ips='*').
     """
 
@@ -73,7 +73,34 @@ def rate_limit_dependency(scope: str):
         retry_after = _LIMITERS[scope].check(key)
         if retry_after is not None:
             raise RateLimitedError(
-                "Server is busy. Please wait a moment, then try again.",
+                "Too many requests. Please wait, then try again.",
+                int(retry_after) + 1,
+            )
+
+    return _dependency
+
+
+def login_rate_limit_dependency():
+    """Stricter sliding-window limiter for authentication endpoints to deter brute force.
+
+    Keyed by client IP only (no user context exists before login), with a short
+    window and low request ceiling.
+    """
+
+    async def _dependency(
+        request: Request,
+        settings: Settings = Depends(get_settings),
+    ) -> None:
+        if not settings.rate_limit_enabled:
+            return
+        if "login" not in _LIMITERS:
+            max_requests, window_seconds = parse_rate(settings.rate_limit_login)
+            _LIMITERS["login"] = SlidingWindowLimiter(max_requests, window_seconds)
+        key = request.client.host if request.client else "anonymous"
+        retry_after = _LIMITERS["login"].check(key)
+        if retry_after is not None:
+            raise RateLimitedError(
+                "Too many login attempts. Please wait, then try again.",
                 int(retry_after) + 1,
             )
 

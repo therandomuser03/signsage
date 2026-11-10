@@ -151,7 +151,7 @@ export default function TextToSignPage() {
               ? "Checking avatar…"
               : usingVrm
                 ? "Avatar ready"
-                : "Procedural preview"}
+                : "Procedural motion"}
           </p>
         </div>
       </div>
@@ -365,7 +365,7 @@ export default function TextToSignPage() {
                     className="h-full w-full"
                     caption={
                       state.currentGlossId ??
-                      (state.isPlaying ? "Signing…" : "Procedural preview")
+                      (state.isPlaying ? "Signing…" : "Procedural motion")
                     }
                   />
                 )
@@ -392,7 +392,7 @@ export default function TextToSignPage() {
             {!usingVrm && manifest && (
               <Alert className="mt-3">
                 <CircleAlert aria-hidden="true" />
-                <AlertTitle>Procedural motion preview</AlertTitle>
+                <AlertTitle>Motion mode</AlertTitle>
                 <AlertDescription>
                   The hand-authored VRM avatar and clips are not bundled here,
                   so a built-in 3D figure performs a distinct motion per sign.

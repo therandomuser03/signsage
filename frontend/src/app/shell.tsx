@@ -55,21 +55,21 @@ const ACTIVE =
   "bg-green-500/10 font-medium text-foreground [&>svg]:text-green-600 dark:[&>svg]:text-green-400";
 
 const INTERPRET_NAV = [
-  { to: "/app/translate", label: "Live Interpreter", icon: Languages },
-  { to: "/app/text-to-sign", label: "Text → Sign", icon: Hand },
+  { to: "/app/interpreter", label: "Live Interpreter", icon: Languages },
+  { to: "/app/generator", label: "Sign Generator", icon: Hand },
 ];
 
 const LIBRARY_NAV = [
-  { to: "/app/history", label: "History", icon: History },
-  { to: "/app/saved-signs", label: "Saved Signs", icon: Bookmark },
+  { to: "/app/translation-log", label: "Translation Log", icon: History },
+  { to: "/app/custom-glossary", label: "Custom Glossary", icon: Bookmark },
 ];
 
 const TITLES: Record<string, string> = {
   "/app": "Live Interpreter",
-  "/app/translate": "Live Interpreter",
-  "/app/text-to-sign": "Text → Sign",
-  "/app/history": "History",
-  "/app/saved-signs": "Saved Signs",
+  "/app/interpreter": "Live Interpreter",
+  "/app/generator": "Sign Generator",
+  "/app/translation-log": "Translation Log",
+  "/app/custom-glossary": "Custom Glossary",
   "/app/settings": "Settings",
 };
 

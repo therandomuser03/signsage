@@ -35,7 +35,7 @@ class CapabilitiesResponse(BaseModel):
     avatar_vocabulary_size: int
     landmark_count: int
     max_frames_per_sequence: int
-    # Word-level recognition (demo vocabulary, behind SIGNSAGE_WORD_MODE_ENABLED)
+    # Word-level recognition (behind SIGNSAGE_WORD_MODE_ENABLED)
     word_recognition_enabled: Optional[bool] = None
     word_recognition_vocabulary: Optional[List[str]] = None
     word_recognition_threshold: Optional[float] = None

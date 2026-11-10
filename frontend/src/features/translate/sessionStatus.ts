@@ -62,7 +62,7 @@ export function sessionBadgeLabel(
   status: ConnectionStatus,
   opts: { modelUnavailable: boolean; everOpened: boolean },
 ): string {
-  if (opts.modelUnavailable) return "Preview only";
+  if (opts.modelUnavailable) return "Camera mode";
   return transportLabel(status, opts.everOpened);
 }
 

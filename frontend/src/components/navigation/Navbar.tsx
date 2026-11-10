@@ -141,6 +141,13 @@ export function Navbar() {
           </Link>
 
           <Link
+            to="/help"
+            className="font-medium text-foreground/60 transition-colors hover:text-foreground"
+          >
+            Help
+          </Link>
+
+          <Link
             to="/privacy"
             className="font-medium text-foreground/60 transition-colors hover:text-foreground"
           >

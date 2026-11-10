@@ -38,7 +38,7 @@ function ProductPreview() {
           </div>
 
           <p className="text-sm text-foreground/40">
-            Camera preview
+            Camera feed
           </p>
         </div>
       </div>
@@ -89,21 +89,21 @@ const HOW_IT_WORKS = [
 const CAPABILITIES = [
   {
     number: "01",
-    title: "Sign → Text",
+    title: "Live Interpreter",
     text: "Experiment with real-time sign-to-text using browser-extracted landmarks.",
-    to: "/app/translate",
+    to: "/app/interpreter",
   },
   {
     number: "02",
-    title: "Text → Sign",
+    title: "Sign Generator",
     text: "Demonstrate how interpreted language can be represented visually.",
-    to: "/app/text-to-sign",
+    to: "/app/generator",
   },
   {
     number: "03",
-    title: "Translation History",
+    title: "Translation Log",
     text: "Review past translations with user-controlled application data.",
-    to: "/app/history",
+    to: "/app/translation-log",
   },
 ];
 

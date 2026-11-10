@@ -92,7 +92,7 @@ export default function AboutPage() {
             lightMode={theme === "light"}
           />
         </div>
-        <div className="relative z-10 mx-auto max-w-4xl">
+        <div className="relative z-10 mx-auto max-w-6xl">
           <p className="animate-rise text-sm font-semibold uppercase tracking-[0.2em] text-foreground/40">
             About SignSage
           </p>
@@ -115,7 +115,7 @@ export default function AboutPage() {
 
       {/* 2. The problem */}
       <section className="border-t border-transparent px-6 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
               The problem
@@ -142,7 +142,7 @@ export default function AboutPage() {
 
       {/* 3. The approach */}
       <section className="border-t border-transparent px-6 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
               The approach
@@ -174,7 +174,7 @@ export default function AboutPage() {
 
       {/* 4. ISL focus */}
       <section className="border-t border-transparent bg-card px-6 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
               Focus
@@ -201,7 +201,7 @@ export default function AboutPage() {
 
       {/* 5. Focused scope */}
       <section className="border-t border-transparent px-6 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
               Scope
@@ -270,7 +270,7 @@ export default function AboutPage() {
 
       {/* 6. Privacy */}
       <section className="border-t border-transparent px-6 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
               Privacy
@@ -297,7 +297,7 @@ export default function AboutPage() {
 
       {/* 7. Technology */}
       <section className="border-t border-transparent bg-card px-6 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-6xl">
           <Reveal>
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
               Technology
@@ -316,7 +316,7 @@ export default function AboutPage() {
               Browser-side landmark tracking, a real-time socket
               protocol, and a Python backend — instrumented
               end to end, with evaluation results published alongside
-              the demo instead of hidden behind it.
+              the platform instead of hidden behind it.
             </p>
           </Reveal>
         </div>
@@ -324,7 +324,7 @@ export default function AboutPage() {
 
       {/* 8. CTA */}
       <section className="px-6 py-28 md:py-40">
-        <div className="mx-auto max-w-4xl text-center">
+        <div className="mx-auto max-w-6xl text-center">
           <Reveal>
             <h2 className="text-5xl font-semibold tracking-[-0.04em] md:text-7xl">
               Explore SignSage.
@@ -333,7 +333,7 @@ export default function AboutPage() {
               Try SignSage and see where it stands.
             </p>
             <Link
-              to="/app/translate"
+              to="/app/interpreter"
               className="mt-10 inline-flex rounded-xl bg-primary px-7 py-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
             >
               Start interpreting

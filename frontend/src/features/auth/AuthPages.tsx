@@ -41,7 +41,13 @@ import { SignSageLogo } from "@/components/logo";
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email address."),
-  password: z.string().min(8, "Password needs at least 8 characters."),
+  password: z
+    .string()
+    .min(8, "Password needs at least 8 characters.")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter.")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter.")
+    .regex(/[0-9]/, "Password must contain at least one digit.")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character."),
 });
 
 type Credentials = z.infer<typeof credentialsSchema>;
@@ -511,7 +517,7 @@ export function SignupPage() {
 /** Auth-checking page: signed in → the app, otherwise → login (which returns here). */
 export function StartPage() {
   const navigate = useNavigate();
-  const { next, loginTo } = useNext("/app/translate");
+  const { next, loginTo } = useNext("/app/interpreter");
 
   useEffect(() => {
     let live = true;

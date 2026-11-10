@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from app.api.router import router
 from app.core.config import get_settings
@@ -42,6 +43,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Apply production-grade security headers to every response."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
 app = FastAPI(title="SignSage API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
@@ -51,6 +65,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.middleware("http")(security_headers_middleware)
 
 register_exception_handlers(app)
 app.include_router(router)
