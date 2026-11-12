@@ -178,9 +178,9 @@ class Settings(BaseSettings):
     # --- Rate limiting (production sliding windows) ---------------
     rate_limit_enabled: bool = True
     rate_limit_login: str = "5/min"
-    rate_limit_word: str = "20/min"
-    rate_limit_compose: str = "15/min"
-    rate_limit_history_write: str = "20/min"
+    rate_limit_word: str = "30/min"
+    rate_limit_compose: str = "20/min"
+    rate_limit_history_write: str = "30/min"
     # Tune per deployment via SIGNSAGE_RATE_LIMIT_*.
 
     @field_validator("cors_origins", mode="before")

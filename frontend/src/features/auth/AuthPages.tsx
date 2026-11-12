@@ -37,6 +37,7 @@ import { toast } from "@/components/ui/toast";
 import { isSupabaseConfigured } from "@/services/supabase/client";
 import { getAccessToken, resetPassword, signIn, signInWithGoogle, signUp } from "@/services/supabase/auth";
 import { SignSageLogo } from "@/components/logo";
+import { isGoogleOAuthEnabled } from "./googleOAuth";
 
 
 const credentialsSchema = z.object({
@@ -51,6 +52,16 @@ const credentialsSchema = z.object({
 });
 
 type Credentials = z.infer<typeof credentialsSchema>;
+
+// Login deliberately does NOT apply the signup complexity rules: existing
+// accounts with older (simpler) passwords must still be able to sign in.
+// Supabase/Auth validates the password against whatever was set at signup.
+const loginSchema = z.object({
+  email: z.string().email("Enter a valid email address."),
+  password: z.string().min(1, "Enter your password."),
+});
+
+type LoginCredentials = z.infer<typeof loginSchema>;
 
 function useCredentialsForm() {
   return useForm<Credentials>();
@@ -168,10 +179,12 @@ function LoginForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
-  const { register, handleSubmit, getValues, formState: { errors } } = useCredentialsForm();
+  // Google is only offered when the host has explicitly enabled and configured it.
+  const googleEnabled = isGoogleOAuthEnabled(import.meta.env?.VITE_GOOGLE_OAUTH_ENABLED);
+  const { register, handleSubmit, getValues, formState: { errors } } = useForm<LoginCredentials>();
 
-  const onSubmit = (values: Credentials) => {
-    const parsed = credentialsSchema.safeParse(values);
+  const onSubmit = (values: LoginCredentials) => {
+    const parsed = loginSchema.safeParse(values);
     if (!parsed.success) return;
     setServerError(null);
     setBusy(true);
@@ -260,16 +273,18 @@ function LoginForm() {
             {busy && <Spinner aria-hidden="true" />}
             Login
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={busy || googleBusy}
-            onClick={onGoogle}
-          >
-            {googleBusy && <Spinner aria-hidden="true" />}
-            Login with Google
-          </Button>
+          {googleEnabled && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={busy || googleBusy}
+              onClick={onGoogle}
+            >
+              {googleBusy && <Spinner aria-hidden="true" />}
+              Login with Google
+            </Button>
+          )}
           <FieldDescription className="text-center">
             Don&apos;t have an account?{" "}
             <Link to={signupTo} className="underline underline-offset-4">

@@ -106,9 +106,9 @@ export default function AboutPage() {
             className="animate-rise mt-8 max-w-2xl text-lg font-medium leading-8 text-foreground/55 md:text-xl"
             style={{ animationDelay: "180ms" }}
           >
-            SignSage is an Indian Sign Language communication
-            platform — exploring interaction between signs, text, and
-            visual representations.
+            SignSage is a research prototype for Indian Sign Language
+            communication — exploring interaction between signs, text, and
+            visual representations. Not for medical, legal or emergency use.
           </p>
         </div>
       </section>
@@ -281,9 +281,8 @@ export default function AboutPage() {
             <div className="mt-8 max-w-2xl space-y-5 text-lg leading-8 text-foreground/55">
               <p>
                 Camera frames are processed into landmark representations
-                in the browser. Only those numerical representations
-                travel to the backend — raw video never leaves the
-                device, because the system never needs it to.
+                in the browser. For the live camera path, only those
+                numerical representations travel to the backend.
               </p>
               <p>
                 Server-side, only text results are stored, per account,

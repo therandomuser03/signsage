@@ -212,9 +212,10 @@ export default function LandingPage() {
               className="animate-rise mt-8 max-w-2xl text-lg font-medium leading-8 text-foreground/55 md:text-xl"
               style={{ animationDelay: "200ms" }}
             >
-              SignSage is an Indian Sign Language communication
-              platform — real-time interpretation between signs, text,
-              and visual representations.
+              SignSage is a research prototype for Indian Sign Language
+              communication — real-time interpretation between signs, text,
+              and visual representations. Not for medical, legal or emergency
+              use.
             </p>
 
             <div

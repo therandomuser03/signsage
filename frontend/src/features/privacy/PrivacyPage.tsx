@@ -18,7 +18,7 @@ const SECTIONS = [
   {
     value: "camera",
     title: "Camera processing",
-    body: "Video is captured through your browser's camera API and drawn to a local preview. Landmark extraction runs on-device in the same page. Frames are processed as they arrive and discarded — the application keeps no video, takes no snapshots, and has nowhere to send pictures even if it wanted to: the network protocol only accepts numerical landmark arrays.",
+    body: "Video is captured through your browser's camera API and drawn to a local preview. For the live camera interpreter path, landmark extraction runs on-device in the same page and frames are processed as they arrive and discarded — the application keeps no video and takes no snapshots. Only numerical landmark arrays travel to the backend for that path.",
   },
   {
     value: "landmarks",
@@ -93,9 +93,9 @@ export default function PrivacyPage() {
               <ShieldCheck aria-hidden="true" />
               <AlertTitle>The one rule</AlertTitle>
               <AlertDescription>
-                If data never leaves your device, it cannot leak. The
-                system is designed so the backend never needs — and
-                never receives — your video.
+                If your camera data never leaves your device, it cannot leak
+                from that path. The live camera interpreter path sends
+                landmark representations, not raw video, to the backend.
               </AlertDescription>
             </Alert>
           </Reveal>

@@ -1,8 +1,4 @@
 import { SignSageLogo } from "@/components/logo";
-import {
-  Link,
-  X,
-} from "lucide-react";
 
 function LinkColumn({
   title,
@@ -33,35 +29,19 @@ function LinkColumn({
 const PLATFORM = [
   { label: "How it works", href: "/how-it-works" },
   { label: "Capabilities", href: "/capabilities" },
-  { label: "Case studies", href: "#" },
-  { label: "Safety & AI models", href: "#" },
 ];
 
 const SUPPORT = [
-  { label: "Help & support", href: "/help" },
-  { label: "Resource Center", href: "#" },
-  { label: "Status", href: "#" },
-  { label: "Developer Docs", href: "#" },
+  { label: "Help", href: "/help" },
 ];
 
 const ABOUT = [
-  { label: "Our mission", href: "/about" },
-  { label: "Medical Advisory", href: "#" },
-  { label: "Research", href: "#" },
-  { label: "Accessibility commitment", href: "#" },
+  { label: "About", href: "/about" },
+  { label: "Translation Log", href: "/app/translation-log" },
 ];
 
 const SECURITY = [
-  { label: "HIPAA & privacy", href: "/privacy" },
-  { label: "Security posture", href: "#" },
-  { label: "Terms of service", href: "#" },
-  { label: "GDPR compliance", href: "#" },
-];
-
-const SOCIALS = [
-  { icon: Link, label: "LinkedIn", href: "#" },
-  { icon: X, label: "Twitter/X", href: "#" },
-  { icon: Link, label: "GitHub", href: "#" },
+  { label: "Privacy", href: "/privacy" },
 ];
 
 /** Site-wide footer. Single instance — reuse, don't duplicate. */
@@ -77,8 +57,8 @@ export function Footer() {
               <span className="text-lg font-semibold tracking-tight">SignSage</span>
             </div>
             <p className="max-w-xs text-sm leading-6 text-foreground/55">
-              Clinical-grade AI bridging sign language, text, and visual
-              representations.
+              Research prototype for Indian Sign Language communication. Not
+              for medical, legal or emergency use.
             </p>
           </div>
 
@@ -96,24 +76,7 @@ export function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col justify-between gap-2 text-sm text-foreground/40 md:flex-row">
-          <span>© 2026 SignSage. All rights reserved.</span>
-          <div className="flex items-center gap-4">
-            <span className="text-foreground/55">Clinical communication platform for sign language.</span>
-            <div className="flex items-center gap-3">
-              {SOCIALS.map(({ icon: Icon, label, href }) => (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={label}
-                  className="text-foreground/55 hover:text-foreground transition-colors"
-                >
-                  <Icon className="h-4 w-4" />
-                </a>
-              ))}
-            </div>
-          </div>
+          <span>© 2026 SignSage.</span>
         </div>
       </div>
     </footer>

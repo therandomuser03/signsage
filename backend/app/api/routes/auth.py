@@ -7,7 +7,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.core.dependencies import get_current_user
-from app.core.ratelimit import login_rate_limit_dependency
 from app.core.security import AuthenticatedUser
 from app.schemas.auth import MeResponse
 from app.services.authentication_service import to_domain_user
@@ -18,7 +17,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.get(
     "/me",
     response_model=MeResponse,
-    dependencies=[Depends(login_rate_limit_dependency())],
 )
 async def me(user: AuthenticatedUser = Depends(get_current_user)) -> MeResponse:
     domain_user = to_domain_user(user)

@@ -59,14 +59,14 @@ test("transport wording never mentions the model", () => {
   assert.equal(transportLabel("idle", false), "Disconnected");
 });
 
-test("session surfaces read preview-only instead of a failure", () => {
+test("session surfaces camera mode instead of a failure when model gated", () => {
   assert.equal(
     sessionBadgeLabel("closed", { modelUnavailable: true, everOpened: false }),
-    "Preview only",
+    "Camera mode",
   );
   assert.equal(
     sessionBadgeLabel("idle", { modelUnavailable: true, everOpened: false }),
-    "Preview only",
+    "Camera mode",
   );
   // No verdict: honest transport wording.
   assert.equal(

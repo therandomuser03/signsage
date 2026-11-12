@@ -79,29 +79,3 @@ def rate_limit_dependency(scope: str):
 
     return _dependency
 
-
-def login_rate_limit_dependency():
-    """Stricter sliding-window limiter for authentication endpoints to deter brute force.
-
-    Keyed by client IP only (no user context exists before login), with a short
-    window and low request ceiling.
-    """
-
-    async def _dependency(
-        request: Request,
-        settings: Settings = Depends(get_settings),
-    ) -> None:
-        if not settings.rate_limit_enabled:
-            return
-        if "login" not in _LIMITERS:
-            max_requests, window_seconds = parse_rate(settings.rate_limit_login)
-            _LIMITERS["login"] = SlidingWindowLimiter(max_requests, window_seconds)
-        key = request.client.host if request.client else "anonymous"
-        retry_after = _LIMITERS["login"].check(key)
-        if retry_after is not None:
-            raise RateLimitedError(
-                "Too many login attempts. Please wait, then try again.",
-                int(retry_after) + 1,
-            )
-
-    return _dependency

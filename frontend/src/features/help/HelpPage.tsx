@@ -1,6 +1,5 @@
-import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Footer } from "@/components/footer";
 import { Navbar } from "@/components/navigation/Navbar";
@@ -11,15 +10,22 @@ import { useTheme } from "@/components/theme-provider";
 /**
  * ISL dictionary help page.
  *
- * Lists common Indian Sign Language words and links each to its
- * demonstration page on https://indiansignlanguage.org/ so users can
- * learn how to perform a sign.
+ * Lists common Indian Sign Language words and links each to the ISL portal
+ * homepage so users can look up a sign demonstration.
  *
- * NOTE: indiansignlanguage.org blocks direct scraping, so the per-word
- * URL pattern below (`/dictionary/<word>`) follows the site's standard
- * dictionary structure. If the live site uses a different path, change
- * ISL_BASE_URL here and all links update at once.
+ * NOTE: indiansignlanguage.org blocks automated requests (403 on
+ * /dictionary/<word>), so the per-word pattern below could not be verified
+ * against the live site. Every word card therefore links to the portal
+ * homepage instead. The portal belongs to a third party; this page only links
+ * to it and is not affiliated with it.
+ *
+ * The per-word URL pattern is kept only as a clearly marked, unverified
+ * reference: ISL_BASE_URL + "/" + <word>.
  */
+const ISL_PORTAL_HOME = "https://indiansignlanguage.org/";
+
+// Unverified per-word reference pattern (kept as a clearly marked constant,
+// not used for links): https://indiansignlanguage.org/dictionary/<word>
 const ISL_BASE_URL = "https://indiansignlanguage.org/dictionary";
 
 const ISL_WORDS = [
@@ -118,6 +124,15 @@ export default function HelpPage() {
               Each card opens the sign&apos;s page on indiansignlanguage.org
               so you can watch the demonstration and learn the hand shape.
             </p>
+            <p className="mt-4 text-xs text-foreground/40">
+              Per-word dictionary links on indiansignlanguage.org follow the
+              unverified pattern{" "}
+              <code className="font-mono">{ISL_BASE_URL}/&lt;word&gt;</code>
+              . This page links to the portal homepage instead because the
+              per-word pattern could not be confirmed against the live site.
+              The portal belongs to a third party; SignSage only links to it
+              and is not affiliated with it.
+            </p>
           </Reveal>
 
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -134,74 +149,19 @@ export default function HelpPage() {
                 <CardContent className="pt-4">
                   <div className="flex items-center justify-between">
                     <Badge variant="secondary">ISL sign</Badge>
-                    <Link
-                      to={`${ISL_BASE_URL}/${encodeURIComponent(word)}`}
+                    <a
+                      href={ISL_PORTAL_HOME}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-border hover:bg-muted"
                     >
-                      View sign <ExternalLink size={14} />
-                    </Link>
+                      View sign on ISL portal <ExternalLink size={14} />
+                    </a>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="border-t border-transparent bg-card px-6 pb-24 md:py-32">
-        <div className="mx-auto max-w-6xl">
-          <Reveal>
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-foreground/40">
-              Train the model
-            </p>
-            <h2 className="mt-5 text-4xl font-semibold tracking-tight md:text-6xl">
-              Teach SignSage new words
-            </h2>
-            <p className="mt-4 max-w-2xl text-lg leading-8 text-foreground/55">
-              The live interpreter&apos;s recognition model can be retrained
-              on your own ISL videos. Use the Kaggle training notebook to
-              train from YouTube clips and export a bundle the backend
-              serves directly.
-            </p>
-          </Reveal>
-
-          <Card className="mt-10">
-            <CardHeader>
-              <CardTitle>Kaggle training notebook</CardTitle>
-              <CardDescription>
-                research/train_isl_sign_to_text.ipynb
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="py-4">
-              <ul className="space-y-2 text-sm text-foreground/60 list-disc pl-5">
-                <li>
-                  Gather short ISL video clips named <code className="font-mono text-xs bg-muted px-1 rounded">hello__001.mp4</code>
-                </li>
-                <li>
-                  Upload to Google Drive or Kaggle, run{" "}
-                  <code className="font-mono text-xs bg-muted px-1 rounded">research/train_isl_sign_to_text.ipynb</code>
-                </li>
-                <li>
-                  Export <code className="font-mono text-xs bg-muted px-1 rounded">model.pt</code>,{" "}
-                  <code className="font-mono text-xs bg-muted px-1 rounded">labels.json</code>,{" "}
-                  <code className="font-mono text-xs bg-muted px-1 rounded">metadata.json</code>,{" "}
-                  <code className="font-mono text-xs bg-muted px-1 rounded">evaluation_results.json</code>
-                </li>
-                <li>
-                  Set <code className="font-mono text-xs bg-muted px-1 rounded">SIGNSAGE_MODEL_BUNDLE_DIR</code> and{" "}
-                  <code className="font-mono text-xs bg-muted px-1 rounded">SIGNSAGE_MODEL_KIND=isolated_words</code>, then restart the backend
-                </li>
-              </ul>
-              <a
-                href="#"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-border hover:bg-muted outline outline-offset-4 underline underline-offset-4"
-              >
-                Open notebook in repository
-              </a>
-            </CardContent>
-          </Card>
         </div>
       </section>
 
