@@ -45,12 +45,13 @@ export async function signInWithGoogle() {
 }
 
 /** Microsoft OAuth via Supabase. Supabase exposes Microsoft identity as the
- * "azure" provider (Azure AD / Microsoft Entra ID). Redirects away on success;
+ * "azure" provider (Azure AD / Microsoft Entra ID). Azure must return an email
+ * address, so the "email" scope is required. Redirects away on success;
  * throws honestly (e.g. provider not enabled) on failure. */
 export async function signInWithMicrosoft() {
   const { data, error } = await getSupabase().auth.signInWithOAuth({
     provider: "azure",
-    options: { redirectTo: `${window.location.origin}/app` },
+    options: { redirectTo: `${window.location.origin}/app`, scopes: "email" },
   });
   if (error) throw error;
   return data;
