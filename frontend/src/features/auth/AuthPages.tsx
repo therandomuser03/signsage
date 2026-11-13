@@ -35,9 +35,16 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { isSupabaseConfigured } from "@/services/supabase/client";
-import { getAccessToken, resetPassword, signIn, signInWithGoogle, signUp } from "@/services/supabase/auth";
+import {
+  getAccessToken,
+  resetPassword,
+  signIn,
+  signInWithGoogle,
+  signInWithMicrosoft,
+  signUp,
+} from "@/services/supabase/auth";
 import { SignSageLogo } from "@/components/logo";
-import { isGoogleOAuthEnabled } from "./googleOAuth";
+import { isGoogleOAuthEnabled, isMicrosoftOAuthEnabled } from "./googleOAuth";
 
 
 const credentialsSchema = z.object({
@@ -179,8 +186,12 @@ function LoginForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
-  // Google is only offered when the host has explicitly enabled and configured it.
+  const [microsoftBusy, setMicrosoftBusy] = useState(false);
+  // Google/Microsoft are only offered when the host has explicitly enabled and configured them.
   const googleEnabled = isGoogleOAuthEnabled(import.meta.env?.VITE_GOOGLE_OAUTH_ENABLED);
+  const microsoftEnabled = isMicrosoftOAuthEnabled(
+    import.meta.env?.VITE_MICROSOFT_OAUTH_ENABLED,
+  );
   const { register, handleSubmit, getValues, formState: { errors } } = useForm<LoginCredentials>();
 
   const onSubmit = (values: LoginCredentials) => {
@@ -220,6 +231,15 @@ function LoginForm() {
       // OAuth redirects away on success, so only failures land here.
       toast.add({ title: "Google sign-in failed", description: e instanceof Error ? e.message : "Request failed.", type: "error" });
       setGoogleBusy(false);
+    });
+  };
+
+  const onMicrosoft = () => {
+    setMicrosoftBusy(true);
+    signInWithMicrosoft().catch((e: unknown) => {
+      // OAuth redirects away on success, so only failures land here.
+      toast.add({ title: "Microsoft sign-in failed", description: e instanceof Error ? e.message : "Request failed.", type: "error" });
+      setMicrosoftBusy(false);
     });
   };
 
@@ -269,22 +289,20 @@ function LoginForm() {
           </Alert>
         )}
         <Field>
-          <Button type="submit" className="w-full" disabled={busy || googleBusy}>
+          <Button type="submit" className="w-full" disabled={busy || googleBusy || microsoftBusy}>
             {busy && <Spinner aria-hidden="true" />}
             Login
           </Button>
-          {googleEnabled && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={busy || googleBusy}
-              onClick={onGoogle}
-            >
-              {googleBusy && <Spinner aria-hidden="true" />}
-              Login with Google
-            </Button>
-          )}
+          <OAuthButtons
+            googleEnabled={googleEnabled}
+            microsoftEnabled={microsoftEnabled}
+            googleBusy={googleBusy}
+            microsoftBusy={microsoftBusy}
+            onGoogle={onGoogle}
+            onMicrosoft={onMicrosoft}
+            disabled={busy || googleBusy || microsoftBusy}
+            verb="Login"
+          />
           <FieldDescription className="text-center">
             Don&apos;t have an account?{" "}
             <Link to={signupTo} className="underline underline-offset-4">
@@ -302,9 +320,16 @@ function SignupForm() {
   const { next, loginTo } = useNext();
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [microsoftBusy, setMicrosoftBusy] = useState(false);
   const [terms, setTerms] = useState(false);
   const [data, setData] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  // Google/Microsoft are only offered when the host has explicitly enabled and configured them.
+  const googleEnabled = isGoogleOAuthEnabled(import.meta.env?.VITE_GOOGLE_OAUTH_ENABLED);
+  const microsoftEnabled = isMicrosoftOAuthEnabled(
+    import.meta.env?.VITE_MICROSOFT_OAUTH_ENABLED,
+  );
   const { register, handleSubmit, formState: { errors } } = useCredentialsForm();
 
   const onSubmit = (values: Credentials) => {
@@ -331,6 +356,22 @@ function SignupForm() {
         toast.add({ title: "Couldn’t create your account", description: message, type: "error" });
       })
       .finally(() => setBusy(false));
+  };
+
+  const onGoogle = () => {
+    setGoogleBusy(true);
+    signInWithGoogle().catch((e: unknown) => {
+      toast.add({ title: "Google sign-in failed", description: e instanceof Error ? e.message : "Request failed.", type: "error" });
+      setGoogleBusy(false);
+    });
+  };
+
+  const onMicrosoft = () => {
+    setMicrosoftBusy(true);
+    signInWithMicrosoft().catch((e: unknown) => {
+      toast.add({ title: "Microsoft sign-in failed", description: e instanceof Error ? e.message : "Request failed.", type: "error" });
+      setMicrosoftBusy(false);
+    });
   };
 
   return (
@@ -438,10 +479,20 @@ function SignupForm() {
           </Alert>
         )}
         <Field>
-          <Button type="submit" className="w-full" disabled={busy}>
+          <Button type="submit" className="w-full" disabled={busy || googleBusy || microsoftBusy}>
             {busy && <Spinner aria-hidden="true" />}
             Create account
           </Button>
+          <OAuthButtons
+            googleEnabled={googleEnabled}
+            microsoftEnabled={microsoftEnabled}
+            googleBusy={googleBusy}
+            microsoftBusy={microsoftBusy}
+            onGoogle={onGoogle}
+            onMicrosoft={onMicrosoft}
+            disabled={busy || googleBusy || microsoftBusy}
+            verb="Sign up"
+          />
           <FieldDescription className="text-center">
             Already have an account?{" "}
             <Link to={loginTo} className="underline underline-offset-4">
@@ -451,6 +502,99 @@ function SignupForm() {
         </Field>
       </FieldGroup>
     </form>
+  );
+}
+
+/** Google brand mark (downloaded SVG served from /public). */
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <img
+      src="/google-icon-logo-svgrepo-com.svg"
+      alt="Google"
+      aria-hidden="true"
+      className={`w-5 h-5 shrink-0 ${className ?? ""}`}
+      decoding="async"
+    />
+  );
+}
+
+/** Microsoft brand mark (downloaded SVG served from /public). */
+function MicrosoftIcon({ className }: { className?: string }) {
+  return (
+    <img
+      src="/microsoft-svgrepo-com.svg"
+      alt="Microsoft"
+      aria-hidden="true"
+      className={`w-5 h-5 shrink-0 ${className ?? ""}`}
+      decoding="async"
+    />
+  );
+}
+
+/** Social sign-in buttons, rendered only when the host has enabled the provider. */
+function OAuthButtons({
+  googleEnabled,
+  microsoftEnabled,
+  googleBusy,
+  microsoftBusy,
+  onGoogle,
+  onMicrosoft,
+  disabled,
+  verb,
+}: {
+  googleEnabled: boolean;
+  microsoftEnabled: boolean;
+  googleBusy: boolean;
+  microsoftBusy: boolean;
+  onGoogle: () => void;
+  onMicrosoft: () => void;
+  disabled: boolean;
+  verb: "Login" | "Sign up";
+}) {
+  if (!googleEnabled && !microsoftEnabled) return null;
+  const quick = verb === "Login" ? "Sign in" : "Sign up";
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border/60" />
+        </div>
+        <span className="relative flex items-center justify-center px-2 text-xs text-muted-foreground">
+          Or
+        </span>
+      </div>
+      <p className="text-xs text-center text-muted-foreground">
+        Want to make it quick? {quick} with:
+      </p>
+      <div className="flex flex-col gap-2">
+        {googleEnabled && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={disabled}
+            onClick={onGoogle}
+          >
+            {googleBusy && <Spinner aria-hidden="true" />}
+            <GoogleIcon aria-hidden="true" className="mr-2" />
+            {quick} with Google
+          </Button>
+        )}
+        {microsoftEnabled && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={disabled}
+            onClick={onMicrosoft}
+          >
+            {microsoftBusy && <Spinner aria-hidden="true" />}
+            <MicrosoftIcon aria-hidden="true" className="mr-2" />
+            {quick} with Microsoft
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -44,6 +44,18 @@ export async function signInWithGoogle() {
   return data;
 }
 
+/** Microsoft OAuth via Supabase. Supabase exposes Microsoft identity as the
+ * "azure" provider (Azure AD / Microsoft Entra ID). Redirects away on success;
+ * throws honestly (e.g. provider not enabled) on failure. */
+export async function signInWithMicrosoft() {
+  const { data, error } = await getSupabase().auth.signInWithOAuth({
+    provider: "azure",
+    options: { redirectTo: `${window.location.origin}/app` },
+  });
+  if (error) throw error;
+  return data;
+}
+
 /** Sends a Supabase password-reset email. Throws on failure. */
 export async function resetPassword(email: string) {
   const { data, error } = await getSupabase().auth.resetPasswordForEmail(email, {
