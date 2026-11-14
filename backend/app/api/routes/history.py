@@ -41,6 +41,18 @@ async def clear_history(
     return DeletedResponse(deleted=await service.clear(user))
 
 
+@router.get(
+    "/selfcheck",
+    dependencies=[Depends(rate_limit_dependency("history_write"))],
+)
+async def history_selfcheck(
+    user: AuthenticatedUser = Depends(get_current_user),
+    service: HistoryService = Depends(get_history_service),
+) -> dict:
+    """Insert a session+message, read them back, delete both; return step-by-step status."""
+    return await service.selfcheck(user)
+
+
 @router.delete(
     "/{record_id}", response_model=DeletedResponse,
     dependencies=[Depends(rate_limit_dependency("history_write"))],

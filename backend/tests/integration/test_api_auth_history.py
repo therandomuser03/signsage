@@ -66,9 +66,21 @@ def test_clear_history_and_pagination_validation(make_client):
 
 def test_history_requires_auth_and_reports_disabled(make_client):
     assert make_client().get("/api/v1/history").status_code == 401
+    assert make_client().get("/api/v1/history/selfcheck").status_code == 401
     c = make_client(history_enabled="false")
     r = c.get("/api/v1/history", headers=bearer("u1"))
     assert r.status_code == 503 and r.json()["code"] == "HISTORY_UNAVAILABLE"
+
+
+def test_history_selfcheck_returns_ok_for_signed_in_user(make_client):
+    c = make_client()
+    assert c.get("/api/v1/history/selfcheck").status_code == 401
+    res = c.get("/api/v1/history/selfcheck", headers=bearer("u1"))
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    assert len(data["steps"]) == 4
+    assert [s["step"] for s in data["steps"]] == ["session_insert", "message_insert", "read_back", "delete"]
 
 
 def test_auth_required_blocks_guest_translation(make_client):

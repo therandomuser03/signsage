@@ -85,6 +85,7 @@ router = APIRouter(prefix="/translation", tags=["translation"])
 # Process-wide singleton for the word classifier bundle.
 _word_adapter: Optional[WordClassifierAdapter] = None
 _word_adapter_loaded = False
+_word_adapter_dir: Optional[str] = None
 
 
 class WordModeDisabledError(SignSageError):
@@ -115,17 +116,18 @@ def load_word_adapter_at_startup(settings: Settings) -> None:
     already warm. A failure is logged, not fatal: the first request still
     triggers a lazy load via _get_word_adapter().
     """
-    global _word_adapter, _word_adapter_loaded
+    global _word_adapter, _word_adapter_loaded, _word_adapter_dir
     if not settings.word_mode_enabled:
         return
-    if _word_adapter_loaded:
-        return
     model_dir = resolve_word_model_dir(settings)
+    if _word_adapter_loaded and _word_adapter_dir == model_dir:
+        return
     t0 = time.perf_counter()
     try:
         _word_adapter = WordClassifierAdapter.load(model_dir, device=settings.device)
         _warmup_golden_inference(_word_adapter, model_dir)
         _word_adapter_loaded = True
+        _word_adapter_dir = model_dir
         warm_ms = (time.perf_counter() - t0) * 1000
         logger.info(
             "WORD_MODE: word model warmed at startup in %.1f ms (dir=%s; golden "
@@ -148,19 +150,21 @@ def _resolve_word_model_dir(settings: Settings) -> str:
 
 
 def _get_word_adapter(settings: Settings) -> WordClassifierAdapter:
-    global _word_adapter, _word_adapter_loaded
-    if not _word_adapter_loaded:
-        model_dir = _resolve_word_model_dir(settings)
+    global _word_adapter, _word_adapter_loaded, _word_adapter_dir
+    model_dir = _resolve_word_model_dir(settings)
+    if not _word_adapter_loaded or _word_adapter_dir != model_dir:
         _word_adapter = WordClassifierAdapter.load(model_dir, device=settings.device)
         _word_adapter_loaded = True
+        _word_adapter_dir = model_dir
     return _word_adapter
 
 
 def _reset_word_adapter() -> None:
     """Test-only: force the next _get_word_adapter() call to reload."""
-    global _word_adapter, _word_adapter_loaded
+    global _word_adapter, _word_adapter_loaded, _word_adapter_dir
     _word_adapter = None
     _word_adapter_loaded = False
+    _word_adapter_dir = None
 
 
 def _extract_landmarks(payload: dict) -> np.ndarray:
@@ -370,11 +374,12 @@ async def sentence_recognition(
 
     # --- Best-effort history save for signed-in users only ---
     history_saved = False
+    history_error: Optional[str] = None
     save_history = bool(payload.get("save_history", True))
     if user and history and save_history and accepted:
         joined = " ".join(s.text for s in signs)
         confidence = float(np.mean([s.confidence for s in signs]))
-        history_saved = await history.try_record_word(user, NewHistoryRecord(
+        history_saved, history_error = await history.try_record_word_checked(user, NewHistoryRecord(
             direction=Direction.SIGN_TO_TEXT,
             output_text=sentence,
             result_type=ResultType.MODEL,
@@ -385,7 +390,7 @@ async def sentence_recognition(
             sequence=1,
             title=f"Sign to text: {sentence[:60]}",
             status="completed",
-        )) is not None
+        ))
 
     return {
         "gloss_sequence": gloss_sequence,
@@ -397,6 +402,7 @@ async def sentence_recognition(
         "motion_energy": result.motion_energy,
         "status": "ok",
         "history_saved": history_saved,
+        "history_error": history_error,
     }
 
 
@@ -436,6 +442,7 @@ async def compose_sentence(
 
     # --- Best-effort history save for signed-in users only ---
     history_saved = False
+    history_error: Optional[str] = None
     save_history = bool(payload.get("save_history", True))
     if user and history and save_history and words:
         confidences = payload.get("confidences")
@@ -451,7 +458,7 @@ async def compose_sentence(
         accepted_words = [w for w in words if w != "rest"]
         joined_words = " ".join(accepted_words)
         title = f"Word recognition: {sentence[:60]}" if sentence else "Word recognition"
-        history_saved = await history.try_record_word(user, NewHistoryRecord(
+        history_saved, history_error = await history.try_record_word_checked(user, NewHistoryRecord(
             direction=Direction.SIGN_TO_TEXT,
             output_text=sentence,
             result_type=ResultType.MODEL,
@@ -462,9 +469,9 @@ async def compose_sentence(
             sequence=1,
             title=title,
             status="completed",
-        )) is not None
+        ))
 
-    return {"sentence": sentence, "method": method, "history_saved": history_saved}
+    return {"sentence": sentence, "method": method, "history_saved": history_saved, "history_error": history_error}
 
 
 

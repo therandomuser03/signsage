@@ -3,8 +3,9 @@ show, hide or label. The frontend reads these instead of guessing."""
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends
 
@@ -20,6 +21,8 @@ from app.ml.word_classifier_adapter import resolve_word_model_dir
 from app.schemas.common import CapabilitiesResponse, ModelInfo, ModelsResponse
 from app.services.avatar_gloss_service import load_vocabulary
 from app.services.history_service import build_history_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["capabilities"])
 
@@ -53,6 +56,37 @@ def _word_model_version(settings: Settings) -> "str | None":
     return str(version) if isinstance(version, str) and version else None
 
 
+def _resolve_word_capabilities(
+    settings: Settings,
+) -> tuple[bool, Optional[str], Optional[str], Optional[list[str]], Optional[float]]:
+    """Resolve word model capabilities.
+    Returns (word_recognition_enabled, unavailable_reason, model_version, vocabulary, threshold).
+    If word mode is enabled but the model bundle cannot be loaded, logs an ERROR with the resolved
+    directory and the exception, and returns word_recognition_enabled=False.
+    """
+    if not settings.word_mode_enabled:
+        return False, "word_mode_disabled", None, None, None
+
+    model_dir = resolve_word_model_dir(settings)
+    try:
+        from app.api.routes.word_translation import _get_word_adapter
+        adapter = _get_word_adapter(settings)
+        return (
+            True,
+            None,
+            adapter.model_version,
+            list(adapter.labels),
+            float(adapter.confidence_threshold),
+        )
+    except Exception as exc:
+        logger.error(
+            "WORD_MODE: word model bundle cannot be loaded from %s: %s",
+            model_dir,
+            exc,
+        )
+        return False, f"model_load_failed: {exc}", None, None, None
+
+
 @router.get("/capabilities", response_model=CapabilitiesResponse)
 def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResponse:
     from app.ml.inference.heuristic_signs import FALLBACK_VOCABULARY
@@ -71,7 +105,13 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         # fallback serves a 5-sign vocabulary -- report honestly.
         reason = None
         source = "heuristic-fallback"
-    word_model_version = _word_model_version(settings)
+    (
+        word_enabled,
+        word_unavail_reason,
+        word_version,
+        word_vocab,
+        word_threshold,
+    ) = _resolve_word_capabilities(settings)
     return CapabilitiesResponse(
         api_version="v1",
         websocket_path="/ws/translate",
@@ -86,17 +126,11 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         avatar_vocabulary_size=len(load_vocabulary(settings)),
         landmark_count=TOTAL_LANDMARKS,
         max_frames_per_sequence=settings.max_frames_per_sequence,
-        word_recognition_enabled=settings.word_mode_enabled,
-        word_recognition_vocabulary=(
-            ["hello", "me", "you", "yes", "no", "help", "water", "where", "rest"]
-            if settings.word_mode_enabled else None
-        ),
-        word_recognition_threshold=(
-            0.7 if settings.word_mode_enabled else None
-        ),
-        word_recognition_model_version=(
-            word_model_version if settings.word_mode_enabled else None
-        ),
+        word_recognition_enabled=word_enabled,
+        word_recognition_unavailable_reason=word_unavail_reason,
+        word_recognition_vocabulary=word_vocab,
+        word_recognition_threshold=word_threshold,
+        word_recognition_model_version=word_version,
         word_recognition_label="sign-sequence to sentence interpretation (8 words plus a rest (no-sign) class), adapted to one signer",
     )
 

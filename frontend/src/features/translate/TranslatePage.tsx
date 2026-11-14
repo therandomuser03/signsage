@@ -40,6 +40,7 @@ import type {
 } from "@/types/api";
 import { showSignPhraseButton } from "@/features/translate/phrase";
 import { showLegacyUpload, showWordRecognitionCard } from "@/features/translate/visibility";
+import { type CaptureDetails, detailsToJson } from "@/features/translate/details";
 import {
   defaultInterpreterTab,
   splitWordVocab,
@@ -178,9 +179,19 @@ export default function TranslatePage() {
   // Result of the experimental 10-second phrase capture (chips + sentence).
   const [phraseResult, setPhraseResult] = useState<SentenceRecognitionResponse | null>(null);
   const [composedHistorySaved, setComposedHistorySaved] = useState<boolean | null>(null);
+  const [composeHistoryError, setComposeHistoryError] = useState<string | null>(null);
   const [phraseHistorySaved, setPhraseHistorySaved] = useState<boolean | null>(null);
   /** Snapshot of the Settings save-history preference (read at mount). */
   const [saveHistory] = useState(() => loadPrefs().saveHistory);
+  /** Selected phrase duration in ms (6 / 10 / 15 s). */
+  const [phraseDurationMs, setPhraseDurationMs] = useState(PHRASE_RECORD_DURATION_MS);
+  /** Remaining seconds during phrase recording (shown next to End early). */
+  const [phraseRemainingSec, setPhraseRemainingSec] = useState(0);
+  const phraseCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** State mirror of captureKindRef so JSX re-renders on change. */
+  const [captureKind, setCaptureKind] = useState<"word" | "phrase">("word");
+  /** Last completed capture details for the Details disclosure panel. */
+  const [lastDetails, setLastDetails] = useState<CaptureDetails | null>(null);
 
   // --- Voice output for the composed sentence (browser speech synthesis) ---
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -581,6 +592,7 @@ export default function TranslatePage() {
     captureTrueLabelRef.current = trueLabel ?? null;
     captureDurationRef.current = opts?.durationMs ?? WORD_RECORD_DURATION_MS;
     captureKindRef.current = opts?.kind ?? "word";
+    setCaptureKind(captureKindRef.current);
     const video = videoRef.current;
     const extractor = extractorRef.current;
     if (!video || !extractor) {
@@ -628,6 +640,16 @@ export default function TranslatePage() {
     wordStopTimeRef.current = wordRecStartRef.current + captureDurationRef.current;
     setWordPhase("recording");
     wordPhaseRef.current = "recording";
+
+    // Phrase: show a live remaining-seconds countdown via a 1 s interval.
+    if (captureKindRef.current === "phrase") {
+      let secs = Math.round(captureDurationRef.current / 1000);
+      setPhraseRemainingSec(secs);
+      phraseCountdownRef.current = setInterval(() => {
+        secs -= 1;
+        setPhraseRemainingSec(secs > 0 ? secs : 0);
+      }, 1000);
+    }
 
     // start the capture loop if not already running
     if (wordRafRef.current === 0) {
@@ -687,6 +709,21 @@ export default function TranslatePage() {
           const totalMs = performance.now() - captureEndMs;
           setPhraseResult(result);
           setPhraseHistorySaved(result.history_saved ?? false);
+          setLastDetails({
+            kind: "phrase",
+            framesCaptured: frames.length,
+            effectiveFps,
+            leftHandFraction: leftPresent,
+            rightHandFraction: rightPresent,
+            roundTripMs,
+            accepted: result.accepted,
+            threshold: result.threshold,
+            modelVersion: result.model_version,
+            status: result.status,
+            glossSequence: result.gloss_sequence,
+            sentence: result.sentence,
+            nWindows: result.gloss_sequence?.length,
+          });
           console.log(
             "[phrase-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f gloss_sequence=%s",
             frames.length,
@@ -706,6 +743,21 @@ export default function TranslatePage() {
           const roundTripMs = performance.now() - t0Request;
           const totalMs = performance.now() - captureEndMs;
           setWordResult(result);
+          setLastDetails({
+            kind: "word",
+            framesCaptured: frames.length,
+            effectiveFps,
+            leftHandFraction: leftPresent,
+            rightHandFraction: rightPresent,
+            roundTripMs,
+            predictedLabel: result.word,
+            confidence: result.confidence,
+            threshold: result.threshold,
+            accepted: result.accepted,
+            top3: result.top3,
+            modelVersion: result.model_version,
+            status: result.status,
+          });
           if (trueLabel) {
             setCaptureCounts((prev) => ({ ...prev, [trueLabel]: (prev[trueLabel] ?? 0) + 1 }));
           }
@@ -758,6 +810,11 @@ export default function TranslatePage() {
     wordRafRef.current = 0;
     wordFramesRef.current = [];
     setWordCountdown(0);
+    if (phraseCountdownRef.current) {
+      clearInterval(phraseCountdownRef.current);
+      phraseCountdownRef.current = null;
+    }
+    setPhraseRemainingSec(0);
   }, []);
 
   const removeWordFromList = useCallback((index: number) => {
@@ -779,6 +836,8 @@ export default function TranslatePage() {
     setPhraseResult(null);
     setComposedHistorySaved(null);
     setPhraseHistorySaved(null);
+    setComposeHistoryError(null);
+    setLastDetails(null);
   }, []);
 
   const speak = useCallback(
@@ -832,6 +891,7 @@ export default function TranslatePage() {
       });
       setComposedSentence(result.sentence);
       setComposedHistorySaved(result.history_saved ?? false);
+      setComposeHistoryError(result.history_error ?? null);
     } catch (err: any) {
       setWordError(
         err instanceof NetworkError
@@ -1199,10 +1259,19 @@ export default function TranslatePage() {
           >
             <TabsList className="mx-4 mt-3 grid w-[calc(100%-2rem)] grid-cols-2">
               <TabsTrigger value="word">Word recognition</TabsTrigger>
-              <TabsTrigger value="rule">Rule-based preview</TabsTrigger>
+              <TabsTrigger value="rule">Basic preview (5 shapes)</TabsTrigger>
             </TabsList>
 
             <TabsContent value="word" className="flex-1 px-4 pb-4 pt-2">
+              {/* Model status chip */}
+              {backendOnline !== null && (
+                <div className={`mb-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${wordSupported ? "bg-green-500/15 text-green-700" : "bg-amber-500/15 text-amber-700"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${wordSupported ? "bg-green-500" : "bg-amber-500"}`} aria-hidden="true" />
+                  {wordSupported
+                    ? `Trained model ready: ${capabilities?.word_recognition_model_version ?? "unknown"}`
+                    : `Not available: ${capabilities?.word_recognition_unavailable_reason ?? (backendOnline === false ? "server not reachable" : "word recognition disabled")}`}
+                </div>
+              )}
               {wordSupported ? (
                 <div className="flex flex-col gap-3 text-sm">
                   <div>
@@ -1281,22 +1350,48 @@ export default function TranslatePage() {
                       )}
                     </Button>
                     {showSignPhraseButton(capabilities) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                          wordPhase === "countdown" ||
-                          wordPhase === "recording" ||
-                          wordProcessing ||
-                          phase === "starting-camera" ||
-                          phase === "loading-detector" ||
-                          phase === "error"
-                        }
-                        onClick={() => startWordRecording(undefined, { durationMs: PHRASE_RECORD_DURATION_MS, kind: "phrase" })}
-                      >
-                        <Camera size={14} /> Sign a phrase
-                      </Button>
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            wordPhase === "countdown" ||
+                            wordPhase === "recording" ||
+                            wordProcessing ||
+                            phase === "starting-camera" ||
+                            phase === "loading-detector" ||
+                            phase === "error"
+                          }
+                          onClick={() => startWordRecording(undefined, { durationMs: phraseDurationMs, kind: "phrase" })}
+                        >
+                          <Camera size={14} /> Sign a phrase <span className="text-foreground/40">(experimental)</span>
+                        </Button>
+                        {/* End early: visible only while phrase is recording */}
+                        {wordPhase === "recording" && captureKind === "phrase" && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => void stopWordRecording()}
+                          >
+                            End early {phraseRemainingSec > 0 && <span className="ml-1 font-mono text-xs">{phraseRemainingSec}s</span>}
+                          </Button>
+                        )}
+                        {/* Duration selector: hidden while recording */}
+                        {wordPhase !== "recording" && wordPhase !== "countdown" && (
+                          <select
+                            value={phraseDurationMs}
+                            onChange={(e) => setPhraseDurationMs(Number(e.target.value))}
+                            className="rounded border border-foreground/20 bg-background px-2 py-1 text-xs"
+                            aria-label="Phrase duration"
+                          >
+                            <option value={6_000}>6 s</option>
+                            <option value={10_000}>10 s</option>
+                            <option value={15_000}>15 s</option>
+                          </select>
+                        )}
+                      </>
                     )}
                     <Button
                       type="button"
@@ -1347,7 +1442,11 @@ export default function TranslatePage() {
                           </p>
                           {saveHistory && phraseHistorySaved !== null && (
                             <p className="mt-1 text-[11px] text-green-700/70">
-                              {phraseHistorySaved ? "Saved to history" : "Not saved (sign in to save history)"}
+                              {phraseHistorySaved
+                                ? "Saved to history"
+                                : phraseResult.history_error
+                                  ? `Not saved: ${phraseResult.history_error}`
+                                  : "Not saved (sign in to save history)"}
                             </p>
                           )}
                         </>
@@ -1390,6 +1489,44 @@ export default function TranslatePage() {
                         </p>
                       )}
                     </div>
+                  )}
+
+                  {/* Details disclosure: last word or phrase capture */}
+                  {lastDetails && (
+                    <details className="rounded-md border border-foreground/10 text-xs">
+                      <summary className="flex cursor-pointer select-none items-center justify-between px-3 py-2 text-foreground/60 hover:text-foreground">
+                        <span>Details</span>
+                        <button
+                          type="button"
+                          className="ml-auto rounded px-2 py-0.5 text-[10px] text-foreground/50 hover:bg-foreground/10"
+                          onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(detailsToJson(lastDetails)); }}
+                        >
+                          Copy
+                        </button>
+                      </summary>
+                      <div className="space-y-0.5 px-3 pb-3 pt-1 font-mono text-[11px] text-foreground/60">
+                        <p>frames: {lastDetails.framesCaptured} · fps: {lastDetails.effectiveFps.toFixed(1)} · rt: {lastDetails.roundTripMs.toFixed(0)} ms</p>
+                        <p>left hand: {(lastDetails.leftHandFraction * 100).toFixed(0)}% · right hand: {(lastDetails.rightHandFraction * 100).toFixed(0)}%</p>
+                        {lastDetails.kind === "word" ? (
+                          <>
+                            <p>label: {lastDetails.predictedLabel ?? "—"} · confidence: {lastDetails.confidence?.toFixed(3) ?? "—"} · threshold: {lastDetails.threshold?.toFixed(2) ?? "—"}</p>
+                            <p>accepted: {String(lastDetails.accepted)} · status: {lastDetails.status ?? "—"}</p>
+                            {lastDetails.top3 && lastDetails.top3.length > 0 && (
+                              <p>top-3: {lastDetails.top3.map((t) => `${t.label} (${t.probability.toFixed(2)})`).join(", ")}</p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p>sentence: {lastDetails.sentence ?? "—"} · windows: {lastDetails.nWindows ?? "—"}</p>
+                            <p>accepted: {String(lastDetails.accepted)} · threshold: {lastDetails.threshold?.toFixed(2) ?? "—"}</p>
+                            {lastDetails.glossSequence && lastDetails.glossSequence.length > 0 && (
+                              <p>glosses: {lastDetails.glossSequence.map((g) => `${g.gloss}(${g.confidence.toFixed(2)})`).join(", ")}</p>
+                            )}
+                          </>
+                        )}
+                        <p>model: {lastDetails.modelVersion ?? "—"}</p>
+                      </div>
+                    </details>
                   )}
 
                   {/* Accepted words list */}
@@ -1483,7 +1620,11 @@ export default function TranslatePage() {
                       </p>
                       {saveHistory && composedHistorySaved !== null && (
                         <p className="mt-1 text-[11px] text-green-700/70">
-                          {composedHistorySaved ? "Saved to history" : "Not saved (sign in to save history)"}
+                          {composedHistorySaved
+                            ? "Saved to history"
+                            : composeHistoryError
+                              ? `Not saved: ${composeHistoryError}`
+                              : "Not saved (sign in to save history)"}
                         </p>
                       )}
                     </div>
@@ -1548,7 +1689,10 @@ export default function TranslatePage() {
                     <p className="mt-1 text-xs text-foreground/60">{wordDisabledDetail(capabilities)}</p>
                   )}
                   <p className="mt-2 text-xs text-foreground/50">
-                    Use the Rule-based preview tab instead.
+                    Use the Basic preview tab instead.
+                  </p>
+                  <p className="mt-2 text-xs text-foreground/45">
+                    Developers: set <code>SIGNSAGE_WORD_MODE_ENABLED=true</code> and restart the backend.
                   </p>
                 </div>
               )}
@@ -1560,6 +1704,7 @@ export default function TranslatePage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
                     Live translation
                   </p>
+                  <p className="mt-1 text-[10px] text-foreground/50">Basic shape matcher only. Use Word recognition for the trained model.</p>
                   <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground/60">
                     <span
                       aria-hidden="true"

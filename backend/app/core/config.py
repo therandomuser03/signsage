@@ -154,8 +154,7 @@ class Settings(BaseSettings):
     def auth_enabled(self) -> bool:
         return bool(self.supabase_url and self.supabase_publishable_key)
     # --- Model labelling / WebSocket limits -----------------------------------
-    # Disabled by default; never enabled in production via render.yaml.
-    word_mode_enabled: bool = False
+    word_mode_enabled: bool = True
     word_model_dir: Optional[str] = "models/word_v3"
     word_debug: bool = False
     # Dev-only: when true, POST /api/v1/translation/word accepts an optional

@@ -93,7 +93,7 @@ def test_compose_route(make_client):
     response = client.post("/api/v1/translation/compose", json={"words": ["hello", "water"]})
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"sentence", "method", "history_saved"}
+    assert set(body) == {"sentence", "method", "history_saved", "history_error"}
     assert body["method"] in {"llm", "fallback"}
     assert isinstance(body["sentence"], str)
 

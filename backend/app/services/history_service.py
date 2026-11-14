@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 from app.core.config import Settings
 from app.core.errors import AuthError, HistoryUnavailableError, NotFoundError
 from app.core.security import AuthenticatedUser
-from app.domain.translation.entities import HistoryRecord, NewHistoryRecord
+from app.domain.translation.entities import HistoryRecord, NewHistoryRecord, Direction, ResultType
 from app.infrastructure.database.repositories.translation_repository import (
     SupabaseTranslationRepository,
     TranslationRepository,
@@ -62,6 +62,24 @@ class HistoryService:
             _log_failure("record", exc)
             return None
 
+    async def try_record_word_checked(
+        self, user: AuthenticatedUser, record: NewHistoryRecord
+    ) -> tuple[bool, Optional[str]]:
+        """Like try_record_word but also returns a compact error string on failure.
+
+        Returns (saved: bool, history_error: str | None).
+        history_error format: "<step>:<http_status>:<pg_code>" — never contains tokens or payload text.
+        """
+        try:
+            result = await self._repo.add_word_recognition(user, record)
+            return result is not None, None
+        except Exception as exc:  # noqa: BLE001
+            _log_failure("record", exc)
+            step = (getattr(exc, "step", None) or "unknown").replace(" ", "_")
+            status = getattr(exc, "status", None)
+            pg_code = getattr(exc, "pg_code", None)
+            return False, f"{step}:{status}:{pg_code}"
+
     async def list(self, user: AuthenticatedUser, limit: int, offset: int) -> Tuple[List[HistoryRecord], int]:
         try:
             return await self._repo.list(user, limit, offset)
@@ -84,6 +102,21 @@ class HistoryService:
         except Exception as exc:
             _log_failure("clear", exc)
             raise
+
+    async def selfcheck(self, user: AuthenticatedUser) -> dict:
+        """Insert a session titled 'selfcheck' and one message, read them back, delete both."""
+        try:
+            return await self._repo.selfcheck(user)
+        except Exception as exc:  # noqa: BLE001
+            _log_failure("selfcheck", exc)
+            return {
+                "ok": False,
+                "steps": [{
+                    "step": (getattr(exc, "step", None) or "selfcheck").replace(" ", "_"),
+                    "status": getattr(exc, "status", None),
+                    "code": getattr(exc, "pg_code", None),
+                }],
+            }
 
 
 def build_history_service(settings: Settings) -> Optional[HistoryService]:

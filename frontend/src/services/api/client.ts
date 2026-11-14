@@ -1,6 +1,7 @@
 import type {
   AvatarGlossRequest, AvatarGlossResponse, AvatarVocabularyResponse, CapabilitiesResponse,
   ComposeRequest, ComposeResponse, DeletedResponse, HealthResponse, HistoryListResponse,
+  HistorySelfcheckResponse,
   ImageClassifyRequest, ImageClassifyResponse, LandmarkFramePayload, MeResponse, ModelsResponse,
   SentenceRecognitionResponse,
   SignToTextRequest, SignToTextResponse, VideoTranslationResponse, WordRecognitionResponse,
@@ -111,4 +112,5 @@ export class ApiClient {
     this.request<HistoryListResponse>("GET", `${endpoints.history}?limit=${limit}&offset=${offset}`);
   deleteHistoryItem = (id: string) => this.request<DeletedResponse>("DELETE", endpoints.historyItem(id));
   clearHistory = () => this.request<DeletedResponse>("DELETE", endpoints.history);
+  historySelfcheck = () => this.request<HistorySelfcheckResponse>("GET", endpoints.historySelfcheck);
 }

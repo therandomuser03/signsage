@@ -246,3 +246,58 @@ def test_row_to_record_mapping_untouched():
            "translation_messages": []}
     rec = _session_to_record(row)
     assert rec.output_text == "orphan" and rec.title == "orphan"
+
+
+async def test_selfcheck_success_walks_all_four_steps():
+    def handler(req):
+        t = _table(req)
+        if t == "translation_sessions" and req.method == "POST":
+            return httpx.Response(201, json=[{"id": "s-1"}])
+        if t == "translation_messages" and req.method == "POST":
+            return httpx.Response(201, json=[{"id": "m-1"}])
+        if t == "translation_sessions" and req.method == "GET":
+            return httpx.Response(200, json=[{"id": "s-1", "title": "selfcheck"}])
+        if req.method == "DELETE":
+            return httpx.Response(200, json=[{"id": "s-1"}])
+        return httpx.Response(200, json=[])
+
+    result = await _service(handler).selfcheck(USER)
+    assert result == {
+        "ok": True,
+        "steps": [
+            {"step": "session_insert", "status": 201, "code": None},
+            {"step": "message_insert", "status": 201, "code": None},
+            {"step": "read_back", "status": 200, "code": None},
+            {"step": "delete", "status": 200, "code": None},
+        ],
+    }
+
+
+async def test_selfcheck_fails_at_session_insert():
+    def handler(req):
+        return httpx.Response(400, json={"code": "23502", "message": "null user_id"})
+
+    result = await _service(handler).selfcheck(USER)
+    assert result["ok"] is False
+    assert result["steps"] == [
+        {"step": "session_insert", "status": 400, "code": "23502"},
+    ]
+
+
+async def test_selfcheck_fails_at_message_insert():
+    def handler(req):
+        t = _table(req)
+        if t == "translation_sessions" and req.method == "POST":
+            return httpx.Response(201, json=[{"id": "s-1"}])
+        if t == "translation_messages" and req.method == "POST":
+            return httpx.Response(403, json={"code": "42501", "message": "RLS error"})
+        if req.method == "DELETE":
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json=[])
+
+    result = await _service(handler).selfcheck(USER)
+    assert result["ok"] is False
+    assert result["steps"] == [
+        {"step": "session_insert", "status": 201, "code": None},
+        {"step": "message_insert", "status": 403, "code": "42501"},
+    ]

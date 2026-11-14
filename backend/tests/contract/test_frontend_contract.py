@@ -24,7 +24,9 @@ def test_compose_and_sentence_declare_history_saved_on_both_sides():
     for iface in ("SentenceRecognitionResponse", "ComposeResponse"):
         block = re.search(rf"interface {iface} \{{([\s\S]*?)\n\}}", api_ts).group(1)
         assert re.search(r"history_saved\??:", block), f"{iface} is missing history_saved in frontend types"
+        assert re.search(r"history_error\??:", block), f"{iface} is missing history_error in frontend types"
     assert backend.count('"history_saved"') >= 2, "word_translation.py must return history_saved from /sentence and /compose"
+    assert backend.count('"history_error"') >= 2, "word_translation.py must return history_error from /sentence and /compose"
 
 
 def _read_backend() -> str:

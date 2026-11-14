@@ -27,7 +27,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { apiClient } from "@/services/api/instance";
 import { ApiError } from "@/services/api/errors";
 import { getAccessToken, signOut } from "@/services/supabase/auth";
-import type { MeResponse } from "@/types/api";
+import type { HistorySelfcheckResponse, MeResponse } from "@/types/api";
 import { loadPrefs, savePrefs, type TranslationPrefs } from "./preferences";
 
 export default function SettingsPage() {
@@ -38,6 +38,9 @@ export default function SettingsPage() {
   const [clearing, setClearing] = useState(false);
   const [cleared, setCleared] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
+  const [selfcheckRunning, setSelfcheckRunning] = useState(false);
+  const [selfcheckResult, setSelfcheckResult] = useState<HistorySelfcheckResponse | null>(null);
+  const [selfcheckError, setSelfcheckError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -83,6 +86,20 @@ export default function SettingsPage() {
     }
   };
 
+  const runHistoryCheck = async () => {
+    setSelfcheckRunning(true);
+    setSelfcheckError(null);
+    setSelfcheckResult(null);
+    try {
+      const res = await apiClient.historySelfcheck();
+      setSelfcheckResult(res);
+    } catch (e) {
+      setSelfcheckError(e instanceof ApiError ? e.message : "History check failed.");
+    } finally {
+      setSelfcheckRunning(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl space-y-6">
       <div>
@@ -109,6 +126,41 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between gap-2 py-3.5">
                 <span className="text-foreground/60">User ID</span>
                 <code className="max-w-48 truncate text-xs">{me.id}</code>
+              </div>
+              <div className="flex flex-col gap-2 py-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="font-medium text-foreground">History diagnostic</span>
+                    <p className="text-xs text-foreground/55">
+                      Verify translation history session, message, read, and delete permissions.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={selfcheckRunning}
+                    onClick={() => void runHistoryCheck()}
+                  >
+                    {selfcheckRunning ? "Running…" : "Run history check"}
+                  </Button>
+                </div>
+                {selfcheckResult && (
+                  <div className="mt-2 rounded-md bg-foreground/5 p-2.5 font-mono text-xs">
+                    <p className={selfcheckResult.ok ? "font-semibold text-green-600" : "font-semibold text-destructive"}>
+                      {selfcheckResult.ok ? "History check passed" : "History check failed"}
+                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      {selfcheckResult.steps.map((s, idx) => (
+                        <p key={idx} className="text-foreground/70">
+                          {s.step}: {s.status ?? "unknown"} {s.code ? `(code: ${s.code})` : ""}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selfcheckError && (
+                  <p className="mt-1 text-xs text-destructive">{selfcheckError}</p>
+                )}
               </div>
               <div className="py-3.5">
                 <Button

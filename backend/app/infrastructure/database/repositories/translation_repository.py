@@ -49,6 +49,7 @@ class TranslationRepository(Protocol):
     async def list(self, user: AuthenticatedUser, limit: int, offset: int) -> Tuple[List[HistoryRecord], int]: ...
     async def delete(self, user: AuthenticatedUser, record_id: str) -> bool: ...
     async def clear(self, user: AuthenticatedUser) -> int: ...
+    async def selfcheck(self, user: AuthenticatedUser) -> dict: ...
 
 
 def _row_to_record(row: dict) -> HistoryRecord:
@@ -300,6 +301,62 @@ class SupabaseTranslationRepository:
             raise _tag(exc, "clear sessions") from exc
         return len(resp.json())
 
+    async def selfcheck(self, user: AuthenticatedUser) -> dict:
+        """Insert a session titled 'selfcheck' and one message, read back, delete both."""
+        steps = []
+        # 1) Session insert
+        try:
+            session_resp = await self._db.request(
+                "POST", TABLE, user,
+                json={"user_id": user.id, "direction": "sign_to_text", "status": "completed", "title": "selfcheck"},
+                prefer="return=representation",
+            )
+            session_id = str(session_resp.json()[0]["id"])
+            steps.append({"step": "session_insert", "status": session_resp.status_code, "code": None})
+        except Exception as exc:
+            steps.append({"step": "session_insert", "status": getattr(exc, "status", None), "code": getattr(exc, "pg_code", None)})
+            return {"ok": False, "steps": steps}
+
+        # 2) Message insert
+        try:
+            msg_resp = await self._db.request(
+                "POST", MESSAGES_TABLE, user,
+                json={"session_id": session_id, "sequence": 1, "direction": "sign_to_text", "input_text": "selfcheck", "output_text": "selfcheck", "gloss": "selfcheck", "confidence": 1.0, "model_version": "selfcheck", "result_type": "model"},
+                prefer="return=representation",
+            )
+            steps.append({"step": "message_insert", "status": msg_resp.status_code, "code": None})
+        except Exception as exc:
+            steps.append({"step": "message_insert", "status": getattr(exc, "status", None), "code": getattr(exc, "pg_code", None)})
+            try:
+                await self.delete(user, session_id)
+            except Exception:
+                pass
+            return {"ok": False, "steps": steps}
+
+        # 3) Read back
+        try:
+            read_resp = await self._db.request(
+                "GET", TABLE, user, params={"id": f"eq.{session_id}", "select": "id,title"}
+            )
+            steps.append({"step": "read_back", "status": read_resp.status_code, "code": None})
+        except Exception as exc:
+            steps.append({"step": "read_back", "status": getattr(exc, "status", None), "code": getattr(exc, "pg_code", None)})
+            try:
+                await self.delete(user, session_id)
+            except Exception:
+                pass
+            return {"ok": False, "steps": steps}
+
+        # 4) Delete both
+        try:
+            await self.delete(user, session_id)
+            steps.append({"step": "delete", "status": 200, "code": None})
+        except Exception as exc:
+            steps.append({"step": "delete", "status": getattr(exc, "status", None), "code": getattr(exc, "pg_code", None)})
+            return {"ok": False, "steps": steps}
+
+        return {"ok": True, "steps": steps}
+
 
 class InMemoryTranslationRepository:
     def __init__(self) -> None:
@@ -360,6 +417,17 @@ class InMemoryTranslationRepository:
 
     async def clear(self, user: AuthenticatedUser) -> int:
         return len(self._by_user.pop(user.id, []))
+
+    async def selfcheck(self, user: AuthenticatedUser) -> dict:
+        return {
+            "ok": True,
+            "steps": [
+                {"step": "session_insert", "status": 201, "code": None},
+                {"step": "message_insert", "status": 201, "code": None},
+                {"step": "read_back", "status": 200, "code": None},
+                {"step": "delete", "status": 200, "code": None},
+            ],
+        }
 
 
 _memory_repository: Optional[InMemoryTranslationRepository] = None

@@ -23,24 +23,25 @@ function caps(overrides: Partial<CapabilitiesResponse> = {}): CapabilitiesRespon
   };
 }
 
-test("hidden by default (flag unset), even with word mode enabled", () => {
-  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true })), false);
-  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true }), ""), false);
+test("visible by default (flag unset), when word mode is enabled", () => {
+  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true })), true);
+  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true }), ""), true);
+  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true }), "true"), true);
+});
+
+test("hidden only when flag is exactly 'false'", () => {
   assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true }), "false"), false);
 });
 
-test("hidden with flag true when word mode disabled or null", () => {
+test("hidden when word mode disabled or null, even if flag is not false", () => {
+  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: false })), false);
   assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: false }), "true"), false);
-  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: null }), "true"), false);
-  assert.strictEqual(showSignPhraseButton(null, "true"), false);
-});
-
-test("visible only with flag true AND word mode enabled", () => {
-  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: true }), "true"), true);
+  assert.strictEqual(showSignPhraseButton(caps({ word_recognition_enabled: null })), false);
+  assert.strictEqual(showSignPhraseButton(null), false);
 });
 
 test("hidden when word_recognition_enabled absent from payload", () => {
   const without = { ...caps() };
   delete without.word_recognition_enabled;
-  assert.strictEqual(showSignPhraseButton(without, "true"), false);
+  assert.strictEqual(showSignPhraseButton(without), false);
 });

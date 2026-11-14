@@ -6,6 +6,7 @@ export const endpoints = {
   models: "/api/v1/models",
   me: "/api/v1/auth/me",
   history: "/api/v1/history",
+  historySelfcheck: "/api/v1/history/selfcheck",
   historyItem: (id: string) => `/api/v1/history/${encodeURIComponent(id)}`,
   signToText: "/api/v1/translation/sign-to-text",
   avatarGloss: "/api/v1/text-to-sign",

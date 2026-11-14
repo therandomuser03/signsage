@@ -37,6 +37,7 @@ class CapabilitiesResponse(BaseModel):
     max_frames_per_sequence: int
     # Word-level recognition (behind SIGNSAGE_WORD_MODE_ENABLED)
     word_recognition_enabled: Optional[bool] = None
+    word_recognition_unavailable_reason: Optional[str] = None
     word_recognition_vocabulary: Optional[List[str]] = None
     word_recognition_threshold: Optional[float] = None
     word_recognition_model_version: Optional[str] = None

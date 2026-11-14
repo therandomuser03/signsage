@@ -34,6 +34,7 @@ export interface CapabilitiesResponse {
   max_frames_per_sequence: number;
   // Word-level recognition (behind SIGNSAGE_WORD_MODE_ENABLED)
   word_recognition_enabled?: boolean | null;
+  word_recognition_unavailable_reason?: string | null;
   word_recognition_vocabulary?: string[] | null;
   word_recognition_threshold?: number | null;
   word_recognition_model_version?: string | null;
@@ -61,6 +62,8 @@ export interface SentenceRecognitionResponse {
   status: string;
   /** True when the backend persisted this signing to the user's history (signed-in users only). Defaults false when absent. */
   history_saved?: boolean;
+  /** Set when the signed-in user's history save failed: "<step>:<http_status>:<pg_code>". Null otherwise. */
+  history_error?: string | null;
 }
 
 export interface ComposeRequest {
@@ -74,6 +77,8 @@ export interface ComposeResponse {
   method: string; // "llm" | "fallback"
   /** True when the backend persisted this sentence to the user's history (signed-in users only). Defaults false when absent. */
   history_saved?: boolean;
+  /** Set when the signed-in user's history save failed: "<step>:<http_status>:<pg_code>". Null otherwise. */
+  history_error?: string | null;
 }
 
 export interface ModelInfo {
@@ -152,6 +157,17 @@ export interface HistoryListResponse {
 
 export interface DeletedResponse {
   deleted: number;
+}
+
+export interface HistorySelfcheckStep {
+  step: string;
+  status?: number | string | null;
+  code?: string | null;
+}
+
+export interface HistorySelfcheckResponse {
+  ok: boolean;
+  steps: HistorySelfcheckStep[];
 }
 
 /** Static ISL image classification (alphabet letters A-Z or supported word signs). */
