@@ -125,6 +125,9 @@ class ContinuousSignPipeline:
         self._current_sign_start_frame: int = 0
         self._current_sign_frames: int = 0
         self._current_best_confidence: float = 0.0
+        # Last token accepted by flush(): [{text, confidence, ...}], kept so
+        # callers can inspect per-gloss confidences after a flush.
+        self.last_flushed: list[RecognizedSign] = []
         # Cooldown counter (frames remaining before next sign can be accepted).
         self._cooldown_remaining: int = 0
         # Low-motion run length (for boundary detection).
@@ -289,6 +292,9 @@ class ContinuousSignPipeline:
         self._current_sign_frames = 0
         self._current_best_confidence = 0.0
         flushed = list(self.accepted_signs)
+        # Kept for callers that want the finalized sequence (e.g. the REST
+        # /sentence endpoint reads the per-gloss confidences from here).
+        self.last_flushed = flushed
         self.accepted_signs = []
         self._buffer = []
         self._motion_history = deque(maxlen=self.max_buffer_frames)
@@ -310,6 +316,7 @@ class ContinuousSignPipeline:
         self._low_motion_run = 0
         self._cooldown_remaining = 0
         self._last_accepted_text = None
+        self.last_flushed = []
 
     @property
     def current_sign(self) -> Optional[str]:

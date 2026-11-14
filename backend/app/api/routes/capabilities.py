@@ -80,7 +80,7 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         word_recognition_model_version=(
             "word_v3_8w_s123" if settings.word_mode_enabled else None
         ),
-        word_recognition_label="word-level recognition, adapted to one signer; not sentence translation",
+        word_recognition_label="sign-sequence to sentence interpretation (9-sign vocabulary), adapted to one signer",
     )
 
 

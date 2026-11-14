@@ -19,6 +19,8 @@ from app.infrastructure.storage.model_storage import ModelBundleNotConfiguredErr
 from app.ml.adapters.sign_to_text_adapter import ModelLoadError, SignToTextAdapter
 from app.ml.continuous_sign import ContinuousSignPipeline
 from app.ml.isolated_words import IsolatedWordAdapter
+from app.ml.word_sequence import WordSequencePipeline
+from app.ml.word_classifier_adapter import WordClassifierAdapter, resolve_word_model_dir
 from app.ml.contracts.inference_contract import InferenceContractError
 from app.ml.contracts.landmark_contract import LandmarkContractError
 from app.ml.contracts.model_contract import ModelContractError
@@ -55,15 +57,27 @@ def get_sign_to_text_pipeline(
     with _lock:
         if _pipeline is None or _pipeline_key != pipeline_key:
             try:
-                bundle_dir = resolve_bundle_dir(settings)
-                logger.info("Loading Sign->Text pipeline from %s", bundle_dir)
-                if settings.model_kind == "isolated_words":
-                    adapter = IsolatedWordAdapter.load(bundle_dir, device=settings.device)
-                elif settings.model_kind == "continuous_sign":
-                    adapter = IsolatedWordAdapter.load(bundle_dir, device=settings.device)
-                    adapter = ContinuousSignPipeline(adapter)
+                if settings.model_kind == "continuous_sign":
+                    # The continuous sign pipeline needs only the word model,
+                    # not the transformer bundle.
+                    model_dir = resolve_word_model_dir(settings)
+                    logger.info(
+                        "Loading continuous sign pipeline from word model %s",
+                        model_dir,
+                    )
+                    word = WordClassifierAdapter.load(model_dir, device=settings.device)
+                    adapter = WordSequencePipeline(
+                        word,
+                        min_motion=settings.min_motion_energy,
+                        min_confidence=settings.min_confidence,
+                    )
                 else:
-                    adapter = SignToTextAdapter.load(bundle_dir, device=settings.device)
+                    bundle_dir = resolve_bundle_dir(settings)
+                    logger.info("Loading Sign->Text pipeline from %s", bundle_dir)
+                    if settings.model_kind == "isolated_words":
+                        adapter = IsolatedWordAdapter.load(bundle_dir, device=settings.device)
+                    else:
+                        adapter = SignToTextAdapter.load(bundle_dir, device=settings.device)
             except (
                 ModelBundleNotConfiguredError, ModelBundleNotFoundError, ModelLoadError,
                 LandmarkContractError, ModelContractError, InferenceContractError,

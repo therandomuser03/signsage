@@ -1,0 +1,116 @@
+{
+  "model_version": "word_v3_8w_s4ref_s123",
+  "status": "FINAL-UNEVALUATED",
+  "note": "Trained on S1+S2+S3 (SignSage captures) plus S4, the external ISL reference videos (one clip per word, mixed signer(s) and sources). No held-out data exists for this exact model. Expected quality estimated by train S1+S2+S4 / test S3 (5 seeds): acc 0.980 +/- 0.029, macro-F1 0.979 +/- 0.030 (see results_s4_videos.json); baseline S1+S2 / S3 was 0.935 +/- 0.012.",
+  "trained_on": {
+    "sessions": [
+      "S1",
+      "S2",
+      "S3",
+      "S4"
+    ],
+    "s4_note": "S4 = external reference videos (hello, help, me, no, rest, water, where, yes, you), 1 clip/word, converted with the same tasks-vision landmarker models as the app."
+  },
+  "label_list": [
+    "hello",
+    "me",
+    "you",
+    "yes",
+    "no",
+    "help",
+    "water",
+    "where",
+    "rest"
+  ],
+  "n_classes": 9,
+  "excluded_words": [
+    "thank you",
+    "please"
+  ],
+  "exclusion_reason": "Weak on S3 (F1 0.52 and 0.44 in the 10-class model).",
+  "signer_note": "adapted to one signer; not signer-independent",
+  "model": "1D-CNN (cnn-v3), dropout 0.3: Conv1d(122->32->64, ReLU, Dropout) x2, AdaptiveAvgPool1d, Linear->n_classes. Trained WITH frame-level augmentation (hand-frame dropout 0-50%, scale +/-10%, rotation +/-10 deg, time-warp +/-15%).",
+  "hyperparameters": {
+    "epochs": 60,
+    "lr": 0.001,
+    "batch": 16,
+    "optimizer": "Adam",
+    "dropout": 0.3,
+    "seed": 42
+  },
+  "features": {
+    "spec": "features_v3.py / sign_features_v3.py",
+    "dim": 122,
+    "frames": 60,
+    "layout": "signsage (pose 0-32 | face 33-500 | hand slots 501-542)",
+    "normalisation": "MediaPipe Left/Right labels IGNORED. Hands assigned to two stable physical slots by temporal tracking (nearest wrist to previous frame; two hands in one frame ordered by image x, then continuity). ACTIVE slot = hand with larger total wrist travel (tie: more frames present); other = SECONDARY. Per-frame: wrist - shoulder_centre / shoulder_width; other 20 landmarks - wrist / hand_size (hand_size = ||wrist - middle fingertip||). If the active hand's mean wrist x is image-left of the shoulder midpoint, all x coords (hands + face) are mirrored about the per-frame shoulder midpoint so the active hand is right-hand-active. Missing runs <=5 frames interpolated; longer/leading/trailing missing kept as zero coords with mask=0, never normalised into shoulder space.",
+    "channels": [
+      "active hand 42",
+      "secondary hand 42",
+      "active_mask",
+      "secondary_mask",
+      "hand-to-face 32",
+      "wrist velocity 4"
+    ]
+  },
+  "extractor": {
+    "name": "@mediapipe/tasks-vision PoseLandmarker + FaceLandmarker + HandLandmarker",
+    "version": "1.2.2",
+    "running_mode": "VIDEO",
+    "note": "External ISL reference video converted with the same tasks-vision landmarker models as the app/recorder (Python tasks API, CPU delegate). Different signer(s)/sources; coordinates NOT mirrored; handedness follows the image.",
+    "options": {
+      "pose": {
+        "numPoses": 1
+      },
+      "face": {
+        "numFaces": 1
+      },
+      "hands": {
+        "numHands": 2
+      }
+    },
+    "models": [
+      "pose_landmarker_lite.task",
+      "face_landmarker.task",
+      "hand_landmarker.task"
+    ]
+  },
+  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). S4 reference videos are 25-30 fps; app captures are ~10 fps; the model is invariant to this via resampling. Coordinates are NOT mirrored; canonicalisation mirroring is applied inside features_v3.",
+  "recommended_confidence_threshold": 0.7,
+  "threshold_note": "Threshold 0.7 kept from REPORT_G (calibrated on S2 dev); not re-selected from S3. Train S1+S2+S4 / test S3: acc 0.980 at 100% coverage; threshold table in results_s4_videos.json.",
+  "s3_heldout_metrics": {
+    "acc_mean": 0.98,
+    "acc_std": 0.029,
+    "macroF1_mean": 0.979,
+    "macroF1_std": 0.03,
+    "n_test": 40,
+    "note": "from results_s4_videos.json (train S1+S2+S4, test S3, 5 seeds)"
+  },
+  "cpu_latency_ms_per_clip": 0.7525231776187639,
+  "golden_test_vector": {
+    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_final8_s4/golden_test_vector.npy",
+    "expected_logits": [
+      4.509908676147461,
+      -5.38308048248291,
+      -3.3348145484924316,
+      -2.4113078117370605,
+      0.17469479143619537,
+      -4.803855895996094,
+      -0.47438058257102966,
+      -3.4109349250793457,
+      -5.633666515350342
+    ],
+    "expected_logits_labels": [
+      "hello",
+      "me",
+      "you",
+      "yes",
+      "no",
+      "help",
+      "water",
+      "where",
+      "rest"
+    ],
+    "note": "Run features_v3/sign_features_v3 on golden_test_vector.npy then the model; logits must match expected_logits (within float tolerance)."
+  }
+}

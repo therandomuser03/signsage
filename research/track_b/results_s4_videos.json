@@ -1,0 +1,263 @@
+{
+  "baseline_s1s2": {
+    "acc_mean": 0.9349999999999999,
+    "acc_std": 0.012247448713915848,
+    "mf1_mean": 0.9330808080808082,
+    "mf1_std": 0.012767517939492838,
+    "per_seed": [
+      {
+        "seed": 0,
+        "acc": 0.95,
+        "macro_f1": 0.9494949494949495
+      },
+      {
+        "seed": 1,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 2,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 3,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 4,
+        "acc": 0.95,
+        "macro_f1": 0.9479166666666666
+      }
+    ],
+    "per_class": {
+      "hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "me": {
+        "precision": 0.9666666666666668,
+        "recall": 1.0,
+        "f1": 0.9818181818181818
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.76,
+        "f1": 0.861111111111111
+      },
+      "yes": {
+        "precision": 0.8095238095238095,
+        "recall": 1.0,
+        "f1": 0.8939393939393939
+      },
+      "no": {
+        "precision": 0.8285714285714286,
+        "recall": 1.0,
+        "f1": 0.9
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9777777777777779
+      },
+      "water": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "where": {
+        "precision": 1.0,
+        "recall": 0.76,
+        "f1": 0.85
+      }
+    },
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 40,
+        "coverage": 1.0,
+        "accuracy": 0.95
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 39,
+        "coverage": 0.975,
+        "accuracy": 0.9487179487179487
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 36,
+        "coverage": 0.9,
+        "accuracy": 0.9722222222222222
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 33,
+        "coverage": 0.825,
+        "accuracy": 0.9696969696969697
+      }
+    ],
+    "n_test": 40
+  },
+  "with_s4_videos": {
+    "acc_mean": 0.9800000000000001,
+    "acc_std": 0.029154759474226483,
+    "mf1_mean": 0.9794823232323232,
+    "mf1_std": 0.03004546473305755,
+    "per_seed": [
+      {
+        "seed": 0,
+        "acc": 0.975,
+        "macro_f1": 0.9747474747474747
+      },
+      {
+        "seed": 1,
+        "acc": 1.0,
+        "macro_f1": 1.0
+      },
+      {
+        "seed": 2,
+        "acc": 0.925,
+        "macro_f1": 0.9226641414141414
+      },
+      {
+        "seed": 3,
+        "acc": 1.0,
+        "macro_f1": 1.0
+      },
+      {
+        "seed": 4,
+        "acc": 1.0,
+        "macro_f1": 1.0
+      }
+    ],
+    "per_class": {
+      "hello": {
+        "precision": 0.9428571428571428,
+        "recall": 1.0,
+        "f1": 0.9666666666666666
+      },
+      "me": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "you": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9777777777777779
+      },
+      "yes": {
+        "precision": 0.9333333333333333,
+        "recall": 1.0,
+        "f1": 0.9636363636363636
+      },
+      "no": {
+        "precision": 1.0,
+        "recall": 0.9199999999999999,
+        "f1": 0.95
+      },
+      "help": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "water": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9777777777777779
+      },
+      "where": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "thresholds": [
+      {
+        "threshold": "argmax",
+        "n_accepted": 40,
+        "coverage": 1.0,
+        "accuracy": 0.975
+      },
+      {
+        "threshold": 0.5,
+        "n_accepted": 40,
+        "coverage": 1.0,
+        "accuracy": 0.975
+      },
+      {
+        "threshold": 0.7,
+        "n_accepted": 36,
+        "coverage": 0.9,
+        "accuracy": 1.0
+      },
+      {
+        "threshold": 0.9,
+        "n_accepted": 35,
+        "coverage": 0.875,
+        "accuracy": 1.0
+      }
+    ],
+    "n_test": 40
+  },
+  "s4_clips": [
+    {
+      "label": "hello",
+      "frames": 285,
+      "left_det": 0.54386,
+      "right_det": 0.02807000000000004
+    },
+    {
+      "label": "help",
+      "frames": 184,
+      "left_det": 0.5054350000000001,
+      "right_det": 0.49456500000000003
+    },
+    {
+      "label": "me",
+      "frames": 136,
+      "left_det": 0.110294,
+      "right_det": 0.441176
+    },
+    {
+      "label": "no",
+      "frames": 116,
+      "left_det": 0.784483,
+      "right_det": 0.00862099999999999
+    },
+    {
+      "label": "rest",
+      "frames": 254,
+      "left_det": 0.940945,
+      "right_det": 0.830709
+    },
+    {
+      "label": "water",
+      "frames": 178,
+      "left_det": 0.044943999999999984,
+      "right_det": 0.52809
+    },
+    {
+      "label": "where",
+      "frames": 188,
+      "left_det": 0.882979,
+      "right_det": 0.867021
+    },
+    {
+      "label": "yes",
+      "frames": 115,
+      "left_det": 0.686957,
+      "right_det": 0.04347800000000002
+    },
+    {
+      "label": "you",
+      "frames": 149,
+      "left_det": 0.03355699999999995,
+      "right_det": 0.395973
+    }
+  ],
+  "note": "S4 = 9 external ISL reference videos (1 clip/word, mixed signers/sources). Test set S3 is held out from both configs. Adopt S4 only if not worse than baseline by >1 std."
+}

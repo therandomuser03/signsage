@@ -30,6 +30,37 @@ from app.ml.preprocessing.sign_features_v3 import (
 )
 
 
+def resolve_word_model_dir(settings) -> str:
+    """Resolve the word model directory.
+
+    Resolution order:
+      1. An absolute ``SIGNSAGE_WORD_MODEL_DIR`` env var wins outright.
+      2. ``<backend root>/word_model`` — the model folder baked into the
+         backend image next to ``app/`` (docker build context: backend/).
+      3. ``<repo root>/models/word_v3`` — local dev layout.
+      4. ``<cwd>/<word_model_dir>`` — fallback for custom relative values.
+    The resolved path is logged at startup so a mis-deploy is visible in the
+    startup logs instead of failing on the first request.
+    """
+    d = settings.word_model_dir or "models/word_v3"
+    p = Path(d)
+    if p.is_absolute():
+        return str(p)
+    backend_root = Path(__file__).resolve().parents[2]  # .../backend (contains app/) (app/ml/ -> app/ -> backend/)
+    repo_root = backend_root.parent  # repository root
+    candidates = [
+        backend_root / "word_model",
+        repo_root / "models" / "word_v3",
+        Path.cwd() / d,
+    ]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return str(candidate)
+    # Nothing staged: fall back to the baked-in candidate so the startup log
+    # shows the expected path; callers get a clear file-not-found error.
+    return str(backend_root / "word_model")
+
+
 class _WordNet(nn.Module):
     """cnn-v3: 1D-CNN, dropout 0.3, on 122-dim x 60-frame features."""
 

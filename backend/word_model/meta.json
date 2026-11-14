@@ -1,13 +1,15 @@
 {
-  "model_version": "word_v3_8w_s123",
+  "model_version": "word_v3_8w_s4ref_s123",
   "status": "FINAL-UNEVALUATED",
-  "note": "No held-out data exists for this model (trained on S1+S2+S3). Expected quality estimated by REPORT_I step 1 (train S1+S2, test S3): acc 0.935, macro-F1 0.933 on the 8 words + rest.",
+  "note": "Trained on S1+S2+S3 (SignSage captures) plus S4, the external ISL reference videos (one clip per word, mixed signer(s) and sources). No held-out data exists for this exact model. Expected quality estimated by train S1+S2+S4 / test S3 (5 seeds): acc 0.980 +/- 0.029, macro-F1 0.979 +/- 0.030 (see results_s4_videos.json); baseline S1+S2 / S3 was 0.935 +/- 0.012.",
   "trained_on": {
     "sessions": [
       "S1",
       "S2",
-      "S3"
-    ]
+      "S3",
+      "S4"
+    ],
+    "s4_note": "S4 = external reference videos (hello, help, me, no, rest, water, where, yes, you), 1 clip/word, converted with the same tasks-vision landmarker models as the app."
   },
   "label_list": [
     "hello",
@@ -52,55 +54,51 @@
     ]
   },
   "extractor": {
-    "name": "@mediapipe/tasks-vision HolisticExtractor",
-    "version": "1.0.1",
+    "name": "@mediapipe/tasks-vision PoseLandmarker + FaceLandmarker + HandLandmarker",
+    "version": "1.2.2",
     "running_mode": "VIDEO",
-    "note": "Same options as the SignSage frontend (frontend/src/features/translate/landmarks.ts): pose numPoses=1, face numFaces=1, hands numHands=2, delegate GPU, no confidence thresholds set (MediaPipe defaults), no delegate fallback. Coordinates are NOT mirrored; only the preview is CSS-mirrored (scaleX(-1)) like the app.",
+    "note": "External ISL reference video converted with the same tasks-vision landmarker models as the app/recorder (Python tasks API, CPU delegate). Different signer(s)/sources; coordinates NOT mirrored; handedness follows the image.",
     "options": {
       "pose": {
-        "modelAssetPath": "assets/models/pose_landmarker_lite.task",
-        "delegate": "GPU",
-        "runningMode": "VIDEO",
         "numPoses": 1
       },
       "face": {
-        "modelAssetPath": "assets/models/face_landmarker.task",
-        "delegate": "GPU",
-        "runningMode": "VIDEO",
         "numFaces": 1
       },
       "hands": {
-        "modelAssetPath": "assets/models/hand_landmarker.task",
-        "delegate": "GPU",
-        "runningMode": "VIDEO",
         "numHands": 2
       }
-    }
+    },
+    "models": [
+      "pose_landmarker_lite.task",
+      "face_landmarker.task",
+      "hand_landmarker.task"
+    ]
   },
-  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). Effective FPS varies per clip; the model is invariant to this via resampling. Coordinates are NOT mirrored (only the app preview is CSS-mirrored); canonicalisation mirroring is applied inside features_v3.",
+  "fps_note": "Features resampled to 60 frames per clip (uniform subsample if T>=60, edge-pad if T<60). S4 reference videos are 25-30 fps; app captures are ~10 fps; the model is invariant to this via resampling. Coordinates are NOT mirrored; canonicalisation mirroring is applied inside features_v3.",
   "recommended_confidence_threshold": 0.7,
-  "threshold_note": "Threshold 0.7 kept from REPORT_G (calibrated on S2 dev); not re-selected from S3. On the S3 clean held-out test (train S1+S2, test S3, 8 words), threshold 0.7 gave acc 0.972 at 90% coverage (argmax acc 0.950 at 100%).",
+  "threshold_note": "Threshold 0.7 kept from REPORT_G (calibrated on S2 dev); not re-selected from S3. Train S1+S2+S4 / test S3: acc 0.980 at 100% coverage; threshold table in results_s4_videos.json.",
   "s3_heldout_metrics": {
-    "acc_mean": 0.935,
-    "acc_std": 0.012,
-    "macroF1_mean": 0.933,
-    "macroF1_std": 0.013,
+    "acc_mean": 0.98,
+    "acc_std": 0.029,
+    "macroF1_mean": 0.979,
+    "macroF1_std": 0.03,
     "n_test": 40,
-    "note": "from results_final8.json (train S1+S2, test S3, 5 seeds)"
+    "note": "from results_s4_videos.json (train S1+S2+S4, test S3, 5 seeds)"
   },
-  "cpu_latency_ms_per_clip": 0.4108040353935233,
+  "cpu_latency_ms_per_clip": 0.7525231776187639,
   "golden_test_vector": {
-    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_final8/golden_test_vector.npy",
+    "input_npy": "/mnt/Drive-D/Codes/signsage/research/track_b/export_final8_s4/golden_test_vector.npy",
     "expected_logits": [
-      7.429642677307129,
-      -12.627481460571289,
-      -3.438955545425415,
-      -1.6378087997436523,
-      -0.49880877137184143,
-      -5.783358097076416,
-      0.8977934718132019,
-      -6.843522548675537,
-      -9.089458465576172
+      4.509908676147461,
+      -5.38308048248291,
+      -3.3348145484924316,
+      -2.4113078117370605,
+      0.17469479143619537,
+      -4.803855895996094,
+      -0.47438058257102966,
+      -3.4109349250793457,
+      -5.633666515350342
     ],
     "expected_logits_labels": [
       "hello",

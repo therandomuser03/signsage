@@ -1,4 +1,4 @@
-"""Word-level recognition REST endpoints (behind SIGNSAGE_WORD_MODE_ENABLED).
+"""Word/sentence recognition REST endpoints (behind SIGNSAGE_WORD_MODE_ENABLED).
 
 POST /api/v1/translation/word
     input  = landmarks: list of frames, each 543 x [x, y, z]
@@ -6,13 +6,18 @@ POST /api/v1/translation/word
     accepted=false and word=null when max prob < threshold or the predicted
     label is "rest". Returns 503 WORD_MODE_DISABLED when the flag is off.
 
+POST /api/v1/translation/sentence
+    input  = { frames: [...] } (same frame format as /word)
+    output = { gloss_sequence, sentence, method, accepted, model_version, ... }
+    Continuous sign stream (motion-gated sliding windows) -> ordered glosses
+    -> sentence (deterministic rules -> Groq refinement -> fallback).
+
 POST /api/v1/translation/compose
     input  = { words: [...] }
     output = { sentence, method }
     Validates each word against the loaded vocabulary. Uses Groq (when
     configured) with a strict prompt, falls back to a deterministic join.
-
-Never presents word recognition as sentence translation.
+    Handles history saving for signed-in users.
 """
 from __future__ import annotations
 
@@ -24,7 +29,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
 from app.core.dependencies import get_optional_history_service, get_request_user
@@ -32,8 +37,9 @@ from app.core.errors import SignSageError
 from app.core.ratelimit import rate_limit_dependency
 from app.core.security import AuthenticatedUser
 from app.domain.translation.entities import Direction, NewHistoryRecord, ResultType
-from app.ml.word_classifier_adapter import WordClassifierAdapter
-from app.ml.word_composer import compose_fallback, guard_llm_output
+from app.ml.word_classifier_adapter import WordClassifierAdapter, WordClassificationResult, resolve_word_model_dir
+from app.ml.word_sequence import WordSequencePipeline
+from app.services.gloss_composer import compose_words
 from app.services.history_service import HistoryService
 
 logger = logging.getLogger("signsage.word_debug")
@@ -114,7 +120,7 @@ def load_word_adapter_at_startup(settings: Settings) -> None:
         return
     if _word_adapter_loaded:
         return
-    model_dir = _resolve_word_model_dir(settings)
+    model_dir = resolve_word_model_dir(settings)
     t0 = time.perf_counter()
     try:
         _word_adapter = WordClassifierAdapter.load(model_dir, device=settings.device)
@@ -137,34 +143,8 @@ async def _startup_load_word_model() -> None:
 
 
 def _resolve_word_model_dir(settings: Settings) -> str:
-    """Resolve the word model directory.
-
-    Resolution order:
-      1. An absolute ``SIGNSAGE_WORD_MODEL_DIR`` env var wins outright.
-      2. ``<backend root>/word_model`` — the model folder baked into the
-         backend image next to ``app/`` (docker build context: backend/).
-      3. ``<repo root>/models/word_v3`` — local dev layout.
-      4. ``<cwd>/<word_model_dir>`` — fallback for custom relative values.
-    The resolved path is logged at startup so a mis-deploy is visible in the
-    startup logs instead of failing on the first request.
-    """
-    d = settings.word_model_dir or "models/word_v3"
-    p = Path(d)
-    if p.is_absolute():
-        return str(p)
-    backend_root = Path(__file__).resolve().parents[3]  # .../backend (contains app/)
-    repo_root = backend_root.parent  # repository root
-    candidates = [
-        backend_root / "word_model",
-        repo_root / "models" / "word_v3",
-        Path.cwd() / d,
-    ]
-    for candidate in candidates:
-        if candidate.is_dir():
-            return str(candidate)
-    # Nothing staged: fall back to the baked-in candidate so the startup log
-    # shows the expected path; callers get a clear file-not-found error.
-    return str(backend_root / "word_model")
+    """Alias kept for call sites/tests that import this name."""
+    return resolve_word_model_dir(settings)
 
 
 def _get_word_adapter(settings: Settings) -> WordClassifierAdapter:
@@ -183,21 +163,8 @@ def _reset_word_adapter() -> None:
     _word_adapter_loaded = False
 
 
-@router.post("/word", dependencies=[Depends(rate_limit_dependency("word"))])
-async def word_recognition(
-    request: Request,
-    payload: dict,
-    settings: Settings = Depends(get_settings),
-    user: Optional[AuthenticatedUser] = Depends(get_request_user),
-) -> dict:
-    if not settings.word_mode_enabled:
-        raise WordModeDisabledError(
-            "Word recognition is disabled. Set SIGNSAGE_WORD_MODE_ENABLED=true "
-            "to enable the word-level recognition path."
-        )
-
-    t0_total = time.perf_counter()
-    t_parse_start = time.perf_counter()
+def _extract_landmarks(payload: dict) -> np.ndarray:
+    """Validate payload["frames"] and return a (T, 543, 3) float32 array."""
     frames = payload.get("frames")
     if not isinstance(frames, list) or len(frames) < 2:
         raise HTTPException(
@@ -214,7 +181,6 @@ async def word_recognition(
             status_code=422,
             detail={"code": "INVALID_MESSAGE", "message": f"invalid landmarks: {exc}"},
         ) from exc
-    t_parse_ms = (time.perf_counter() - t_parse_start) * 1000
 
     if landmarks.ndim != 3 or landmarks.shape[1:] != (543, 3):
         raise HTTPException(
@@ -229,6 +195,26 @@ async def word_recognition(
             status_code=422,
             detail={"code": "INVALID_MESSAGE", "message": "landmarks must contain only finite coordinates"},
         )
+    return landmarks
+
+
+@router.post("/word", dependencies=[Depends(rate_limit_dependency("word"))])
+async def word_recognition(
+    request: Request,
+    payload: dict,
+    settings: Settings = Depends(get_settings),
+    user: Optional[AuthenticatedUser] = Depends(get_request_user),
+) -> dict:
+    if not settings.word_mode_enabled:
+        raise WordModeDisabledError(
+            "Word recognition is disabled. Set SIGNSAGE_WORD_MODE_ENABLED=true "
+            "to enable the word-level recognition path."
+        )
+
+    t0_total = time.perf_counter()
+    t_parse_start = time.perf_counter()
+    landmarks = _extract_landmarks(payload)
+    t_parse_ms = (time.perf_counter() - t_parse_start) * 1000
 
     n_frames = int(landmarks.shape[0])
     payload_size_bytes = len(json.dumps(payload))
@@ -334,6 +320,77 @@ async def word_recognition(
     }
 
 
+@router.post("/sentence", dependencies=[Depends(rate_limit_dependency("compose"))])
+async def sentence_recognition(
+    request: Request,
+    payload: dict,
+    settings: Settings = Depends(get_settings),
+    user: Optional[AuthenticatedUser] = Depends(get_request_user),
+    history: Optional[HistoryService] = Depends(get_optional_history_service),
+) -> dict:
+    """Continuous sign stream -> ordered glosses -> sentence.
+
+    Same frame format as /word ({frames: [...]}). The stream is fed through
+    the continuous pipeline (motion-gated sliding windows over the isolated
+    word model), which finalises signs at low-motion boundaries. The ordered
+    glosses are then composed into an English sentence (deterministic rules
+    first, Groq strictly-guarded refinement, comma-join fallback).
+    Returns { gloss_sequence, sentence, method, accepted, model_version, ... }.
+    """
+    if not settings.word_mode_enabled:
+        raise WordModeDisabledError(
+            "Sentence recognition is disabled. Set SIGNSAGE_WORD_MODE_ENABLED=true "
+            "to enable the word-level recognition path."
+        )
+
+    landmarks = _extract_landmarks(payload)
+    adapter = _get_word_adapter(settings)
+
+    pipeline = WordSequencePipeline(
+        adapter,
+        min_motion=settings.min_motion_energy,
+        min_confidence=settings.min_confidence,
+    )
+    result = pipeline.transcribe(landmarks)
+    signs = pipeline.last_signs
+
+    vocab = set(adapter.labels)
+    gloss_sequence = [
+        {"gloss": s.text, "confidence": round(float(s.confidence), 4)} for s in signs
+    ]
+    sentence, method = compose_words([s.text for s in signs], vocab, settings)
+    accepted = bool(signs) and bool(sentence)
+
+    # --- Best-effort history save for signed-in users only ---
+    save_history = bool(payload.get("save_history", True))
+    if user and history and save_history and accepted:
+        joined = " ".join(s.text for s in signs)
+        confidence = float(np.mean([s.confidence for s in signs]))
+        await history.try_record_word(user, NewHistoryRecord(
+            direction=Direction.SIGN_TO_TEXT,
+            output_text=sentence,
+            result_type=ResultType.MODEL,
+            model_version=adapter.model_version,
+            input_text=joined,
+            gloss=joined,
+            confidence=max(0.0, min(1.0, confidence)),
+            sequence=1,
+            title=f"Sign to text: {sentence[:60]}",
+            status="completed",
+        ))
+
+    return {
+        "gloss_sequence": gloss_sequence,
+        "sentence": sentence,
+        "method": method,
+        "accepted": accepted,
+        "model_version": adapter.model_version,
+        "threshold": adapter.confidence_threshold,
+        "motion_energy": result.motion_energy,
+        "status": "ok",
+    }
+
+
 @router.post("/compose", dependencies=[Depends(rate_limit_dependency("compose"))])
 async def compose_sentence(
     payload: dict,
@@ -366,7 +423,7 @@ async def compose_sentence(
             },
         )
 
-    sentence, method = _compose(words, vocab, settings)
+    sentence, method = compose_words(words, vocab, settings)
 
     # --- Best-effort history save for signed-in users only ---
     save_history = bool(payload.get("save_history", True))
@@ -400,73 +457,4 @@ async def compose_sentence(
     return {"sentence": sentence, "method": method}
 
 
-def _compose(words: list[str], vocab: set[str], settings: Settings) -> tuple[str, str]:
-    """Compose a sentence from recognised words.
 
-    Rules run first (deterministic, vocabulary from meta.json). Groq is
-    called only for 2+ word sequences that match no explicit rule: one
-    attempt, temperature 0, max_tokens 64, 4 s timeout, strict output guard;
-    anything that fails the guard falls back to the comma-join.
-    """
-    cleaned = [w for w in words if w != "rest"]
-    if not cleaned:
-        return "", "fallback"
-
-    # --- Rules first: explicit patterns (deterministic, never Groq) ---
-    if _rule_matched(cleaned):
-        return compose_fallback(cleaned, vocab), "fallback"
-
-    # --- LLM path (Groq): only 2+ words with no explicit pattern ---
-    if len(cleaned) >= 2 and settings.groq_api_key:
-        try:
-            import httpx
-
-            joined = ", ".join(cleaned)
-            system = (
-                "Compose ONE short English sentence using only these words: "
-                f"{joined}. You may add only the function words is, are, "
-                "am, the, a, I, and punctuation. Do not add any other words, "
-                "names, facts, or details. Reply with only the sentence, "
-                "nothing else."
-            )
-            body = {
-                "model": settings.groq_model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": joined},
-                ],
-                "temperature": 0,
-                "max_tokens": 64,
-            }
-            headers = {
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            }
-            url = f"{settings.groq_base_url.rstrip('/')}/chat/completions"
-            with httpx.Client(timeout=4.0) as client:
-                resp = client.post(url, json=body, headers=headers)
-                resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"]["content"].strip()
-            guarded = guard_llm_output(content, cleaned)
-            if guarded is not None:
-                return guarded, "llm"
-        except Exception:
-            # fall through to deterministic comma-join fallback
-            pass
-
-    # --- Rule-based fallback: comma-join, no function words added ---
-    return compose_fallback(cleaned, vocab), "fallback"
-
-
-def _rule_matched(cleaned: list[str]) -> bool:
-    """True when `cleaned` matches an explicit deterministic pattern."""
-    if not cleaned:
-        return True  # empty -> "" handled by caller
-    if len(cleaned) == 1:
-        return True
-    w = cleaned
-    if w in (["where", "water"], ["where", "you"], ["where", "me"], ["help", "me"]):
-        return True
-    if len(w) == 2 and w[0] == "hello":
-        return True
-    return False
