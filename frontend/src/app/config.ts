@@ -19,4 +19,7 @@ export const config = {
   // Dev-only: when "true", show the labeled-capture panel under the Word mode
   // card. Any other value (incl. unset) hides it entirely.
   captureMode: env.VITE_CAPTURE_MODE ?? "",
+  // Dev-only phrase capture (POST /api/v1/translation/sentence): button shows
+  // only when "true" AND capabilities has word mode enabled. Default = hidden.
+  phraseMode: env.VITE_PHRASE_MODE ?? "",
 } as const;

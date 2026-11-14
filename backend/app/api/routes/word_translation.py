@@ -320,7 +320,7 @@ async def word_recognition(
     }
 
 
-@router.post("/sentence", dependencies=[Depends(rate_limit_dependency("compose"))])
+@router.post("/sentence", dependencies=[Depends(rate_limit_dependency("word"))])
 async def sentence_recognition(
     request: Request,
     payload: dict,
@@ -330,12 +330,14 @@ async def sentence_recognition(
 ) -> dict:
     """Continuous sign stream -> ordered glosses -> sentence.
 
-    Same frame format as /word ({frames: [...]}). The stream is fed through
-    the continuous pipeline (motion-gated sliding windows over the isolated
-    word model), which finalises signs at low-motion boundaries. The ordered
-    glosses are then composed into an English sentence (deterministic rules
-    first, Groq strictly-guarded refinement, comma-join fallback).
+    Same frame format as /word ({frames: [...]}), same rate limiter
+    ("word" scope). The stream is fed through the continuous pipeline
+    (motion-gated sliding windows over the isolated word model), which
+    finalises signs at low-motion boundaries. The ordered glosses are then
+    composed into an English sentence (deterministic rules first, Groq
+    strictly-guarded refinement, comma-join fallback).
     Returns { gloss_sequence, sentence, method, accepted, model_version, ... }.
+    Rejects captures of more than 400 frames with 422.
     """
     if not settings.word_mode_enabled:
         raise WordModeDisabledError(
@@ -344,6 +346,11 @@ async def sentence_recognition(
         )
 
     landmarks = _extract_landmarks(payload)
+    if len(landmarks) > 400:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_MESSAGE", "message": "too many frames; max 400"},
+        )
     adapter = _get_word_adapter(settings)
 
     pipeline = WordSequencePipeline(

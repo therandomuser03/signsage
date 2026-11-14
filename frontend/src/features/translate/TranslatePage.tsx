@@ -30,7 +30,9 @@ import type {
   ImageClassifyResponse,
   VideoTranslationResponse,
   WordRecognitionResponse,
+  SentenceRecognitionResponse,
 } from "@/types/api";
+import { showSignPhraseButton } from "@/features/translate/phrase";
 import {
   activityLabel,
   modelLabel,
@@ -57,6 +59,7 @@ type WordPhase = "idle" | "countdown" | "recording" | "result" | "error";
 const SEND_INTERVAL_MS = 100; // ~10 landmark frames per second
 const DETECT_INTERVAL_MS = 80; // MediaPipe runs far faster than the backend can use; keep preview responsive without re-running all models every animation frame.
 const WORD_RECORD_DURATION_MS = 2500; // 2.5 s capture window
+const PHRASE_RECORD_DURATION_MS = 10_000; // 10 s capture window for the experimental "Sign a phrase" flow
 const WORD_COUNTDOWN_SECONDS = 3;
 
 function drawOverlay(
@@ -144,10 +147,16 @@ export default function TranslatePage() {
   const wordFramesRef = useRef<HolisticFrame[]>([]);
   const wordRecStartRef = useRef(0);
   const wordStopTimeRef = useRef(0);
+  // Which flow this capture is for: "Record word" -> word REST endpoint,
+  // "Sign a phrase" -> /sentence. Also holds the configured capture length.
+  const captureKindRef = useRef<"word" | "phrase">("word");
+  const captureDurationRef = useRef(WORD_RECORD_DURATION_MS);
   // Label passed from the "Record & save" dev panel into the same capture path.
   const captureTrueLabelRef = useRef<string | null>(null);
   const [captureLabel, setCaptureLabel] = useState<string>(wordVocab[0] ?? "");
   const [captureCounts, setCaptureCounts] = useState<Record<string, number>>({});
+  // Result of the experimental 10-second phrase capture (chips + sentence).
+  const [phraseResult, setPhraseResult] = useState<SentenceRecognitionResponse | null>(null);
 
   // --- Voice output for the composed sentence (browser speech synthesis) ---
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -543,9 +552,11 @@ export default function TranslatePage() {
 
   const wordPhaseRef = useRef<WordPhase>("idle");
 
-  const startWordRecording = useCallback(async (trueLabel?: string) => {
+  const startWordRecording = useCallback(async (trueLabel?: string, opts?: { durationMs?: number; kind?: "word" | "phrase" }) => {
     if (wordPhaseRef.current === "countdown" || wordPhaseRef.current === "recording") return;
     captureTrueLabelRef.current = trueLabel ?? null;
+    captureDurationRef.current = opts?.durationMs ?? WORD_RECORD_DURATION_MS;
+    captureKindRef.current = opts?.kind ?? "word";
     const video = videoRef.current;
     const extractor = extractorRef.current;
     if (!video || !extractor) {
@@ -553,7 +564,11 @@ export default function TranslatePage() {
       return;
     }
     setWordError(null);
-    setWordResult(null);
+    if (captureKindRef.current === "phrase") {
+      setPhraseResult(null);
+    } else {
+      setWordResult(null);
+    }
     setWordPhase("countdown");
     wordPhaseRef.current = "countdown";
 
@@ -585,7 +600,7 @@ export default function TranslatePage() {
     }
     wordFramesRef.current = [];
     wordRecStartRef.current = performance.now();
-    wordStopTimeRef.current = wordRecStartRef.current + WORD_RECORD_DURATION_MS;
+    wordStopTimeRef.current = wordRecStartRef.current + captureDurationRef.current;
     setWordPhase("recording");
     wordPhaseRef.current = "recording";
 
@@ -596,9 +611,10 @@ export default function TranslatePage() {
   }, [wordLoop]);
 
   const stopWordRecording = useCallback(async () => {
-    // Same capture path as "Record word"; the dev panel passes a true_label.
+    // "Record word" and "Sign a phrase" share this exact capture path.
     const trueLabel = captureTrueLabelRef.current;
     captureTrueLabelRef.current = null;
+    const captureKind = captureKindRef.current;
     setWordPhase("result");
     wordPhaseRef.current = "result";
 
@@ -627,6 +643,7 @@ export default function TranslatePage() {
 
     const requestPayload = {
       frames: frames?.map((f) => ({ landmarks: f.landmarks })) ?? [],
+      ...(captureKind === "phrase" ? { save_history: loadPrefs().saveHistory } : {}),
       ...(trueLabel ? { true_label: trueLabel } : {}),
     };
     const payloadSize = JSON.stringify(requestPayload).length;
@@ -636,30 +653,51 @@ export default function TranslatePage() {
     if (frames && frames.length > 0) {
       setWordProcessing(true);
       try {
-        const result = await apiClient.word(requestPayload, {
-          retries: 1,
-          timeoutMs: 60_000,
-        });
-        const roundTripMs = performance.now() - t0Request;
-        const totalMs = performance.now() - captureEndMs;
-        setWordResult(result);
-        if (trueLabel) {
-          setCaptureCounts((prev) => ({ ...prev, [trueLabel]: (prev[trueLabel] ?? 0) + 1 }));
+        if (captureKind === "phrase") {
+          const result = await apiClient.sentence(requestPayload, {
+            retries: 1,
+            timeoutMs: 60_000,
+          });
+          const roundTripMs = performance.now() - t0Request;
+          const totalMs = performance.now() - captureEndMs;
+          setPhraseResult(result);
+          console.log(
+            "[phrase-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f gloss_sequence=%s",
+            frames.length,
+            effectiveFps,
+            leftPresent,
+            rightPresent,
+            payloadSize,
+            roundTripMs,
+            totalMs,
+            result.gloss_sequence?.map((g) => g.gloss).join("|") ?? "",
+          );
+        } else {
+          const result = await apiClient.word(requestPayload, {
+            retries: 1,
+            timeoutMs: 60_000,
+          });
+          const roundTripMs = performance.now() - t0Request;
+          const totalMs = performance.now() - captureEndMs;
+          setWordResult(result);
+          if (trueLabel) {
+            setCaptureCounts((prev) => ({ ...prev, [trueLabel]: (prev[trueLabel] ?? 0) + 1 }));
+          }
+          if (result.accepted && result.word) {
+            setWordList((prev) => [...prev, result.word!]);
+            setWordConfidences((prev) => [...prev, result.confidence]);
+          }
+          console.log(
+            "[word-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f",
+            frames.length,
+            effectiveFps,
+            leftPresent,
+            rightPresent,
+            payloadSize,
+            roundTripMs,
+            totalMs,
+          );
         }
-        if (result.accepted && result.word) {
-          setWordList((prev) => [...prev, result.word!]);
-          setWordConfidences((prev) => [...prev, result.confidence]);
-        }
-        console.log(
-          "[word-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f",
-          frames.length,
-          effectiveFps,
-          leftPresent,
-          rightPresent,
-          payloadSize,
-          roundTripMs,
-          totalMs,
-        );
       } catch (err: any) {
         const roundTripMs = performance.now() - t0Request;
         const totalMs = performance.now() - captureEndMs;
@@ -707,6 +745,7 @@ export default function TranslatePage() {
     setWordResult(null);
     setWordError(null);
     setComposedSentence(null);
+    setPhraseResult(null);
   }, []);
 
   const speak = useCallback(
@@ -1406,6 +1445,24 @@ export default function TranslatePage() {
                 </>
               )}
             </Button>
+            {showSignPhraseButton(capabilities) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={
+                  wordPhase === "countdown" ||
+                  wordPhase === "recording" ||
+                  wordProcessing ||
+                  phase === "starting-camera" ||
+                  phase === "loading-detector" ||
+                  phase === "error"
+                }
+                onClick={() => startWordRecording(undefined, { durationMs: PHRASE_RECORD_DURATION_MS, kind: "phrase" })}
+              >
+                <Camera size={14} /> Sign a phrase
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -1416,6 +1473,9 @@ export default function TranslatePage() {
               Make sentence
             </Button>
           </div>
+          <p className="text-xs text-foreground/50 mb-3 leading-snug">
+            Sign each word clearly, then lower your hands for a second before the next word.
+          </p>
 
           {wordError && <p className="mt-1 text-xs text-destructive">{wordError}</p>}
 
@@ -1426,6 +1486,39 @@ export default function TranslatePage() {
                 <Spinner className="h-3 w-3" />
                 <span>Processing…</span>
               </div>
+            </div>
+          )}
+
+          {/* Experimental phrase capture: ordered gloss chips + composed sentence */}
+          {phraseResult && (
+            <div className="mt-3 rounded-md border border-green-500/25 bg-green-50/50 px-3 py-2">
+              <p className="text-xs font-semibold text-green-700 mb-1">
+                Interpretation of recognised words (experimental)
+              </p>
+              {phraseResult.accepted && phraseResult.gloss_sequence.length > 0 ? (
+                <>
+                  <div className="flex flex-wrap gap-2 mb-2" aria-label="Recognised words">
+                    {phraseResult.gloss_sequence.map((g, i) => (
+                      <Badge
+                        key={`${g.gloss}-${i}`}
+                        variant="secondary"
+                        className="px-3 py-1 text-sm"
+                      >
+                        {g.gloss}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-sm text-green-900">{phraseResult.sentence}</p>
+                  <p className="mt-1 text-xs text-green-700/70">
+                    Method: {phraseResult.method === "llm" ? "AI-composed from the sign sequence" : "rule-based from the sign sequence"}
+                    {" · "}glosses {phraseResult.gloss_sequence.map((g) => g.gloss).join(", ")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-foreground/60">
+                  Didn't catch that, please try again.
+                </p>
+              )}
             </div>
           )}
 

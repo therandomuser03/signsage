@@ -2,6 +2,7 @@ import type {
   AvatarGlossRequest, AvatarGlossResponse, AvatarVocabularyResponse, CapabilitiesResponse,
   ComposeRequest, ComposeResponse, DeletedResponse, HealthResponse, HistoryListResponse,
   ImageClassifyRequest, ImageClassifyResponse, LandmarkFramePayload, MeResponse, ModelsResponse,
+  SentenceRecognitionResponse,
   SignToTextRequest, SignToTextResponse, VideoTranslationResponse, WordRecognitionResponse,
 } from "../../types/api";
 import { endpoints } from "./endpoints";
@@ -99,6 +100,9 @@ export class ApiClient {
 
   word = (req: { frames: LandmarkFramePayload[]; true_label?: string }, opts?: RequestOpts) =>
     this.request<WordRecognitionResponse>("POST", endpoints.word, req, opts);
+
+  sentence = (req: { frames: LandmarkFramePayload[]; save_history?: boolean }, opts?: RequestOpts) =>
+    this.request<SentenceRecognitionResponse>("POST", endpoints.sentence, req, opts);
 
   compose = (req: ComposeRequest, opts?: RequestOpts) =>
     this.request<ComposeResponse>("POST", endpoints.compose, req, opts);

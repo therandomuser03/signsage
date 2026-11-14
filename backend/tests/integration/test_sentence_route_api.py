@@ -27,6 +27,7 @@ def make_client(monkeypatch):
     from app.core.config import get_settings
     from app.core.errors import AuthError
     from app.core.security import clear_auth_cache
+    from app.core.ratelimit import _LIMITERS
     from app.ml.models.registry import reset_registry
     from app.infrastructure.database.repositories.translation_repository import (
         reset_memory_repository,
@@ -44,6 +45,7 @@ def make_client(monkeypatch):
         reset_registry()
         reset_memory_repository()
         clear_auth_cache()
+        _LIMITERS.clear()
 
     def _make(**env):
         monkeypatch.setenv("SIGNSAGE_SUPABASE_URL", "https://test.supabase.co")
@@ -120,6 +122,29 @@ def test_sentence_422_invalid_frames(make_client):
     client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
     response = client.post("/api/v1/translation/sentence", json={"frames": []})
     assert response.status_code == 422
+
+
+def test_sentence_422_rejects_over_400_frames(make_client):
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    rng = np.random.default_rng(7)
+    huge = {"frames": [{"landmarks": frame.tolist()} for frame in rng.normal(size=(401, 543, 3))]}
+    response = client.post("/api/v1/translation/sentence", json=huge)
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INVALID_MESSAGE"
+
+
+def test_sentence_rate_limit_matches_word_scope(make_client, monkeypatch):
+    """Sentence recognition must share the word limiter scope (rate_limit_word)."""
+    client = make_client(
+        word_mode_enabled="true", word_model_dir=BUNDLE_DIR, rate_limit_word="2/min"
+    )
+    adapter = _ScriptedWordAdapter.scripted([("water", 0.99)] * 100)
+    _install_stub(monkeypatch, adapter)
+    for _ in range(2):
+        response = client.post("/api/v1/translation/sentence", json={"frames": _frames()})
+        assert response.status_code == 200
+    response = client.post("/api/v1/translation/sentence", json={"frames": _frames()})
+    assert response.status_code == 429
 
 
 def test_sentence_requires_vocabulary_entries(make_client, monkeypatch):

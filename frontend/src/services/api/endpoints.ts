@@ -15,6 +15,7 @@ export const endpoints = {
   islimTranslate: "/api/v1/translation/islim/translate",
   islimTranslateVideo: "/api/v1/translation/islim/translate-video",
   word: "/api/v1/translation/word",
+  sentence: "/api/v1/translation/sentence",
   compose: "/api/v1/translation/compose",
 } as const;
 

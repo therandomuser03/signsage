@@ -50,6 +50,17 @@ export interface WordRecognitionResponse {
   status: string; // "ok" | "no_hands" | "disabled" | "error"
 }
 
+export interface SentenceRecognitionResponse {
+  gloss_sequence: Array<{ gloss: string; confidence: number }>;
+  sentence: string;
+  method: "llm" | "fallback";
+  accepted: boolean;
+  model_version: string;
+  threshold: number;
+  motion_energy: number;
+  status: string;
+}
+
 export interface ComposeRequest {
   words: string[];
   confidences?: number[];
