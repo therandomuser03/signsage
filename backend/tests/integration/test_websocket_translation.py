@@ -140,3 +140,84 @@ def test_rest_endpoint_serves_heuristic_fallback_when_gated(monkeypatch):
 
     get_settings.cache_clear()
     reset_registry()
+
+
+def test_websocket_sentence_boundary_saves_history_for_signed_in_user(promoted_client, monkeypatch):
+    """The WS sentence.boundary path must write session+message (the old
+    single-table insert targeted columns the live schema does not have)."""
+    from app.infrastructure.database.repositories.translation_repository import (
+        get_memory_repository,
+        reset_memory_repository,
+    )
+    from app.core.security import AuthenticatedUser
+
+    async def fake_verify(token, settings, transport=None):
+        if token.startswith("good-"):
+            return AuthenticatedUser(id=token[5:], email=f"{token[5:]}@example.com", access_token=token)
+        from app.core.errors import AuthError
+        raise AuthError("Invalid or expired access token.")
+
+    monkeypatch.setattr(
+        "app.api.websocket.translation.verify_access_token", fake_verify
+    )
+    monkeypatch.setenv("SIGNSAGE_HISTORY_BACKEND", "memory")
+    reset_memory_repository()
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    from app.main import app
+    client = fastapi_testclient.TestClient(app)
+
+    rng = np.random.default_rng(2)
+    with client.websocket_connect("/ws/translate") as ws:
+        ws.send_json({"type": "auth", "access_token": "good-wsuser"})
+        auth_ok = ws.receive_json()
+        assert auth_ok["type"] == "auth.ok"
+        for _ in range(30):
+            ws.send_json({"type": "landmarks.frame", "landmarks": rng.normal(size=(543, 3)).tolist()})
+        ws.send_json({"type": "sentence.boundary", "save_history": True})
+        response = ws.receive_json()
+
+    assert response["type"] == "translation.text"
+    assert response["final"] is True
+    if response.get("accepted"):
+        repo = get_memory_repository()
+        sessions = repo._sessions.get("wsuser", [])
+        assert len(sessions) == 1
+        assert sessions[0]["status"] == "completed"
+        messages = repo._messages.get(sessions[0]["id"], [])
+        assert len(messages) == 1
+        assert messages[0]["sequence"] == 1
+        assert messages[0]["direction"] == "sign_to_text"
+    get_settings.cache_clear()
+
+
+def test_websocket_sentence_boundary_saves_nothing_for_guests(promoted_client, monkeypatch):
+    monkeypatch.setenv("SIGNSAGE_HISTORY_BACKEND", "memory")
+    from app.infrastructure.database.repositories.translation_repository import (
+        get_memory_repository,
+        reset_memory_repository,
+    )
+
+    reset_memory_repository()
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    from app.main import app
+    client = fastapi_testclient.TestClient(app)
+
+    rng = np.random.default_rng(2)
+    with client.websocket_connect("/ws/translate") as ws:
+        for _ in range(30):
+            ws.send_json({"type": "landmarks.frame", "landmarks": rng.normal(size=(543, 3)).tolist()})
+        ws.send_json({"type": "sentence.boundary", "save_history": True})
+        response = ws.receive_json()
+
+    assert response["type"] == "translation.text"
+    repo = get_memory_repository()
+    assert sum(len(v) for v in repo._sessions.values()) == 0
+    assert sum(len(v) for v in repo._messages.values()) == 0
+    assert response.get("history_id") is None
+    get_settings.cache_clear()

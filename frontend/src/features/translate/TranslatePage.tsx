@@ -19,6 +19,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { config } from "@/app/config";
 import { apiClient, NetworkError } from "@/services/api/instance";
 import { getAccessToken, onAuthChange } from "@/services/supabase/auth";
@@ -33,6 +39,14 @@ import type {
   SentenceRecognitionResponse,
 } from "@/types/api";
 import { showSignPhraseButton } from "@/features/translate/phrase";
+import { showLegacyUpload, showWordRecognitionCard } from "@/features/translate/visibility";
+import {
+  defaultInterpreterTab,
+  splitWordVocab,
+  wordDisabledDetail,
+  wordVocabSummary,
+  type InterpreterTab,
+} from "@/features/translate/wordVocab";
 import {
   activityLabel,
   modelLabel,
@@ -130,6 +144,12 @@ export default function TranslatePage() {
   // Hidden entirely unless the env var is exactly "true".
   const captureEnabled = config.captureMode === "true";
   const wordVocab = capabilities?.word_recognition_vocabulary ?? [];
+  // Rest (no-sign) class is excluded — displayed separately from the words.
+  const wordVocabWords = splitWordVocab(capabilities?.word_recognition_vocabulary).words;
+  const [tab, setTab] = useState<InterpreterTab | null>(null);
+  // Null until the user picks a tab: derive the default from capabilities.
+  const activeTab = tab ?? defaultInterpreterTab(capabilities);
+  const wordSupported = showWordRecognitionCard(capabilities);
 
   // --- Word mode (behind SIGNSAGE_WORD_MODE_ENABLED) ---
   // Reuses the same camera + HolisticExtractor as the live interpreter.
@@ -157,6 +177,10 @@ export default function TranslatePage() {
   const [captureCounts, setCaptureCounts] = useState<Record<string, number>>({});
   // Result of the experimental 10-second phrase capture (chips + sentence).
   const [phraseResult, setPhraseResult] = useState<SentenceRecognitionResponse | null>(null);
+  const [composedHistorySaved, setComposedHistorySaved] = useState<boolean | null>(null);
+  const [phraseHistorySaved, setPhraseHistorySaved] = useState<boolean | null>(null);
+  /** Snapshot of the Settings save-history preference (read at mount). */
+  const [saveHistory] = useState(() => loadPrefs().saveHistory);
 
   // --- Voice output for the composed sentence (browser speech synthesis) ---
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -566,6 +590,7 @@ export default function TranslatePage() {
     setWordError(null);
     if (captureKindRef.current === "phrase") {
       setPhraseResult(null);
+      setPhraseHistorySaved(null);
     } else {
       setWordResult(null);
     }
@@ -661,6 +686,7 @@ export default function TranslatePage() {
           const roundTripMs = performance.now() - t0Request;
           const totalMs = performance.now() - captureEndMs;
           setPhraseResult(result);
+          setPhraseHistorySaved(result.history_saved ?? false);
           console.log(
             "[phrase-mode] capture end frames=%d effective_fps=%.2f left_present=%.3f right_present=%.3f payload_bytes=%d round_trip_ms=%.1f total_ms=%.1f gloss_sequence=%s",
             frames.length,
@@ -739,6 +765,11 @@ export default function TranslatePage() {
     setWordConfidences((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const removeLastWord = useCallback(() => {
+    setWordList((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
+    setWordConfidences((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
+  }, []);
+
   const clearWordList = useCallback(() => {
     setWordList([]);
     setWordConfidences([]);
@@ -746,6 +777,8 @@ export default function TranslatePage() {
     setWordError(null);
     setComposedSentence(null);
     setPhraseResult(null);
+    setComposedHistorySaved(null);
+    setPhraseHistorySaved(null);
   }, []);
 
   const speak = useCallback(
@@ -798,6 +831,7 @@ export default function TranslatePage() {
         timeoutMs: 60_000,
       });
       setComposedSentence(result.sentence);
+      setComposedHistorySaved(result.history_saved ?? false);
     } catch (err: any) {
       setWordError(
         err instanceof NetworkError
@@ -821,6 +855,8 @@ export default function TranslatePage() {
       if (!signedIn) {
         setWordList([]);
         setComposedSentence(null);
+        setComposedHistorySaved(null);
+        setPhraseHistorySaved(null);
         setWordResult(null);
         setWordError(null);
         setWordCountdown(0);
@@ -858,13 +894,13 @@ export default function TranslatePage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-semibold tracking-tight">Live Interpreter</h1>
-          <p className="mt-1 text-sm text-foreground/55">
-            Sign naturally. Your movements appear as English in real time.
+          <p className="mt-1 max-w-2xl text-sm text-foreground/55">
+            Camera preview with a limited rule-based recognizer (5 static hand shapes). For the trained model (8 words plus a rest (no-sign) class), use Word recognition.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -944,24 +980,6 @@ export default function TranslatePage() {
         </div>
       )}
 
-      {capabilities?.sign_to_text_source === "heuristic-fallback" && (
-        <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
-          <p className="font-medium">Recognizable signs (limited vocabulary)</p>
-          <p className="mt-0.5 text-xs text-foreground/60">
-            Rule-based recognition of 5 static one-hand shapes — hold each steady
-            toward the camera for ~2 seconds, then press Stop to finalize. Not
-            general ISL translation.
-          </p>
-          <ul className="mt-2 grid gap-1 text-xs text-foreground/75 sm:grid-cols-2">
-            <li><span className="font-medium text-foreground">Hello</span> — open palm, fingers spread</li>
-            <li><span className="font-medium text-foreground">Yes</span> — thumbs up only</li>
-            <li><span className="font-medium text-foreground">No</span> — closed fist</li>
-            <li><span className="font-medium text-foreground">You</span> — index finger only</li>
-            <li><span className="font-medium text-foreground">Help</span> — index + middle fingers</li>
-          </ul>
-        </div>
-      )}
-
       {isolatedWordModel && (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm">
           <p className="font-medium">Limited isolated-word ISL vocabulary</p>
@@ -1011,7 +1029,8 @@ export default function TranslatePage() {
         </div>
       )}
 
-      {/* Video upload for isolated-word recognition */}
+      {/* Legacy six-word video-upload pilot: hidden by default, shown only when VITE_LEGACY_UPLOAD === "true". Code intentionally kept. */}
+      {showLegacyUpload() && (
       <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-2">
           Video upload (isolated-word recognition)
@@ -1067,10 +1086,11 @@ export default function TranslatePage() {
           Experimental six-word vocabulary (friend, hello, hospital, market, school, thank you). Uncalibrated scores. Uploads are not retained.
         </p>
       </div>
+      )}
 
-      {/* Workspace: camera + live translation panel */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-foreground/10 bg-black lg:col-span-2">
+      {/* Workspace: camera stage (left, ~60%) + tabbed recognition panel (right, ~40%) */}
+      <div className="grid items-start gap-4 lg:grid-cols-5">
+      <div className="relative mx-auto w-full max-w-[640px] aspect-[4/3] overflow-hidden rounded-xl border border-foreground/10 bg-black lg:col-span-3 self-start">
         <video
           ref={videoRef}
           autoPlay
@@ -1160,77 +1180,455 @@ export default function TranslatePage() {
             )}
           </>
         )}
+        {/* Camera stage Start/Stop — same handlers as the session bar. */}
+        {!busy && (
+          <button
+            type="button"
+            onClick={() => (running ? stop() : void start())}
+            className="absolute bottom-3 right-3 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white/85 backdrop-blur-md transition-colors hover:bg-black/70 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+          >
+            {running ? "Stop camera" : "Start camera"}
+          </button>
+        )}
         </div>
-        <div className="flex min-h-64 flex-col rounded-xl border border-foreground/10 bg-card lg:min-h-0">
-          <div className="border-b border-foreground/10 px-5 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
-              Live translation
-            </p>
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground/60">
-              <span
-                aria-hidden="true"
-                className={
-                  display
-                    ? "inline-block h-1.5 w-1.5 rounded-full bg-green-500"
-                    : "inline-block h-1.5 w-1.5 rounded-full bg-foreground/30"
-                }
-              />
-              {activityLabel({
-                hasDisplay: display !== null,
-                showingPartial,
-                running,
-                modelUnavailable: terminalUnavailable,
-              })}
-            </p>
-          </div>
-          <div className="flex flex-1 flex-col justify-center px-5 py-5">
-            {modelError ? (
-              <>
-                <p className="text-2xl font-semibold tracking-tight text-foreground/40">
-                  Translation unavailable
-                </p>
-                <p className="mt-2 text-xs text-foreground/55">
-                  {modelError} Camera mode is still available.
-                </p>
-              </>
-            ) : display ? (
-              display.accepted ? (
-                <>
-                  <p className="text-2xl font-semibold tracking-tight">
-                    {display.text}
+        <div className="flex min-h-64 flex-col rounded-xl border border-foreground/10 bg-card lg:col-span-2 lg:min-h-0">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setTab(v as InterpreterTab)}
+            className="flex flex-1 flex-col"
+          >
+            <TabsList className="mx-4 mt-3 grid w-[calc(100%-2rem)] grid-cols-2">
+              <TabsTrigger value="word">Word recognition</TabsTrigger>
+              <TabsTrigger value="rule">Rule-based preview</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="word" className="flex-1 px-4 pb-4 pt-2">
+              {wordSupported ? (
+                <div className="flex flex-col gap-3 text-sm">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+                        Trained model
+                      </p>
+                      <span
+                        className="max-w-45 truncate text-[10px] text-foreground/40"
+                        title={capabilities?.word_recognition_label}
+                      >
+                        {capabilities?.word_recognition_label}
+                      </span>
+                    </div>
+                    {wordVocabWords.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {wordVocabWords.map((w) => (
+                          <Badge key={w} variant="secondary" className="font-normal">
+                            {w}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-1 text-[10px] text-foreground/45">
+                      {wordVocabSummary(capabilities?.word_recognition_vocabulary)}
+                    </p>
+                  </div>
+                  <p className="text-xs leading-snug text-foreground/50">
+                    Sign one word at a time, then press Make sentence
                   </p>
-                  <p className="mt-2 text-xs text-foreground/55">
-                    {showingPartial
-                      ? "Partial result from the live window — keep signing; press Stop to finalize."
-                      : `accepted · ${display.result_type} · ${scoreLabel} ${display.confidence.toFixed(2)}`}
-                  </p>
-                </>
+
+                  {!running && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-fit rounded-full"
+                      disabled={busy}
+                      onClick={() => void start()}
+                    >
+                      <Play aria-hidden="true" />
+                      Start camera
+                    </Button>
+                  )}
+
+                  {/* Record controls */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      disabled={
+                        wordPhase === "countdown" ||
+                        wordPhase === "recording" ||
+                        wordProcessing ||
+                        phase === "starting-camera" ||
+                        phase === "loading-detector" ||
+                        phase === "error"
+                      }
+                      onClick={() => startWordRecording()}
+                    >
+                      {wordPhase === "countdown" ? (
+                        <span className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-green-600">{wordCountdown}</span>
+                          Recording…
+                        </span>
+                      ) : wordPhase === "recording" ? (
+                        <span className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-red-600">●</span>
+                          Recording word…
+                        </span>
+                      ) : (
+                        <>
+                          <Camera size={14} /> Record word
+                        </>
+                      )}
+                    </Button>
+                    {showSignPhraseButton(capabilities) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          wordPhase === "countdown" ||
+                          wordPhase === "recording" ||
+                          wordProcessing ||
+                          phase === "starting-camera" ||
+                          phase === "loading-detector" ||
+                          phase === "error"
+                        }
+                        onClick={() => startWordRecording(undefined, { durationMs: PHRASE_RECORD_DURATION_MS, kind: "phrase" })}
+                      >
+                        <Camera size={14} /> Sign a phrase
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={wordList.length === 0}
+                      onClick={makeSentence}
+                    >
+                      Make sentence
+                    </Button>
+                  </div>
+
+                  {wordError && <p className="text-xs text-destructive">{wordError}</p>}
+
+                  {/* Shown between the end of capture and the result chip landing. */}
+                  {wordProcessing && !wordResult && (
+                    <div className="rounded-md bg-foreground/5 px-3 py-2">
+                      <div className="flex items-center gap-3 text-xs text-foreground/60">
+                        <Spinner className="h-3 w-3" />
+                        <span>Processing…</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Experimental phrase capture: ordered gloss chips + composed sentence */}
+                  {phraseResult && (
+                    <div className="rounded-md border border-green-500/25 bg-green-50/50 px-3 py-2">
+                      <p className="text-xs font-semibold text-green-700 mb-1">
+                        Interpretation of recognised words (experimental)
+                      </p>
+                      {phraseResult.accepted && phraseResult.gloss_sequence.length > 0 ? (
+                        <>
+                          <div className="flex flex-wrap gap-2 mb-2" aria-label="Recognised words">
+                            {phraseResult.gloss_sequence.map((g, i) => (
+                              <Badge
+                                key={`${g.gloss}-${i}`}
+                                variant="secondary"
+                                className="px-3 py-1 text-sm"
+                              >
+                                {g.gloss}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-sm text-green-900">{phraseResult.sentence}</p>
+                          <p className="mt-1 text-xs text-green-700/70">
+                            Method: {phraseResult.method === "llm" ? "AI-composed from the sign sequence" : "rule-based from the sign sequence"}
+                            {" · "}glosses {phraseResult.gloss_sequence.map((g) => g.gloss).join(", ")}
+                          </p>
+                          {saveHistory && phraseHistorySaved !== null && (
+                            <p className="mt-1 text-[11px] text-green-700/70">
+                              {phraseHistorySaved ? "Saved to history" : "Not saved (sign in to save history)"}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-foreground/60">
+                          Didn't catch that, please try again.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Last recognition result */}
+                  {wordResult && (
+                    <div className="rounded-md bg-foreground/5 px-3 py-2">
+                      <p className="text-xs font-semibold text-foreground/60 mb-1">
+                        {wordResult.status === "no_hands"
+                          ? "No hands detected — please repeat"
+                          : wordResult.accepted
+                            ? "Recognised word"
+                            : "Not confidently recognised"}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <span className={wordResult.accepted ? "font-mono text-2xl font-bold text-foreground" : "font-mono text-2xl font-bold text-foreground/40"}>
+                          {wordResult.word ?? "—"}
+                        </span>
+                        <div className="text-right text-xs">
+                          <p className="font-medium">
+                            {wordResult.accepted ? "accepted" : "rejected"}
+                          </p>
+                          <p className="text-foreground/50">
+                            confidence {wordResult.confidence.toFixed(2)} ·
+                            threshold {wordResult.threshold.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      {wordResult.top3.length > 0 && !wordResult.accepted && (
+                        <p className="mt-1 text-xs text-foreground/50">
+                          Top guesses:{" "}
+                          {wordResult.top3.map((t) => `${t.label} (${t.probability.toFixed(2)})`).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Accepted words list */}
+                  {wordList.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground/60 mb-1">
+                        Recognised words
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {wordList.map((w, i) => (
+                          <div key={i} className="flex items-center gap-1 bg-muted rounded-full px-3 py-1.5 text-xs">
+                            <span className="font-medium">{w}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="xs"
+                              className="p-1"
+                              onClick={() => removeWordFromList(i)}
+                              aria-label={`Remove ${w}`}
+                            >
+                              <Square size={10} />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={removeLastWord}
+                        >
+                          Remove last
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearWordList}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                      <p className="mt-1 text-xs text-foreground/50">
+                        Tap a word to remove it. Clear removes the whole list.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Composed sentence */}
+                  {composedSentence && (
+                    <div className="rounded-md bg-green-50/50 border border-green-500/25 px-3 py-2">
+                      <p className="text-xs font-semibold text-green-700 mb-1">
+                        Interpretation of recognised words
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <p className="text-sm text-green-900 flex-1">{composedSentence}</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!speechReady}
+                          onClick={() => {
+                            stopSpeaking();
+                            speak(composedSentence);
+                          }}
+                          title={
+                            speechReady
+                              ? undefined
+                              : "Voice not available in this browser"
+                          }
+                        >
+                          {speaking ? <VolumeX size={14} /> : <Speaker size={14} />}
+                          {speaking ? "Stopping…" : "Speak"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={autoSpeak ? "default" : "outline"}
+                          onClick={() => setAutoSpeak((prev) => !prev)}
+                          aria-pressed={autoSpeak}
+                          title={
+                            speechReady
+                              ? undefined
+                              : "Voice not available in this browser"
+                          }
+                        >
+                          {autoSpeak ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                          {autoSpeak ? "Auto-speak on" : "Auto-speak off"}
+                        </Button>
+                      </div>
+                      <p className="mt-1 text-xs text-green-700/70">
+                        Method: composed from {wordList.length} recognised word(s)
+                      </p>
+                      {saveHistory && composedHistorySaved !== null && (
+                        <p className="mt-1 text-[11px] text-green-700/70">
+                          {composedHistorySaved ? "Saved to history" : "Not saved (sign in to save history)"}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Dev-only labeled capture panel (VITE_CAPTURE_MODE === "true"). Hidden entirely otherwise. */}
+                  {captureEnabled && capabilities?.word_recognition_enabled && (
+                    <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm mt-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-0">
+                          Labeled capture (dev)
+                        </p>
+                        <span className="text-xs text-foreground/40">
+                          VITE_CAPTURE_MODE=true
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <label className="text-xs text-foreground/60">Label</label>
+                        <select
+                          value={captureLabel}
+                          onChange={(e) => setCaptureLabel(e.target.value)}
+                          className="border border-foreground/20 rounded px-2 py-1.5 text-xs bg-background"
+                          disabled={wordProcessing}
+                        >
+                          {wordVocab.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          disabled={
+                            wordProcessing ||
+                            wordPhase === "countdown" ||
+                            wordPhase === "recording" ||
+                            phase === "starting-camera" ||
+                            phase === "loading-detector" ||
+                            phase === "error"
+                          }
+                          onClick={() => startWordRecording(captureLabel)}
+                        >
+                          Record &amp; save
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs text-foreground/50">
+                        {wordVocab.map((v) => (
+                          <span key={v} className="flex items-center gap-1">
+                            {v}: <span className="font-mono">{captureCounts[v] ?? 0}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <>
-                  <p className="text-2xl font-semibold tracking-tight text-foreground/60">
-                    Not confidently recognized
+                <div className="mt-1 rounded-xl border border-foreground/10 bg-background/40 p-4 text-sm">
+                  <p className="font-medium">Word recognition is not enabled on this server</p>
+                  {wordDisabledDetail(capabilities) && (
+                    <p className="mt-1 text-xs text-foreground/60">{wordDisabledDetail(capabilities)}</p>
+                  )}
+                  <p className="mt-2 text-xs text-foreground/50">
+                    Use the Rule-based preview tab instead.
                   </p>
-                  <p className="mt-2 text-xs text-foreground/55">
-                    {display.reason} · {scoreLabel} {display.confidence.toFixed(2)} · no text returned — keep signing or
-                    reposition your hands in frame.
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="rule" className="flex-1 px-4 pb-4 pt-2">
+              <div className="flex h-full flex-col">
+                <div className="border-b border-foreground/10 pb-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+                    Live translation
                   </p>
-                </>
-              )
-            ) : (
-              <>
-                <p className="text-2xl font-semibold tracking-tight text-foreground/40">
-                  {running ? "Listening…" : "Waiting for signing…"}
-                </p>
-                <p className="mt-2 text-xs text-foreground/55">
-                  {running
-                    ? "Sign toward the camera — interpretation appears here."
-                    : "Start a session and sign toward the camera."}
-                </p>
-              </>
-            )}
-          </div>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground/60">
+                    <span
+                      aria-hidden="true"
+                      className={
+                        display
+                          ? "inline-block h-1.5 w-1.5 rounded-full bg-green-500"
+                          : "inline-block h-1.5 w-1.5 rounded-full bg-foreground/30"
+                      }
+                    />
+                    {activityLabel({
+                      hasDisplay: display !== null,
+                      showingPartial,
+                      running,
+                      modelUnavailable: terminalUnavailable,
+                    })}
+                  </p>
+                </div>
+                <div className="flex flex-1 flex-col justify-center py-4">
+                  {modelError ? (
+                    <>
+                      <p className="text-2xl font-semibold tracking-tight text-foreground/40">
+                        Translation unavailable
+                      </p>
+                      <p className="mt-2 text-xs text-foreground/55">
+                        {modelError} Camera mode is still available.
+                      </p>
+                    </>
+                  ) : display ? (
+                    display.accepted ? (
+                      <>
+                        <p className="text-2xl font-semibold tracking-tight">
+                          {display.text}
+                        </p>
+                        <p className="mt-2 text-xs text-foreground/55">
+                          {showingPartial
+                            ? "Partial result from the live window — keep signing; press Stop to finalize."
+                            : `accepted · ${display.result_type} · ${scoreLabel} ${display.confidence.toFixed(2)}`}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-2xl font-semibold tracking-tight text-foreground/60">
+                          Not confidently recognized
+                        </p>
+                        <p className="mt-2 text-xs text-foreground/55">
+                          {display.reason} · {scoreLabel} {display.confidence.toFixed(2)} · no text returned — keep signing or
+                          reposition your hands in frame.
+                        </p>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <p className="text-2xl font-semibold tracking-tight text-foreground/40">
+                        {running ? "Listening…" : "Waiting for signing…"}
+                      </p>
+                      <p className="mt-2 text-xs text-foreground/55">
+                        {running
+                          ? "Sign toward the camera — interpretation appears here."
+                          : "Start a session and sign toward the camera."}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
+
       {(cameraMessage || detectorMessage) && phase === "error" && (
         <Alert variant="destructive">
           <CircleAlert aria-hidden="true" />
@@ -1398,298 +1796,6 @@ export default function TranslatePage() {
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {/* Word mode: record one word → recognised word with confidence → compose sentence */}
-      {capabilities?.word_recognition_enabled && (
-        <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-0">
-              Word recognition
-            </p>
-            <span className="text-xs text-foreground/40">
-              {capabilities.word_recognition_label}
-            </span>
-          </div>
-
-          {/* Record controls */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={
-                wordPhase === "countdown" ||
-                wordPhase === "recording" ||
-                wordProcessing ||
-                phase === "starting-camera" ||
-                phase === "loading-detector" ||
-                phase === "error"
-              }
-              onClick={() => startWordRecording()}
-            >
-              {wordPhase === "countdown" ? (
-                <span className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-green-600">{wordCountdown}</span>
-                  Recording…
-                </span>
-              ) : wordPhase === "recording" ? (
-                <span className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-red-600">●</span>
-                  Recording word…
-                </span>
-              ) : (
-                <>
-                  <Camera size={14} /> Record word
-                </>
-              )}
-            </Button>
-            {showSignPhraseButton(capabilities) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  wordPhase === "countdown" ||
-                  wordPhase === "recording" ||
-                  wordProcessing ||
-                  phase === "starting-camera" ||
-                  phase === "loading-detector" ||
-                  phase === "error"
-                }
-                onClick={() => startWordRecording(undefined, { durationMs: PHRASE_RECORD_DURATION_MS, kind: "phrase" })}
-              >
-                <Camera size={14} /> Sign a phrase
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={wordList.length === 0}
-              onClick={makeSentence}
-            >
-              Make sentence
-            </Button>
-          </div>
-          <p className="text-xs text-foreground/50 mb-3 leading-snug">
-            Sign each word clearly, then lower your hands for a second before the next word.
-          </p>
-
-          {wordError && <p className="mt-1 text-xs text-destructive">{wordError}</p>}
-
-          {/* Shown between the end of capture and the result chip landing. */}
-          {wordProcessing && !wordResult && (
-            <div className="mt-3 rounded-md bg-foreground/5 px-3 py-2">
-              <div className="flex items-center gap-3 text-xs text-foreground/60">
-                <Spinner className="h-3 w-3" />
-                <span>Processing…</span>
-              </div>
-            </div>
-          )}
-
-          {/* Experimental phrase capture: ordered gloss chips + composed sentence */}
-          {phraseResult && (
-            <div className="mt-3 rounded-md border border-green-500/25 bg-green-50/50 px-3 py-2">
-              <p className="text-xs font-semibold text-green-700 mb-1">
-                Interpretation of recognised words (experimental)
-              </p>
-              {phraseResult.accepted && phraseResult.gloss_sequence.length > 0 ? (
-                <>
-                  <div className="flex flex-wrap gap-2 mb-2" aria-label="Recognised words">
-                    {phraseResult.gloss_sequence.map((g, i) => (
-                      <Badge
-                        key={`${g.gloss}-${i}`}
-                        variant="secondary"
-                        className="px-3 py-1 text-sm"
-                      >
-                        {g.gloss}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-sm text-green-900">{phraseResult.sentence}</p>
-                  <p className="mt-1 text-xs text-green-700/70">
-                    Method: {phraseResult.method === "llm" ? "AI-composed from the sign sequence" : "rule-based from the sign sequence"}
-                    {" · "}glosses {phraseResult.gloss_sequence.map((g) => g.gloss).join(", ")}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-foreground/60">
-                  Didn't catch that, please try again.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Last recognition result */}
-          {wordResult && (
-            <div className="mt-3 rounded-md bg-foreground/5 px-3 py-2">
-              <p className="text-xs font-semibold text-foreground/60 mb-1">
-                {wordResult.status === "no_hands"
-                  ? "No hands detected — please repeat"
-                  : wordResult.accepted
-                    ? "Recognised word"
-                    : "Not confidently recognised"}
-              </p>
-              <div className="flex items-center gap-3">
-                <span className={wordResult.accepted ? "font-mono text-2xl font-bold text-foreground" : "font-mono text-2xl font-bold text-foreground/40"}>
-                  {wordResult.word ?? "—"}
-                </span>
-                <div className="text-right text-xs">
-                  <p className="font-medium">
-                    {wordResult.accepted ? "accepted" : "rejected"}
-                  </p>
-                  <p className="text-foreground/50">
-                    confidence {wordResult.confidence.toFixed(2)} ·
-                    threshold {wordResult.threshold.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-              {wordResult.top3.length > 0 && !wordResult.accepted && (
-                <p className="mt-1 text-xs text-foreground/50">
-                  Top guesses:{" "}
-                  {wordResult.top3.map((t) => `${t.label} (${t.probability.toFixed(2)})`).join(", ")}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Accepted words list */}
-          {wordList.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold text-foreground/60 mb-1">
-                Recognised words
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {wordList.map((w, i) => (
-                  <div key={i} className="flex items-center gap-1 bg-muted rounded-full px-3 py-1.5 text-xs">
-                    <span className="font-medium">{w}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className="p-1"
-                      onClick={() => removeWordFromList(i)}
-                      aria-label={`Remove ${w}`}
-                    >
-                      <Square size={10} />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearWordList}
-                >
-                  Clear
-                </Button>
-              </div>
-              <p className="mt-1 text-xs text-foreground/50">
-                Tap a word to remove it. Clear removes the whole list.
-              </p>
-            </div>
-          )}
-
-          {/* Composed sentence */}
-          {composedSentence && (
-            <div className="mt-3 rounded-md bg-green-50/50 border border-green-500/25 px-3 py-2">
-              <p className="text-xs font-semibold text-green-700 mb-1">
-                Interpretation of recognised words
-              </p>
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <p className="text-sm text-green-900 flex-1">{composedSentence}</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!speechReady}
-                  onClick={() => {
-                    stopSpeaking();
-                    speak(composedSentence);
-                  }}
-                  title={
-                    speechReady
-                      ? undefined
-                      : "Voice not available in this browser"
-                  }
-                >
-                  {speaking ? <VolumeX size={14} /> : <Speaker size={14} />}
-                  {speaking ? "Stopping…" : "Speak"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={autoSpeak ? "default" : "outline"}
-                  onClick={() => setAutoSpeak((prev) => !prev)}
-                  aria-pressed={autoSpeak}
-                  title={
-                    speechReady
-                      ? undefined
-                      : "Voice not available in this browser"
-                  }
-                >
-                  {autoSpeak ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                  {autoSpeak ? "Auto-speak on" : "Auto-speak off"}
-                </Button>
-              </div>
-              <p className="mt-1 text-xs text-green-700/70">
-                Method: composed from {wordList.length} recognised word(s)
-              </p>
-            </div>
-          )}
-
-          {/* Dev-only labeled capture panel (VITE_CAPTURE_MODE === "true"). Hidden entirely otherwise. */}
-          {captureEnabled && capabilities?.word_recognition_enabled && (
-            <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm mt-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-0">
-                  Labeled capture (dev)
-                </p>
-                <span className="text-xs text-foreground/40">
-                  VITE_CAPTURE_MODE=true
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <label className="text-xs text-foreground/60">Label</label>
-                <select
-                  value={captureLabel}
-                  onChange={(e) => setCaptureLabel(e.target.value)}
-                  className="border border-foreground/20 rounded px-2 py-1.5 text-xs bg-background"
-                  disabled={wordProcessing}
-                >
-                  {wordVocab.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  disabled={
-                    wordProcessing ||
-                    wordPhase === "countdown" ||
-                    wordPhase === "recording" ||
-                    phase === "starting-camera" ||
-                    phase === "loading-detector" ||
-                    phase === "error"
-                  }
-                  onClick={() => startWordRecording(captureLabel)}
-                >
-                  Record &amp; save
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs text-foreground/50">
-                {wordVocab.map((v) => (
-                  <span key={v} className="flex items-center gap-1">
-                    {v}: <span className="font-mono">{captureCounts[v] ?? 0}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

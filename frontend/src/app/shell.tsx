@@ -191,20 +191,24 @@ function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex w-full items-center gap-1">
+            {/* One toggle only: here. In icon-collapsed mode the logo row
+                hides and this trigger becomes the centered expand control
+                (the rail stays available too); keyboard reachable. */}
+            <div className="flex w-full items-center gap-1 group-data-[collapsible=icon]:justify-center">
               <SidebarMenuButton
                 size="lg"
-                className="flex-1"
+                className="flex-1 group-data-[collapsible=icon]:hidden"
                 render={<Link to="/" />}
               >
                 <SignSageLogo className="h-8 w-8" />
-                <span className="font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                <span className="font-semibold tracking-tight">
                   SignSage
                 </span>
               </SidebarMenuButton>
-              <span className="group-data-[collapsible=icon]:hidden">
-                <SidebarTrigger aria-label="Collapse navigation" />
-              </span>
+              <SidebarTrigger
+                aria-label="Toggle navigation"
+                className="group-data-[collapsible=icon]:size-8"
+              />
             </div>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -259,8 +263,9 @@ export function AppShell() {
       <AppSidebar />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 backdrop-blur-md">
-          <SidebarTrigger aria-label="Toggle navigation" />
-          <Separator orientation="vertical" className="h-5" />
+          {/* Offcanvas trigger: only below md (sheet mode). Desktop uses the sidebar's own toggle. */}
+          <SidebarTrigger aria-label="Toggle navigation" className="md:hidden" />
+          <Separator orientation="vertical" className="h-5 md:hidden" />
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               <BreadcrumbItem className="shrink-0">

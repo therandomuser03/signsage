@@ -16,7 +16,7 @@ from app.infrastructure.storage.model_storage import (
 )
 from app.ml.models.registry import is_loaded
 from app.ml.preprocessing.landmarks import TOTAL_LANDMARKS
-from app.ml.word_classifier_adapter import WordClassifierAdapter
+from app.ml.word_classifier_adapter import resolve_word_model_dir
 from app.schemas.common import CapabilitiesResponse, ModelInfo, ModelsResponse
 from app.services.avatar_gloss_service import load_vocabulary
 from app.services.history_service import build_history_service
@@ -37,6 +37,22 @@ def _bundle_found(settings: Settings) -> bool:
         return False
 
 
+def _word_model_version(settings: Settings) -> "str | None":
+    """model_version of the word model, read from its meta.json at
+    <resolved word model dir>/meta.json -- the same file
+    WordClassifierAdapter.load() uses. Never the hardcoded literal."""
+    if not settings.word_mode_enabled:
+        return None
+    try:
+        meta = json.loads(
+            (Path(resolve_word_model_dir(settings)) / "meta.json").read_text(encoding="utf-8")
+        )
+    except Exception:  # noqa: BLE001 -- capabilities must not 500 on a bad/missing meta
+        return None
+    version = meta.get("model_version")
+    return str(version) if isinstance(version, str) and version else None
+
+
 @router.get("/capabilities", response_model=CapabilitiesResponse)
 def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResponse:
     from app.ml.inference.heuristic_signs import FALLBACK_VOCABULARY
@@ -55,6 +71,7 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         # fallback serves a 5-sign vocabulary -- report honestly.
         reason = None
         source = "heuristic-fallback"
+    word_model_version = _word_model_version(settings)
     return CapabilitiesResponse(
         api_version="v1",
         websocket_path="/ws/translate",
@@ -78,9 +95,9 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
             0.7 if settings.word_mode_enabled else None
         ),
         word_recognition_model_version=(
-            "word_v3_8w_s123" if settings.word_mode_enabled else None
+            word_model_version if settings.word_mode_enabled else None
         ),
-        word_recognition_label="sign-sequence to sentence interpretation (9-sign vocabulary), adapted to one signer",
+        word_recognition_label="sign-sequence to sentence interpretation (8 words plus a rest (no-sign) class), adapted to one signer",
     )
 
 

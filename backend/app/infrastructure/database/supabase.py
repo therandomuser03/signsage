@@ -16,6 +16,25 @@ from app.core.errors import AuthError, HistoryUnavailableError
 from app.core.security import AuthenticatedUser
 
 
+def _postgrest_error(resp: httpx.Response) -> tuple[Optional[str], Optional[str]]:
+    """Extract the PostgREST {code, message} pair from an error body.
+
+    Returns (None, None) when the body is not the expected shape. Bounded
+    length; never includes request data, headers or tokens.
+    """
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001 -- best-effort error enrichment only
+        return None, None
+    if not isinstance(body, dict):
+        return None, None
+    code = body.get("code") if isinstance(body.get("code"), str) else None
+    message = body.get("message") if isinstance(body.get("message"), str) else None
+    if message is not None and len(message) > 300:
+        message = message[:300] + "…"
+    return code, message
+
+
 class SupabaseRestClient:
     def __init__(self, settings: Settings, transport: Optional[httpx.AsyncBaseTransport] = None):
         if not (settings.supabase_url and settings.supabase_publishable_key):
@@ -50,9 +69,23 @@ class SupabaseRestClient:
                     headers=self._headers(user, prefer),
                 )
         except httpx.HTTPError as exc:
-            raise HistoryUnavailableError(f"Could not reach the database: {type(exc).__name__}") from exc
+            err = HistoryUnavailableError(
+                f"Could not reach the database: {type(exc).__name__}",
+                path=f"/rest/v1/{table}",
+            )
+            raise err from exc
         if resp.status_code == 401:
-            raise AuthError("Invalid or expired access token.")
+            err = AuthError("Invalid or expired access token.")
+            err.path = f"/rest/v1/{table}"  # type: ignore[attr-defined]
+            err.status = 401  # type: ignore[attr-defined]
+            raise err
         if resp.status_code >= 400:
-            raise HistoryUnavailableError(f"Database request failed (HTTP {resp.status_code}).")
+            pg_code, pg_message = _postgrest_error(resp)
+            raise HistoryUnavailableError(
+                f"Database request failed (HTTP {resp.status_code}).",
+                path=f"/rest/v1/{table}",
+                status=resp.status_code,
+                pg_code=pg_code,
+                pg_message=pg_message,
+            )
         return resp

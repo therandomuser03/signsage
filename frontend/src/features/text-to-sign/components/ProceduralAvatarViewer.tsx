@@ -248,14 +248,14 @@ export const ProceduralAvatarViewer = forwardRef<ProceduralAvatarHandle, Props>(
         box.expandByObject(rig.torso);
       }
       applyPose(rig, restPose());
-      fitCameraToBox(camera, box);
+      fitCameraToBox(camera, box, 1.12);
 
       const resize = () => {
         const w = canvas.clientWidth || 640;
         const h = canvas.clientHeight || 360;
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
-        fitCameraToBox(camera, box);
+        fitCameraToBox(camera, box, 1.12);
         camera.updateProjectionMatrix();
       };
       resize();

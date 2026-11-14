@@ -369,11 +369,12 @@ async def sentence_recognition(
     accepted = bool(signs) and bool(sentence)
 
     # --- Best-effort history save for signed-in users only ---
+    history_saved = False
     save_history = bool(payload.get("save_history", True))
     if user and history and save_history and accepted:
         joined = " ".join(s.text for s in signs)
         confidence = float(np.mean([s.confidence for s in signs]))
-        await history.try_record_word(user, NewHistoryRecord(
+        history_saved = await history.try_record_word(user, NewHistoryRecord(
             direction=Direction.SIGN_TO_TEXT,
             output_text=sentence,
             result_type=ResultType.MODEL,
@@ -384,7 +385,7 @@ async def sentence_recognition(
             sequence=1,
             title=f"Sign to text: {sentence[:60]}",
             status="completed",
-        ))
+        )) is not None
 
     return {
         "gloss_sequence": gloss_sequence,
@@ -395,6 +396,7 @@ async def sentence_recognition(
         "threshold": adapter.confidence_threshold,
         "motion_energy": result.motion_energy,
         "status": "ok",
+        "history_saved": history_saved,
     }
 
 
@@ -433,6 +435,7 @@ async def compose_sentence(
     sentence, method = compose_words(words, vocab, settings)
 
     # --- Best-effort history save for signed-in users only ---
+    history_saved = False
     save_history = bool(payload.get("save_history", True))
     if user and history and save_history and words:
         confidences = payload.get("confidences")
@@ -448,7 +451,7 @@ async def compose_sentence(
         accepted_words = [w for w in words if w != "rest"]
         joined_words = " ".join(accepted_words)
         title = f"Word recognition: {sentence[:60]}" if sentence else "Word recognition"
-        await history.try_record_word(user, NewHistoryRecord(
+        history_saved = await history.try_record_word(user, NewHistoryRecord(
             direction=Direction.SIGN_TO_TEXT,
             output_text=sentence,
             result_type=ResultType.MODEL,
@@ -459,9 +462,9 @@ async def compose_sentence(
             sequence=1,
             title=title,
             status="completed",
-        ))
+        )) is not None
 
-    return {"sentence": sentence, "method": method}
+    return {"sentence": sentence, "method": method, "history_saved": history_saved}
 
 
 

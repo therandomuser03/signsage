@@ -17,6 +17,21 @@ def _read(rel: str) -> str:
     return (FRONTEND / rel).read_text(encoding="utf-8")
 
 
+def test_compose_and_sentence_declare_history_saved_on_both_sides():
+    """Both sides carry the optional history_saved flag (signed-in saves only)."""
+    api_ts = _read("src/types/api.ts")
+    backend = _read_backend()
+    for iface in ("SentenceRecognitionResponse", "ComposeResponse"):
+        block = re.search(rf"interface {iface} \{{([\s\S]*?)\n\}}", api_ts).group(1)
+        assert re.search(r"history_saved\??:", block), f"{iface} is missing history_saved in frontend types"
+    assert backend.count('"history_saved"') >= 2, "word_translation.py must return history_saved from /sentence and /compose"
+
+
+def _read_backend() -> str:
+    path = Path(__file__).resolve().parents[2] / "app" / "api" / "routes" / "word_translation.py"
+    return path.read_text(encoding="utf-8")
+
+
 def test_avatar_vocabulary_matches_the_frontend_manifest():
     from app.services.avatar_gloss_service import load_vocabulary
 

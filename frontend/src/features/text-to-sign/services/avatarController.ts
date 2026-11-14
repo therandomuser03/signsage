@@ -105,7 +105,7 @@ export class AvatarController {
     if (distance * 2 * halfFov * aspect < size.x) {
       distance = size.x / (2 * halfFov * aspect);
     }
-    distance *= 1.35;
+    distance *= 1.15;
     this.camera.position.set(center.x, center.y + size.y * 0.12, center.z + distance);
     this.camera.lookAt(center);
     this.camera.near = 0.1;

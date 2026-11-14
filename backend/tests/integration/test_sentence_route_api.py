@@ -185,3 +185,39 @@ def test_sentence_rest_only_returns_not_accepted(make_client, monkeypatch):
     assert body["gloss_sequence"] == []
     assert body["sentence"] == ""
     assert body["accepted"] is False
+
+
+def test_sentence_history_saved_true_for_signed_in_user(make_client, monkeypatch):
+    """Sentence endpoint: signed-in user with memory history -> history_saved true + one session+message."""
+    adapter = _ScriptedWordAdapter.scripted([("hello", 0.99)] * 8)
+    _install_stub(monkeypatch, adapter)
+    from app.infrastructure.database.repositories.translation_repository import (
+        get_memory_repository,
+    )
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    response = client.post(
+        "/api/v1/translation/sentence",
+        json={"frames": _frames(), "save_history": True},
+        headers={"Authorization": "Bearer good-sentences"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["history_saved"] is True
+    repo = get_memory_repository()
+    sessions = repo._sessions.get("sentences", [])
+    assert len(sessions) == 1
+    messages = repo._messages.get(sessions[0]["id"], [])
+    assert len(messages) == 1
+    assert messages[0]["result_type"] == "model"
+
+
+def test_sentence_history_saved_false_for_guest(make_client, monkeypatch):
+    adapter = _ScriptedWordAdapter.scripted([("hello", 0.99)] * 8)
+    _install_stub(monkeypatch, adapter)
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    response = client.post(
+        "/api/v1/translation/sentence",
+        json={"frames": _frames(), "save_history": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["history_saved"] is False

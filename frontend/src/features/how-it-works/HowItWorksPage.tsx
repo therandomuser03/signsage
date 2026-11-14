@@ -27,15 +27,15 @@ const STEPS = [
     number: "02",
     title: "Interpret",
     lead: "The extracted representation is passed through the SignSage interpretation pipeline.",
-    body: "Landmark frames stream over a live connection to the backend, where the interpretation pipeline reads the sequence the way a reader follows a sentence — frame by frame, in order.",
-    points: ["Live landmark streaming", "Sequence-based interpretation", "Confidence reported per result"],
+    body: "Landmark frames stream over a live connection to the backend, where a limited recognizer responds — a rule-based matcher for a few static shapes, or the trained word-level model (limited vocabulary, adapted to one signer) when it is enabled.",
+    points: ["Live landmark streaming", "Word-level recognition, limited vocabulary", "Confidence reported per result"],
   },
   {
     number: "03",
     title: "Communicate",
     lead: "The resulting interpretation can be presented as text or visual sign representation.",
-    body: "Signs become readable text you can verify at a glance. Going the other way, typed English maps to a gloss sequence performed on a signing avatar.",
-    points: ["Sign → text in real time", "Text → gloss → avatar", "History for what you keep"],
+    body: "Recognised words are composed into sentences you can verify at a glance — limited vocabulary, adapted to one signer. Going the other way, typed English maps to a gloss sequence performed on a signing avatar.",
+    points: ["Sign → words, composed into sentences", "Text → gloss → avatar", "History for what you keep"],
   },
 ];
 
@@ -75,8 +75,9 @@ export default function HowItWorksPage() {
             className="animate-rise mt-8 max-w-2xl text-lg font-medium leading-8 text-foreground/55"
             style={{ animationDelay: "180ms" }}
           >
-            Three stages turn signing into text — and text back into
-            signs. Here is what happens at each one.
+            Three stages explore sign-to-text and text-to-sign — word-level
+            recognition, a limited vocabulary, adapted to one signer.
+            Here is what happens at each one.
           </p>
         </div>
       </section>

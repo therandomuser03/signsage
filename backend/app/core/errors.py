@@ -7,6 +7,7 @@ so the transport layer only translates -- it never decides.
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -64,6 +65,23 @@ class AuthUnavailableError(SignSageError):
 class HistoryUnavailableError(SignSageError):
     code = "HISTORY_UNAVAILABLE"
     status_code = 503
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: Optional[str] = None,
+        status: Optional[int] = None,
+        pg_code: Optional[str] = None,
+        pg_message: Optional[str] = None,
+    ):
+        super().__init__(message)
+        # Details for the history-service log line only; never carries tokens,
+        # keys or payload text (PostgREST error bodies name constraints, not data).
+        self.path = path
+        self.status = status
+        self.pg_code = pg_code
+        self.pg_message = pg_message
 
 
 class NotFoundError(SignSageError):

@@ -93,7 +93,7 @@ def test_compose_route(make_client):
     response = client.post("/api/v1/translation/compose", json={"words": ["hello", "water"]})
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"sentence", "method"}
+    assert set(body) == {"sentence", "method", "history_saved"}
     assert body["method"] in {"llm", "fallback"}
     assert isinstance(body["sentence"], str)
 
@@ -352,3 +352,38 @@ def test_capture_invalid_label_returns_422(make_client, tmp_path, monkeypatch):
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "INVALID_MESSAGE"
     assert _capture_files(captures_dir) == []  # nothing saved for an invalid label
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_compose_history_saved_true_for_signed_in_save(make_client):
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    response = client.post(
+        "/api/v1/translation/compose",
+        json={"words": ["hello"], "confidences": [0.9], "save_history": True},
+        headers={"Authorization": "Bearer good-user9"},
+    )
+    assert response.status_code == 200
+    assert response.json()["history_saved"] is True
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_compose_history_saved_false_for_guest(make_client):
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    response = client.post(
+        "/api/v1/translation/compose",
+        json={"words": ["hello"], "confidences": [0.9], "save_history": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["history_saved"] is False
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_compose_history_saved_false_when_save_history_off(make_client):
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    response = client.post(
+        "/api/v1/translation/compose",
+        json={"words": ["hello"], "confidences": [0.9], "save_history": False},
+        headers={"Authorization": "Bearer good-user9"},
+    )
+    assert response.status_code == 200
+    assert response.json()["history_saved"] is False

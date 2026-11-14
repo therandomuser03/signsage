@@ -6,17 +6,30 @@ TranslationRepository is the interface services depend on. Two implementations:
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Protocol, Tuple
 
 from app.core.config import Settings
+from app.core.errors import HistoryUnavailableError
 from app.core.security import AuthenticatedUser
 from app.domain.translation.entities import Direction, HistoryRecord, NewHistoryRecord, ResultType
 from app.infrastructure.database.supabase import SupabaseRestClient
 
+logger = logging.getLogger(__name__)
+
 TABLE = "translation_sessions"
 MESSAGES_TABLE = "translation_messages"
+
+
+def _tag(exc: Exception, step: str) -> Exception:
+    """Attach the failing step so the service layer can log it precisely."""
+    try:
+        exc.step = step  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 -- tagging is best-effort; logging still works untagged
+        pass
+    return exc
 
 # Sessions own the translatable text; the live schema keeps it in
 # translation_messages, so list() embeds that child table instead of selecting
@@ -51,6 +64,24 @@ def _row_to_record(row: dict) -> HistoryRecord:
         created_at=datetime.fromisoformat(row["created_at"]),
         title=row.get("title"),
     )
+
+
+def _is_relationship_error(exc: HistoryUnavailableError) -> bool:
+    """PostgREST relationship-resolution failures (the embed's FK is gone)."""
+    return (
+        (exc.status or 0) == 400
+        and bool(exc.pg_code)
+        and str(exc.pg_code).upper().startswith("PGRST2")
+    )
+
+
+def _total_from(resp, offset: int, fallback_page_size: int) -> int:
+    """Content-Range looks like "0-9/42" (or "*/0" when empty)."""
+    total = fallback_page_size + offset
+    content_range = resp.headers.get("content-range", "")
+    if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
+        total = int(content_range.rsplit("/", 1)[1])
+    return total
 
 
 def _session_to_record(row: dict) -> HistoryRecord:
@@ -89,7 +120,7 @@ class SupabaseTranslationRepository:
     def from_settings(cls, settings: Settings) -> "SupabaseTranslationRepository":
         return cls(SupabaseRestClient(settings))
 
-    async def add(self, user: AuthenticatedUser, record: NewHistoryRecord) -> HistoryRecord:
+    async def add(self, user: AuthenticatedUser, record: NewHistoryRecord) -> HistoryRecord:  # deprecated: old shape, kept for the memory backend
         body = {
             "user_id": user.id,
             "direction": record.direction.value,
@@ -99,7 +130,10 @@ class SupabaseTranslationRepository:
             "model_version": record.model_version,
             "result_type": record.result_type.value,
         }
-        resp = await self._db.request("POST", TABLE, user, json=body, prefer="return=representation")
+        try:
+            resp = await self._db.request("POST", TABLE, user, json=body, prefer="return=representation")
+        except Exception as exc:
+            raise _tag(exc, "record insert") from exc
         return _row_to_record(resp.json()[0])
 
     async def add_word_recognition(
@@ -117,12 +151,18 @@ class SupabaseTranslationRepository:
             "status": record.status,
             "title": record.title,
         }
-        session_resp = await self._db.request(
-            "POST", TABLE, user, json=session_body, prefer="return=representation"
-        )
+        try:
+            session_resp = await self._db.request(
+                "POST", TABLE, user, json=session_body, prefer="return=representation"
+            )
+        except Exception as exc:
+            raise _tag(exc, "session insert") from exc
         session_id = str(session_resp.json()[0]["id"])
 
-        # 2) Message row linked to the session.
+        # 2) Message row linked to the session. user_id is deliberately NOT
+        #    sent: the live translation_messages shape must be confirmed by
+        #    the information_schema query (see the runbook/report); RLS via
+        #    the owning session covers ownership.
         message_body = {
             "session_id": session_id,
             "sequence": record.sequence,
@@ -134,43 +174,130 @@ class SupabaseTranslationRepository:
             "model_version": record.model_version,
             "result_type": record.result_type.value,
         }
-        message_resp = await self._db.request(
-            "POST", "translation_messages", user, json=message_body, prefer="return=representation"
-        )
+        try:
+            message_resp = await self._db.request(
+                "POST", MESSAGES_TABLE, user, json=message_body, prefer="return=representation"
+            )
+        except Exception as exc:
+            raise _tag(exc, "message insert") from exc
         return str(message_resp.json()[0]["id"])
 
     async def list(self, user: AuthenticatedUser, limit: int, offset: int) -> Tuple[List[HistoryRecord], int]:
-        resp = await self._db.request(
-            "GET", TABLE, user,
-            params={"select": EMBED_SELECT, "order": "created_at.desc", "limit": limit, "offset": offset},
-            prefer="count=exact",
-        )
+        try:
+            resp = await self._db.request(
+                "GET", TABLE, user,
+                params={"select": EMBED_SELECT, "order": "created_at.desc", "limit": limit, "offset": offset},
+                prefer="count=exact",
+            )
+        except HistoryUnavailableError as exc:
+            # PostgREST relationship errors (PGRST2xx): the FK behind the embed
+            # is missing. Fall back to two requests so history still lists.
+            if not _is_relationship_error(exc):
+                raise _tag(exc, "list") from exc
+            logger.warning(
+                "history list: embed failed (status=%s pg_code=%s); "
+                "falling back to a two-request read (sessions, then messages)",
+                exc.status, exc.pg_code,
+            )
+            return await self._list_two_requests(user, limit, offset)
+        except Exception as exc:
+            raise _tag(exc, "list") from exc
         rows = [_session_to_record(r) for r in resp.json()]
-        # Content-Range looks like "0-9/42" (or "*/0" when empty)
-        total = len(rows) + offset
-        content_range = resp.headers.get("content-range", "")
-        if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
-            total = int(content_range.rsplit("/", 1)[1])
-        return rows, total
+        return rows, _total_from(resp, offset, len(rows))
+
+    async def _list_two_requests(
+        self, user: AuthenticatedUser, limit: int, offset: int
+    ) -> Tuple[List[HistoryRecord], int]:
+        # 1) The page of sessions.
+        try:
+            resp = await self._db.request(
+                "GET", TABLE, user,
+                params={"select": "id,user_id,title,direction,status,created_at",
+                        "order": "created_at.desc", "limit": limit, "offset": offset},
+                prefer="count=exact",
+            )
+        except Exception as exc:
+            raise _tag(exc, "list sessions") from exc
+        session_rows = resp.json()
+        total = _total_from(resp, offset, len(session_rows))
+        if not session_rows:
+            return [], total
+        # 2) Their messages, one request by session_id in (...). No FK required.
+        ids = ",".join(str(r["id"]) for r in session_rows)
+        try:
+            msg_resp = await self._db.request(
+                "GET", MESSAGES_TABLE, user,
+                params={"select": ("session_id,sequence,input_text,output_text,"
+                                   "gloss,confidence,model_version,result_type"),
+                        "session_id": f"in.({ids})", "order": "sequence.asc"},
+            )
+        except Exception as exc:
+            raise _tag(exc, "list messages") from exc
+        messages_by_session: Dict[str, List[dict]] = {}
+        for m in msg_resp.json():
+            messages_by_session.setdefault(str(m.get("session_id")), []).append(m)
+        records = []
+        for r in session_rows:
+            row = dict(r)
+            row["translation_messages"] = messages_by_session.get(str(r.get("id")), [])
+            records.append(_session_to_record(row))
+        return records, total
 
     async def delete(self, user: AuthenticatedUser, record_id: str) -> bool:
         # 1) Messages first: nothing is left behind when the FK does not
         #    cascade; a no-rows delete is an ordinary empty response, not an
         #    error. If the FK is ON DELETE CASCADE this simply deletes zero
         #    messages and then the session.
-        await self._db.request(
-            "DELETE", MESSAGES_TABLE, user, params={"session_id": f"eq.{record_id}"},
-        )
+        try:
+            await self._db.request(
+                "DELETE", MESSAGES_TABLE, user, params={"session_id": f"eq.{record_id}"},
+            )
+        except Exception as exc:
+            raise _tag(exc, "delete messages") from exc
         # 2) The session itself (RLS keeps this to the user's own rows).
-        resp = await self._db.request(
-            "DELETE", TABLE, user, params={"id": f"eq.{record_id}"}, prefer="return=representation"
-        )
+        try:
+            resp = await self._db.request(
+                "DELETE", TABLE, user, params={"id": f"eq.{record_id}"}, prefer="return=representation"
+            )
+        except Exception as exc:
+            raise _tag(exc, "delete session") from exc
         return len(resp.json()) > 0
 
     async def clear(self, user: AuthenticatedUser) -> int:
-        resp = await self._db.request(
-            "DELETE", TABLE, user, params={"user_id": f"eq.{user.id}"}, prefer="return=representation"
-        )
+        # Messages first, then the sessions (same reason as delete()): page
+        # through this user's session ids, delete their messages, then the
+        # sessions. Paged so very large histories are cleaned up too.
+        session_ids: List[str] = []
+        offset = 0
+        page = 1000
+        while True:
+            try:
+                ids_resp = await self._db.request(
+                    "GET", TABLE, user,
+                    params={"select": "id", "user_id": f"eq.{user.id}",
+                            "limit": page, "offset": offset},
+                )
+            except Exception as exc:
+                raise _tag(exc, "clear list sessions") from exc
+            batch = [str(r["id"]) for r in ids_resp.json()]
+            session_ids.extend(batch)
+            if len(batch) < page:
+                break
+            offset += page
+        for i in range(0, len(session_ids), 100):
+            chunk = ",".join(session_ids[i : i + 100])
+            try:
+                await self._db.request(
+                    "DELETE", MESSAGES_TABLE, user, params={"session_id": f"in.({chunk})"},
+                )
+            except Exception as exc:
+                raise _tag(exc, "clear messages") from exc
+        try:
+            resp = await self._db.request(
+                "DELETE", TABLE, user, params={"user_id": f"eq.{user.id}"}, prefer="return=representation"
+            )
+        except Exception as exc:
+            raise _tag(exc, "clear sessions") from exc
         return len(resp.json())
 
 

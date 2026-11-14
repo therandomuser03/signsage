@@ -90,7 +90,7 @@ const CAPABILITIES = [
   {
     number: "01",
     title: "Live Interpreter",
-    text: "Experiment with real-time sign-to-text using browser-extracted landmarks.",
+    text: "Experiment with word-level sign recognition using browser-extracted landmarks — sentence composition, limited vocabulary, adapted to one signer.",
     to: "/app/interpreter",
   },
   {
@@ -213,9 +213,9 @@ export default function LandingPage() {
               style={{ animationDelay: "200ms" }}
             >
               SignSage is a research prototype for Indian Sign Language
-              communication — real-time interpretation between signs, text,
-              and visual representations. Not for medical, legal or emergency
-              use.
+              communication — word-level sign recognition with sentence
+              composition, a limited vocabulary adapted to one signer.
+              Not for medical, legal or emergency use.
             </p>
 
             <div

@@ -22,4 +22,7 @@ export const config = {
   // Dev-only phrase capture (POST /api/v1/translation/sentence): button shows
   // only when "true" AND capabilities has word mode enabled. Default = hidden.
   phraseMode: env.VITE_PHRASE_MODE ?? "",
+  // Legacy six-word video-upload pilot: the panel shows only when exactly
+  // "true". Any other value (incl. unset) hides it. Default = hidden.
+  legacyUpload: env.VITE_LEGACY_UPLOAD ?? "",
 } as const;

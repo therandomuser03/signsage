@@ -150,10 +150,14 @@ async def translate_ws(websocket: WebSocket) -> None:
                 )
                 history_id = None
                 if user and history and message.save_history and should_persist(result):
-                    history_id = await history.try_record(user, NewHistoryRecord(
+                    # Same session+message write the REST and word paths use;
+                    # the old single-table insert wrote columns the live
+                    # translation_sessions schema does not have.
+                    history_id = await history.try_record_word(user, NewHistoryRecord(
                         direction=Direction.SIGN_TO_TEXT, output_text=result.text,
                         result_type=classify_result(result), model_version=settings.model_version,
-                        confidence=result.confidence,
+                        confidence=result.confidence, input_text=None, sequence=1,
+                        title=f"Sign to text: {result.text[:50]}", status="completed",
                     ))
                 await websocket.send_json(TranslationTextMessage(
                     text=result.text, accepted=result.accepted, reason=result.reason,

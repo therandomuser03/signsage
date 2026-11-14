@@ -59,6 +59,8 @@ export interface SentenceRecognitionResponse {
   threshold: number;
   motion_energy: number;
   status: string;
+  /** True when the backend persisted this signing to the user's history (signed-in users only). Defaults false when absent. */
+  history_saved?: boolean;
 }
 
 export interface ComposeRequest {
@@ -70,6 +72,8 @@ export interface ComposeRequest {
 export interface ComposeResponse {
   sentence: string;
   method: string; // "llm" | "fallback"
+  /** True when the backend persisted this sentence to the user's history (signed-in users only). Defaults false when absent. */
+  history_saved?: boolean;
 }
 
 export interface ModelInfo {
