@@ -16,4 +16,7 @@ export const config = {
   wsUrl: env.VITE_SIGNSAGE_WS_URL ?? derivedWsUrl,
   supabaseUrl: env.VITE_SUPABASE_URL ?? "",
   supabasePublishableKey: env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
+  // Dev-only: when "true", show the labeled-capture panel under the Word mode
+  // card. Any other value (incl. unset) hides it entirely.
+  captureMode: env.VITE_CAPTURE_MODE ?? "",
 } as const;

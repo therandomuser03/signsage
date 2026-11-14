@@ -8,7 +8,10 @@ import { localGlossMapper } from "../services/glossMapper";
 import type { GlossSequence, SignManifest, SignPlaybackState } from "../types";
 
 type AvatarHandle = {
-  playSequence: (glossIds: string[], onStep?: (id: string, index: number) => void) => Promise<void>;
+  playSequence: (
+    glossIds: string[],
+    onStep?: (id: string, index: number) => void,
+  ) => Promise<string[]>;
   stop: () => void;
 };
 
@@ -26,6 +29,8 @@ export function useSignAnimation(
     queue: [],
   });
   const [unmatchedWords, setUnmatchedWords] = useState<string[]>([]);
+  /** Gloss IDs whose animation assets were unavailable during the last playback. */
+  const [unavailableGlosses, setUnavailableGlosses] = useState<string[]>([]);
   const runId = useRef(0);
 
   const perform = useCallback(
@@ -34,6 +39,7 @@ export function useSignAnimation(
       const { glossIds, unmatchedWords } = await mapper(text, manifest);
       if (runId.current !== thisRun) return; // superseded while mapping
       setUnmatchedWords(unmatchedWords);
+      setUnavailableGlosses([]);
 
       if (!avatarRef.current || glossIds.length === 0) {
         setState({ isPlaying: false, currentIndex: -1, currentGlossId: null, queue: glossIds });
@@ -42,10 +48,11 @@ export function useSignAnimation(
 
       setState({ isPlaying: true, currentIndex: -1, currentGlossId: null, queue: glossIds });
 
-      await avatarRef.current.playSequence(glossIds, (id, index) => {
+      const unavailable = await avatarRef.current.playSequence(glossIds, (id, index) => {
         if (runId.current !== thisRun) return; // a newer call superseded this one
         setState((s) => ({ ...s, currentIndex: index, currentGlossId: id }));
       });
+      if (runId.current === thisRun) setUnavailableGlosses(unavailable);
 
       if (runId.current === thisRun) {
         setState((s) => ({ ...s, isPlaying: false, currentGlossId: null }));
@@ -65,16 +72,18 @@ export function useSignAnimation(
   const replay = useCallback(async () => {
     const queue = state.queue;
     if (!avatarRef.current || queue.length === 0 || state.isPlaying) return;
+    setUnavailableGlosses([]);
     const thisRun = ++runId.current;
     setState((s) => ({ ...s, isPlaying: true, currentIndex: -1, currentGlossId: null }));
-    await avatarRef.current.playSequence(queue, (id, index) => {
+    const unavailable = await avatarRef.current.playSequence(queue, (id, index) => {
       if (runId.current !== thisRun) return;
       setState((s) => ({ ...s, currentIndex: index, currentGlossId: id }));
     });
+    if (runId.current === thisRun) setUnavailableGlosses(unavailable);
     if (runId.current === thisRun) {
       setState((s) => ({ ...s, isPlaying: false, currentGlossId: null }));
     }
   }, [avatarRef, state.queue, state.isPlaying]);
 
-  return { state, unmatchedWords, perform, stop, replay };
+  return { state, unmatchedWords, unavailableGlosses, perform, stop, replay };
 }

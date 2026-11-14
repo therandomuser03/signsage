@@ -11,6 +11,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRM, VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { assetExists } from "./assetExists";
 import type { SignManifest } from "../types";
 
 const CROSSFADE_SECONDS = 0.25;
@@ -28,6 +29,8 @@ export class AvatarController {
 
   private clipCache = new Map<string, THREE.AnimationClip>();
   private manifest: SignManifest;
+  /** Gloss IDs whose animation clip could not be loaded (missing asset). */
+  private unavailableGlosses = new Set<string>();
   private rafId: number | null = null;
   private canvas: HTMLCanvasElement;
   private runId = 0;
@@ -118,6 +121,12 @@ export class AvatarController {
     const entry = this.manifest[glossId];
     if (!entry) throw new Error(`No sign manifest entry for gloss "${glossId}"`);
 
+    // Reject missing assets early (e.g. Vercel SPA fallback returning HTML 200)
+    // so the GLTFLoader never tries to parse an HTML page as a GLB.
+    if (!(await assetExists(entry.animationUrl))) {
+      throw new Error(`Animation asset not available: ${entry.animationUrl}`);
+    }
+
     const gltf = await this.gltfLoader.loadAsync(entry.animationUrl);
     const clip = gltf.animations[0];
     if (!clip) throw new Error(`GLB at ${entry.animationUrl} has no animation clip`);
@@ -129,11 +138,19 @@ export class AvatarController {
   /**
    * Play a single gloss's clip, crossfading from whatever is currently
    * playing. Resolves once the clip has finished (non-looping).
+   * Returns false when the gloss's animation asset is missing (the clip is
+   * skipped rather than aborting the whole sequence).
    */
-  async play(glossId: string): Promise<void> {
+  async play(glossId: string): Promise<boolean> {
     if (!this.mixer || !this.vrm) throw new Error("Avatar not loaded yet");
 
-    const clip = await this.loadClip(glossId);
+    let clip: THREE.AnimationClip;
+    try {
+      clip = await this.loadClip(glossId);
+    } catch {
+      this.unavailableGlosses.add(glossId);
+      return false;
+    }
     const nextAction = this.mixer.clipAction(clip);
     nextAction.reset();
     nextAction.setLoop(THREE.LoopOnce, 1);
@@ -149,16 +166,26 @@ export class AvatarController {
 
     const durationMs = clip.duration * 1000;
     await new Promise((resolve) => setTimeout(resolve, durationMs));
+    return true;
   }
 
-  /** Play a sequence of glosses back-to-back. */
-  async playSequence(glossIds: string[], onStep?: (id: string, index: number) => void): Promise<void> {
+  /** Play a sequence of glosses back-to-back. Returns the gloss IDs whose
+   * animation assets were unavailable (skipped, not fatal). */
+  async playSequence(glossIds: string[], onStep?: (id: string, index: number) => void): Promise<string[]> {
     const thisRun = ++this.runId;
+    const unavailable: string[] = [];
     for (let i = 0; i < glossIds.length; i++) {
-      if (thisRun !== this.runId) return; // stop() was called
+      if (thisRun !== this.runId) return unavailable; // stop() was called
       onStep?.(glossIds[i], i);
-      await this.play(glossIds[i]);
+      const ok = await this.play(glossIds[i]);
+      if (!ok) unavailable.push(glossIds[i]);
     }
+    return unavailable;
+  }
+
+  /** Gloss IDs whose animation clips could not be loaded. */
+  unavailableGlossesList(): string[] {
+    return [...this.unavailableGlosses];
   }
 
   /** Cancel an in-flight playSequence; the awaiting promise resolves. */

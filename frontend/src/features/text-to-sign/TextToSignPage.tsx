@@ -30,12 +30,21 @@ import {
   localGlossMapper,
   remoteGlossMapper,
 } from "@/features/text-to-sign/services/glossMapper";
+import { assetExists, shouldUseVrm } from "@/features/text-to-sign/services/assetExists";
+import { PROCEDURAL_SIGNS } from "@/features/text-to-sign/services/proceduralSigns";
 import type { GlossSequence, SignManifest } from "@/features/text-to-sign/types";
 import { apiClient } from "@/services/api/instance";
 import { loadPrefs } from "@/features/settings/preferences";
 
 const VRM_URL = "/models/avatar/signsage.vrm";
+const MANIFEST_URL = "/models/avatar/manifest.json";
 const MAX_CHARS = 280;
+
+/** Fallback manifest derived from the procedural motions so the dictionary
+ * mapper still resolves glosses when manifest.json is missing or invalid. */
+const FALLBACK_MANIFEST: SignManifest = Object.fromEntries(
+  Object.keys(PROCEDURAL_SIGNS).map((id) => [id, { id, label: id, animationUrl: "" }]),
+);
 
 type Mode = "dictionary" | "assisted";
 
@@ -54,16 +63,39 @@ export default function TextToSignPage() {
 
   useEffect(() => {
     let live = true;
-    fetch("/models/avatar/manifest.json")
-      .then((res) => {
-        if (!res.ok) throw new Error("missing manifest");
-        return res.json();
-      })
-      .then((data) => live && setManifest(data as SignManifest))
-      .catch(() => live && setManifestError(true));
-    fetch(VRM_URL, { method: "HEAD" })
-      .then((res) => live && setAvatarReady(res.ok))
-      .catch(() => live && setAvatarReady(false));
+
+    // Manifest: if the response is HTML (Vercel SPA fallback) or invalid JSON,
+    // treat it as unavailable and fall back to the procedural motions.
+    (async () => {
+      try {
+        if (!(await assetExists(MANIFEST_URL))) {
+          throw new Error("manifest not available");
+        }
+        const res = await fetch(MANIFEST_URL);
+        const data = (await res.json()) as SignManifest;
+        if (live && data && typeof data === "object") {
+          setManifest(data);
+        } else {
+          throw new Error("invalid manifest");
+        }
+      } catch {
+        if (live) {
+          setManifestError(true);
+          setManifest(FALLBACK_MANIFEST);
+        }
+      }
+    })();
+
+    // VRM: use assetExists so an HTML 200 (Vercel rewrite) is rejected.
+    (async () => {
+      try {
+        const exists = await assetExists(VRM_URL);
+        if (live) setAvatarReady(exists);
+      } catch {
+        if (live) setAvatarReady(false);
+      }
+    })();
+
     return () => {
       live = false;
     };
@@ -75,7 +107,7 @@ export default function TextToSignPage() {
     if (!speech.listening) setInterimText("");
   }, [speech.listening]);
 
-  const { perform, stop, replay, state } = useSignAnimation(
+  const { perform, stop, replay, state, unavailableGlosses } = useSignAnimation(
     avatarRef,
     manifest ?? {},
     mode === "dictionary"
@@ -125,7 +157,7 @@ export default function TextToSignPage() {
 
   // The VRM avatar needs hand-authored assets; the procedural avatar is
   // always available, so playback never depends on the HEAD check.
-  const usingVrm = avatarReady === true;
+  const usingVrm = shouldUseVrm(avatarReady === true, manifest !== null);
 
   const progress =
     state.queue.length > 0 && state.currentIndex >= 0
@@ -352,23 +384,30 @@ export default function TextToSignPage() {
           <div className="px-5 py-5">
             <div className="aspect-video overflow-hidden rounded-lg bg-muted">
               {manifest ? (
-                usingVrm ? (
-                  <AvatarViewer
-                    ref={avatarRef}
-                    vrmUrl={VRM_URL}
-                    manifest={manifest}
-                    className="h-full w-full"
-                  />
-                ) : (
-                  <ProceduralAvatarViewer
-                    ref={avatarRef}
-                    className="h-full w-full"
-                    caption={
-                      state.currentGlossId ??
-                      (state.isPlaying ? "Signing…" : "Procedural motion")
-                    }
-                  />
-                )
+                <>
+                  {usingVrm ? (
+                    <AvatarViewer
+                      ref={avatarRef}
+                      vrmUrl={VRM_URL}
+                      manifest={manifest}
+                      className="h-full w-full"
+                    />
+                  ) : (
+                    <ProceduralAvatarViewer
+                      ref={avatarRef}
+                      className="h-full w-full"
+                      caption={
+                        state.currentGlossId ??
+                        (state.isPlaying ? "Signing…" : "Procedural motion")
+                      }
+                    />
+                  )}
+                  {!usingVrm && manifest && (
+                    <p className="mt-2 text-xs text-foreground/50 text-center">
+                      Illustrative animation (approximate). Not a validated ISL sign.
+                    </p>
+                  )}
+                </>
               ) : (
                 <Empty className="h-full border-0">
                   <EmptyHeader>
@@ -398,6 +437,19 @@ export default function TextToSignPage() {
                   so a built-in 3D figure performs a distinct motion per sign.
                   Word lookup and sequencing are real; the movements are not
                   authored ISL.
+                </AlertDescription>
+              </Alert>
+            )}
+            {unavailableGlosses.length > 0 && (
+              <Alert className="mt-3" variant="destructive">
+                <CircleAlert aria-hidden="true" />
+                <AlertTitle>Sign animation unavailable</AlertTitle>
+                <AlertDescription>
+                  {unavailableGlosses.map((id) => (
+                    <div key={id} className="mt-1">
+                      Sign animation unavailable for <span className="font-mono">{id}</span>
+                    </div>
+                  ))}
                 </AlertDescription>
               </Alert>
             )}

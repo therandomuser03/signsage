@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -222,3 +223,132 @@ def test_compose_no_confidences_means_null_confidence(make_client):
     messages = repo._messages.get(sessions[0]["id"], [])
     assert len(messages) == 1
     assert messages[0]["confidence"] is None
+
+
+def _capture_files(captures_dir: Path) -> list[Path]:
+    if not captures_dir.is_dir():
+        return []
+    return sorted(captures_dir.rglob("*.npz"))
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_capture_flag_off_ignores_true_label(make_client, tmp_path, monkeypatch):
+    captures_dir = tmp_path / "captures_labeled"
+    monkeypatch.setattr("app.api.routes.word_translation.CAPTURES_LABELED_DIR", captures_dir)
+    client = make_client(
+        word_mode_enabled="true",
+        word_model_dir=BUNDLE_DIR,
+        capture_mode_enabled="false",
+    )
+    before = _capture_files(captures_dir)
+    response = client.post(
+        "/api/v1/translation/word", json={**_payload(), "true_label": "water"}
+    )
+    assert response.status_code == 200
+    assert _capture_files(captures_dir) == before  # nothing saved
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_capture_without_true_label_unchanged(make_client, tmp_path, monkeypatch):
+    captures_dir = tmp_path / "captures_labeled"
+    monkeypatch.setattr("app.api.routes.word_translation.CAPTURES_LABELED_DIR", captures_dir)
+    monkeypatch.setattr(
+        "app.api.routes.word_translation._is_loopback_address", lambda host: True
+    )
+    client = make_client(
+        word_mode_enabled="true",
+        word_model_dir=BUNDLE_DIR,
+        capture_mode_enabled="true",
+    )
+    response = client.post("/api/v1/translation/word", json=_payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) >= {"word", "confidence", "accepted", "top3", "threshold", "model_version", "status"}
+    assert _capture_files(captures_dir) == []  # nothing saved without true_label
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_capture_flag_on_loopback_saves(make_client, tmp_path, monkeypatch):
+    captures_dir = tmp_path / "captures_labeled"
+    monkeypatch.setattr("app.api.routes.word_translation.CAPTURES_LABELED_DIR", captures_dir)
+    monkeypatch.setattr(
+        "app.api.routes.word_translation._is_loopback_address", lambda host: True
+    )
+    client = make_client(
+        word_mode_enabled="true",
+        word_model_dir=BUNDLE_DIR,
+        capture_mode_enabled="true",
+    )
+    response = client.post(
+        "/api/v1/translation/word", json={**_payload(), "true_label": "water"}
+    )
+    assert response.status_code == 200
+    files = _capture_files(captures_dir)
+    assert len(files) == 1
+    with np.load(files[0]) as z:
+        assert str(z["true_label"].tolist()[0]) == "water"
+        assert z["landmarks"].ndim == 3 and z["landmarks"].shape[1:] == (543, 3)
+        assert list(z["top3_labels"].tolist()) and list(z["top3_probs"].tolist())
+        assert str(z["model_version"].tolist()[0]) == "word_v3_8w_s123"
+        assert isinstance(str(z["timestamp"].tolist()[0]), str)
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_capture_accepts_rest_label(make_client, tmp_path, monkeypatch):
+    captures_dir = tmp_path / "captures_labeled"
+    monkeypatch.setattr("app.api.routes.word_translation.CAPTURES_LABELED_DIR", captures_dir)
+    monkeypatch.setattr(
+        "app.api.routes.word_translation._is_loopback_address", lambda host: True
+    )
+    client = make_client(
+        word_mode_enabled="true",
+        word_model_dir=BUNDLE_DIR,
+        capture_mode_enabled="true",
+    )
+    response = client.post(
+        "/api/v1/translation/word", json={**_payload(), "true_label": "rest"}
+    )
+    assert response.status_code == 200
+    files = _capture_files(captures_dir)
+    assert len(files) == 1
+    with np.load(files[0]) as z:
+        assert str(z["true_label"].tolist()[0]) == "rest"
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_capture_non_loopback_saves_nothing(make_client, tmp_path, monkeypatch):
+    captures_dir = tmp_path / "captures_labeled"
+    monkeypatch.setattr("app.api.routes.word_translation.CAPTURES_LABELED_DIR", captures_dir)
+    monkeypatch.setattr(
+        "app.api.routes.word_translation._is_loopback_address", lambda host: False
+    )
+    client = make_client(
+        word_mode_enabled="true",
+        word_model_dir=BUNDLE_DIR,
+        capture_mode_enabled="true",
+    )
+    response = client.post(
+        "/api/v1/translation/word", json={**_payload(), "true_label": "water"}
+    )
+    assert response.status_code == 200
+    assert _capture_files(captures_dir) == []  # nothing saved from non-loopback
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_capture_invalid_label_returns_422(make_client, tmp_path, monkeypatch):
+    captures_dir = tmp_path / "captures_labeled"
+    monkeypatch.setattr("app.api.routes.word_translation.CAPTURES_LABELED_DIR", captures_dir)
+    monkeypatch.setattr(
+        "app.api.routes.word_translation._is_loopback_address", lambda host: True
+    )
+    client = make_client(
+        word_mode_enabled="true",
+        word_model_dir=BUNDLE_DIR,
+        capture_mode_enabled="true",
+    )
+    response = client.post(
+        "/api/v1/translation/word", json={**_payload(), "true_label": "not_a_word"}
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INVALID_MESSAGE"
+    assert _capture_files(captures_dir) == []  # nothing saved for an invalid label

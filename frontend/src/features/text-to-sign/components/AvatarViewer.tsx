@@ -7,7 +7,11 @@ import { AvatarController } from "../services/avatarController";
 import type { SignManifest } from "../types";
 
 export interface AvatarViewerHandle {
-  playSequence: (glossIds: string[], onStep?: (id: string, index: number) => void) => Promise<void>;
+  /** Resolves with the gloss IDs whose animation assets were unavailable. */
+  playSequence: (
+    glossIds: string[],
+    onStep?: (id: string, index: number) => void,
+  ) => Promise<string[]>;
   stop: () => void;
 }
 
@@ -42,7 +46,7 @@ export const AvatarViewer = forwardRef<AvatarViewerHandle, AvatarViewerProps>(
 
     useImperativeHandle(ref, () => ({
       playSequence: (glossIds, onStep) => {
-        if (!controllerRef.current) return Promise.resolve();
+        if (!controllerRef.current) return Promise.resolve([]);
         return controllerRef.current.playSequence(glossIds, onStep);
       },
       stop: () => controllerRef.current?.stop(),

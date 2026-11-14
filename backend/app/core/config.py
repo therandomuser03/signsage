@@ -158,6 +158,13 @@ class Settings(BaseSettings):
     word_mode_enabled: bool = False
     word_model_dir: Optional[str] = "models/word_v3"
     word_debug: bool = False
+    # Dev-only: when true, POST /api/v1/translation/word accepts an optional
+    # true_label and saves the capture (landmarks + true_label + top3 + model
+    # version + timestamp) to backend/captures_labeled/<label>/<ts>.npz.
+    # Honoured only for loopback clients (127.0.0.1 / ::1) so accidentally
+    # enabling it on Render saves nothing. Default False; never set in
+    # render.yaml.
+    capture_mode_enabled: bool = False
     model_version: str = "signsage-s2t"
     max_message_bytes: int = 262144  # one 543x3 frame is ~30 KB of JSON
 

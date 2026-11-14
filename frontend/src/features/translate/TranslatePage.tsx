@@ -123,6 +123,11 @@ export default function TranslatePage() {
     ? "frame agreement"
     : "uncalibrated model score";
 
+  // --- Dev-only labeled capture (VITE_CAPTURE_MODE === "true") ---
+  // Hidden entirely unless the env var is exactly "true".
+  const captureEnabled = config.captureMode === "true";
+  const wordVocab = capabilities?.word_recognition_vocabulary ?? [];
+
   // --- Word mode (behind SIGNSAGE_WORD_MODE_ENABLED) ---
   // Reuses the same camera + HolisticExtractor as the live interpreter.
   const [wordPhase, setWordPhase] = useState<WordPhase>("idle");
@@ -139,6 +144,10 @@ export default function TranslatePage() {
   const wordFramesRef = useRef<HolisticFrame[]>([]);
   const wordRecStartRef = useRef(0);
   const wordStopTimeRef = useRef(0);
+  // Label passed from the "Record & save" dev panel into the same capture path.
+  const captureTrueLabelRef = useRef<string | null>(null);
+  const [captureLabel, setCaptureLabel] = useState<string>(wordVocab[0] ?? "");
+  const [captureCounts, setCaptureCounts] = useState<Record<string, number>>({});
 
   // --- Voice output for the composed sentence (browser speech synthesis) ---
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -534,8 +543,9 @@ export default function TranslatePage() {
 
   const wordPhaseRef = useRef<WordPhase>("idle");
 
-  const startWordRecording = useCallback(async () => {
+  const startWordRecording = useCallback(async (trueLabel?: string) => {
     if (wordPhaseRef.current === "countdown" || wordPhaseRef.current === "recording") return;
+    captureTrueLabelRef.current = trueLabel ?? null;
     const video = videoRef.current;
     const extractor = extractorRef.current;
     if (!video || !extractor) {
@@ -586,6 +596,9 @@ export default function TranslatePage() {
   }, [wordLoop]);
 
   const stopWordRecording = useCallback(async () => {
+    // Same capture path as "Record word"; the dev panel passes a true_label.
+    const trueLabel = captureTrueLabelRef.current;
+    captureTrueLabelRef.current = null;
     setWordPhase("result");
     wordPhaseRef.current = "result";
 
@@ -614,6 +627,7 @@ export default function TranslatePage() {
 
     const requestPayload = {
       frames: frames?.map((f) => ({ landmarks: f.landmarks })) ?? [],
+      ...(trueLabel ? { true_label: trueLabel } : {}),
     };
     const payloadSize = JSON.stringify(requestPayload).length;
 
@@ -629,6 +643,9 @@ export default function TranslatePage() {
         const roundTripMs = performance.now() - t0Request;
         const totalMs = performance.now() - captureEndMs;
         setWordResult(result);
+        if (trueLabel) {
+          setCaptureCounts((prev) => ({ ...prev, [trueLabel]: (prev[trueLabel] ?? 0) + 1 }));
+        }
         if (result.accepted && result.word) {
           setWordList((prev) => [...prev, result.word!]);
           setWordConfidences((prev) => [...prev, result.confidence]);
@@ -1371,7 +1388,7 @@ export default function TranslatePage() {
                 phase === "loading-detector" ||
                 phase === "error"
               }
-              onClick={startWordRecording}
+              onClick={() => startWordRecording()}
             >
               {wordPhase === "countdown" ? (
                 <span className="flex items-center gap-2">
@@ -1526,6 +1543,58 @@ export default function TranslatePage() {
               <p className="mt-1 text-xs text-green-700/70">
                 Method: composed from {wordList.length} recognised word(s)
               </p>
+            </div>
+          )}
+
+          {/* Dev-only labeled capture panel (VITE_CAPTURE_MODE === "true"). Hidden entirely otherwise. */}
+          {captureEnabled && capabilities?.word_recognition_enabled && (
+            <div className="rounded-xl border border-foreground/10 bg-card px-4 py-3 text-sm mt-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50 mb-0">
+                  Labeled capture (dev)
+                </p>
+                <span className="text-xs text-foreground/40">
+                  VITE_CAPTURE_MODE=true
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <label className="text-xs text-foreground/60">Label</label>
+                <select
+                  value={captureLabel}
+                  onChange={(e) => setCaptureLabel(e.target.value)}
+                  className="border border-foreground/20 rounded px-2 py-1.5 text-xs bg-background"
+                  disabled={wordProcessing}
+                >
+                  {wordVocab.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  disabled={
+                    wordProcessing ||
+                    wordPhase === "countdown" ||
+                    wordPhase === "recording" ||
+                    phase === "starting-camera" ||
+                    phase === "loading-detector" ||
+                    phase === "error"
+                  }
+                  onClick={() => startWordRecording(captureLabel)}
+                >
+                  Record &amp; save
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-foreground/50">
+                {wordVocab.map((v) => (
+                  <span key={v} className="flex items-center gap-1">
+                    {v}: <span className="font-mono">{captureCounts[v] ?? 0}</span>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>

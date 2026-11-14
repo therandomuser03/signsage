@@ -39,6 +39,40 @@ from app.services.history_service import HistoryService
 logger = logging.getLogger("signsage.word_debug")
 DEBUG_CAPTURES_DIR = Path(__file__).resolve().parents[3] / "debug_captures"
 DEBUG_CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
+# Dev-only labeled captures (SIGNSAGE_CAPTURE_MODE_ENABLED, loopback only).
+CAPTURES_LABELED_DIR = Path(__file__).resolve().parents[3] / "captures_labeled"
+CAPTURES_LABELED_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _is_loopback_address(host: str | None) -> bool:
+    """True only for loopback clients (127.0.0.1 / ::1). Never Render."""
+    return host in ("127.0.0.1", "::1")
+
+
+def _save_labeled_capture(
+    label: str,
+    landmarks: np.ndarray,
+    result: WordClassificationResult,
+    model_version: str,
+) -> None:
+    """Save a labeled capture to backend/captures_labeled/<label>/<ts>.npz.
+
+    Never raises: a failed save must never break the recognition response.
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    label_dir = CAPTURES_LABELED_DIR / label
+    label_dir.mkdir(parents=True, exist_ok=True)
+    top3 = [(e["label"], float(e["probability"])) for e in result.top3]
+    np.savez(
+        label_dir / f"{ts}.npz",
+        landmarks=landmarks,
+        true_label=np.array([label]),
+        top3_labels=np.array([t[0] for t in top3]),
+        top3_probs=np.array([t[1] for t in top3]),
+        model_version=np.array([model_version]),
+        timestamp=np.array([ts]),
+    )
+
 
 router = APIRouter(prefix="/translation", tags=["translation"])
 
@@ -151,6 +185,7 @@ def _reset_word_adapter() -> None:
 
 @router.post("/word", dependencies=[Depends(rate_limit_dependency("word"))])
 async def word_recognition(
+    request: Request,
     payload: dict,
     settings: Settings = Depends(get_settings),
     user: Optional[AuthenticatedUser] = Depends(get_request_user),
@@ -201,8 +236,40 @@ async def word_recognition(
     right_present = float(np.any(landmarks[:, 522:543, :] != 0.0, axis=(1, 2)).mean())
 
     adapter = _get_word_adapter(settings)
+
+    # --- Dev-only labeled capture (SIGNSAGE_CAPTURE_MODE_ENABLED) ----------
+    # Honored only from loopback (127.0.0.1 / ::1): enabling it on Render
+    # saves nothing and logs a warning instead.
+    save_capture = False
+    true_label = payload.get("true_label")
+    loopback = _is_loopback_address(request.client.host if request.client else None)
+    if settings.capture_mode_enabled and isinstance(true_label, str) and true_label:
+        if not loopback:
+            logger.warning(
+                "CAPTURE_MODE: ignoring true_label from non-loopback client %s; "
+                "labeled captures are saved from loopback only",
+                request.client.host if request.client else None,
+            )
+        elif true_label not in adapter.labels:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_MESSAGE",
+                    "message": "true_label must be one of the vocabulary labels: "
+                    f"{sorted(adapter.labels)}",
+                },
+            )
+        else:
+            save_capture = True
+
     result = adapter.classify(landmarks)
     t_total_ms = (time.perf_counter() - t0_total) * 1000
+
+    if save_capture:
+        try:
+            _save_labeled_capture(true_label, landmarks, result, adapter.model_version)
+        except Exception as exc:  # noqa: BLE001 - never break the response for a capture save
+            logger.warning("CAPTURE_MODE: failed to save capture: %s", exc)
 
     if settings.word_debug:
         logger.info(

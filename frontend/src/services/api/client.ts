@@ -97,7 +97,7 @@ export class ApiClient {
     return (await res.json()) as VideoTranslationResponse;
   };
 
-  word = (req: { frames: LandmarkFramePayload[] }, opts?: RequestOpts) =>
+  word = (req: { frames: LandmarkFramePayload[]; true_label?: string }, opts?: RequestOpts) =>
     this.request<WordRecognitionResponse>("POST", endpoints.word, req, opts);
 
   compose = (req: ComposeRequest, opts?: RequestOpts) =>

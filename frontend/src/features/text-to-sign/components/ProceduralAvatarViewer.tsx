@@ -10,7 +10,12 @@ import * as THREE from "three";
 import { motionFor, poseAt, type Pose, PROCEDURAL_SIGNS } from "../services/proceduralSigns";
 
 export interface ProceduralAvatarHandle {
-  playSequence: (glossIds: string[], onStep?: (id: string, index: number) => void) => Promise<void>;
+  /** Resolves with the gloss IDs whose animation assets were unavailable.
+   * The procedural fallback has no external assets, so this is always []. */
+  playSequence: (
+    glossIds: string[],
+    onStep?: (id: string, index: number) => void,
+  ) => Promise<string[]>;
   stop: () => void;
 }
 
@@ -307,8 +312,8 @@ export const ProceduralAvatarViewer = forwardRef<ProceduralAvatarHandle, Props>(
       playSequence: (glossIds, onStep) => {
         const run = ++runRef.current;
         playRef.current?.resolve();
-        if (glossIds.length === 0) return Promise.resolve();
-        return new Promise<void>((resolve) => {
+        if (glossIds.length === 0) return Promise.resolve([]);
+        return new Promise<string[]>((resolve) => {
           onStep?.(glossIds[0], 0);
           playRef.current = {
             queue: glossIds, index: 0, startedAt: performance.now(),
@@ -317,7 +322,7 @@ export const ProceduralAvatarViewer = forwardRef<ProceduralAvatarHandle, Props>(
             },
             resolve: () => {
               if (run === runRef.current) playRef.current = null;
-              resolve();
+              resolve([]);
             },
           };
         });
