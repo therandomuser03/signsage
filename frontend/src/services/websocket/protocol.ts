@@ -4,9 +4,9 @@ import type { ResultType } from "../../types/api";
 export const LANDMARK_COUNT = 543; // pose 33 + face 468 + left hand 21 + right hand 21
 export const COORDINATES_PER_LANDMARK = 3;
 
-export interface AuthMessage { type: "auth"; access_token: string }
+export interface AuthMessage { type: "auth"; access_token: string; history_session_id?: string }
 export interface LandmarksFrameMessage { type: "landmarks.frame"; landmarks: number[][] }
-export interface SentenceBoundaryMessage { type: "sentence.boundary"; save_history?: boolean }
+export interface SentenceBoundaryMessage { type: "sentence.boundary"; save_history?: boolean; client_key?: string }
 export type ClientMessage = AuthMessage | LandmarksFrameMessage | SentenceBoundaryMessage;
 
 export interface AuthOkMessage { type: "auth.ok"; user_id: string }

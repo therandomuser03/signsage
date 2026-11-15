@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Optional
 import logging
 import time
 import uuid
@@ -14,7 +15,7 @@ from app.core.config import get_settings
 from app.core.dependencies import build_translation_service
 from app.core.errors import SignSageError
 from app.core.security import verify_access_token
-from app.domain.translation.entities import Direction, NewHistoryRecord
+from app.domain.translation.entities import Direction, NewHistorySentence
 from app.domain.translation.policies import classify_result, should_persist
 from app.schemas.websocket import (
     AuthOkMessage, ErrorCode, ErrorMessage, TranslationTextMessage,
@@ -37,6 +38,9 @@ async def translate_ws(websocket: WebSocket) -> None:
     settings = get_settings()
     session = TranslationSession(session_id=str(uuid.uuid4()), settings=settings)
     user = None
+    # History session scope: set on auth. Falls back to the per-connection id
+    # until then, so even clients that send no key get connection-scoped sessions.
+    history_session_key: Optional[str] = None
 
     try:
         # First load reads a ~100 MB checkpoint: keep it off the event loop.
@@ -78,6 +82,7 @@ async def translate_ws(websocket: WebSocket) -> None:
                 except SignSageError as exc:
                     await _send_error(websocket, exc.code, exc.message)
                     continue
+                history_session_key = message.history_session_id or session.session_id
                 await websocket.send_json(AuthOkMessage(user_id=user.id).model_dump())
 
             elif message.type == "landmarks.frame":
@@ -150,14 +155,16 @@ async def translate_ws(websocket: WebSocket) -> None:
                 )
                 history_id = None
                 if user and history and message.save_history and should_persist(result):
-                    # Same session+message write the REST and word paths use;
-                    # the old single-table insert wrote columns the live
-                    # translation_sessions schema does not have.
-                    history_id = await history.try_record_word(user, NewHistoryRecord(
+                    # Session-scoped write: all sentences of this interaction
+                    # land on ONE translation session; client_key makes retries
+                    # idempotent. Accepted history_id is that session's id.
+                    history_id = await history.try_record_sentence(user, NewHistorySentence(
                         direction=Direction.SIGN_TO_TEXT, output_text=result.text,
                         result_type=classify_result(result), model_version=settings.model_version,
-                        confidence=result.confidence, input_text=None, sequence=1,
-                        title=f"Sign to text: {result.text[:50]}", status="completed",
+                        confidence=result.confidence, input_text=None,
+                        title=f"Sign to text: {result.text[:50]}", status="open",
+                        session_key=history_session_key or session.session_id,
+                        client_key=message.client_key,
                     ))
                 await websocket.send_json(TranslationTextMessage(
                     text=result.text, accepted=result.accepted, reason=result.reason,
@@ -166,3 +173,8 @@ async def translate_ws(websocket: WebSocket) -> None:
                 ).model_dump())
     except WebSocketDisconnect:
         logger.info("[WEBSOCKET] session %s disconnected", session.session_id)
+    finally:
+        # End the history session when the interaction ends, however the
+        # socket closed. Best-effort: never raises, never affects the reply.
+        if user is not None and history is not None:
+            await history.close_session(user, history_session_key or session.session_id)

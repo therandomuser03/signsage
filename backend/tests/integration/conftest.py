@@ -121,6 +121,8 @@ def make_client(monkeypatch):
         monkeypatch.setenv("SIGNSAGE_SUPABASE_URL", "https://test.supabase.co")
         monkeypatch.setenv("SIGNSAGE_SUPABASE_PUBLISHABLE_KEY", "pub")
         monkeypatch.setenv("SIGNSAGE_HISTORY_BACKEND", "memory")
+        # Hermetic: never hit the real Groq API from integration tests.
+        monkeypatch.setenv("SIGNSAGE_GROQ_API_KEY", "")
         monkeypatch.setenv("SIGNSAGE_MODEL_PROMOTED", "true" if promoted else "false")
         if bundle is not None:
             monkeypatch.setenv("SIGNSAGE_MODEL_BUNDLE_DIR", str(bundle))

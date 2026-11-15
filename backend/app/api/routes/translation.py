@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from app.core.dependencies import get_optional_history_service, get_request_user, get_translation_service
 from app.core.errors import InferenceTimeoutError, InvalidLandmarksError
 from app.core.security import AuthenticatedUser
-from app.domain.translation.entities import Direction, NewHistoryRecord
+from app.domain.translation.entities import Direction, NewHistorySentence
 from app.domain.translation.policies import classify_result, should_persist
 from app.schemas.translation import SignToTextRequest, SignToTextResponse
 from app.services.history_service import HistoryService
@@ -49,11 +49,12 @@ async def translate_sign_to_text(
         raise InvalidLandmarksError(str(exc)) from exc
     history_id = None
     if user and history and payload.save_history and should_persist(result):
-        history_id = await history.try_record_word(user, NewHistoryRecord(
+        history_id = await history.try_record_sentence(user, NewHistorySentence(
             direction=Direction.SIGN_TO_TEXT, output_text=result.text, result_type=classify_result(result),
             model_version=settings.model_version, confidence=result.confidence,
-            input_text=None, sequence=1,
+            input_text=None,
             title=f"Sign to text: {result.text[:50]}", status="completed",
+            session_key=payload.client_session_key, client_key=payload.client_key,
         ))
     return SignToTextResponse(
         text=result.text, accepted=result.accepted, reason=result.reason,

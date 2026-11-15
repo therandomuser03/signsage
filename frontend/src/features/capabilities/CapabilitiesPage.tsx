@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
-  Bookmark,
   Hand,
   History,
   Languages,
@@ -46,14 +45,6 @@ const CAPABILITIES = [
     text: "Translations you choose to save are kept per account. Search, filter, review details, and delete anything — individually or all at once.",
     to: "/app/translation-log",
     action: "Open History",
-  },
-  {
-    icon: Bookmark,
-    title: "Saved Signs",
-    status: "Account",
-    text: "Keep useful signs close at hand. Saved signs are your stored translations, browsable as cards with detail and removal.",
-    to: "/app/custom-glossary",
-    action: "Open Saved Signs",
   },
   {
     icon: ShieldCheck,

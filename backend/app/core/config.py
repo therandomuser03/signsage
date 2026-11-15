@@ -113,11 +113,12 @@ class Settings(BaseSettings):
     # Both optional: unset means that stage is skipped and the deterministic
     # word-lookup fallback is used, which is what actually ships first.
     groq_api_key: Optional[str] = None
-    # Smallest stable, non-preview instruct model available to this account's
-    # key (verified via the Groq /models endpoint). llama-3.3-70b-versatile
-    # 404s for this key; gpt-oss-20b puts its output in the `reasoning` field
-    # (empty `content`) so it cannot be used by the simple compose path.
-    groq_model: str = "allam-2-7b"
+    # Key verified against the Groq /models endpoint for this account.
+    # llama-3.3-70b-versatile 404s (removed by Groq). gpt-oss-20b works for
+    # both pipelines when called with reasoning_effort="low" and 256 max
+    # tokens; both Groq call sites do this. The compose path additionally
+    # retries once with allam-2-7b on failure or guard rejection.
+    groq_model: str = "openai/gpt-oss-20b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_timeout_seconds: float = 6.0
     # On 429, Groq returns Retry-After; if it's under this, wait once and retry.
@@ -128,6 +129,17 @@ class Settings(BaseSettings):
     ollama_base_url: Optional[str] = None
     ollama_model: str = "llama3.2"
     ollama_timeout_seconds: float = 6.0
+
+    # ===== Text-to-speech (Auto-Speak) =====
+    # "auto" = use Groq when SIGNSAGE_GROQ_API_KEY is set (browser fallback otherwise),
+    # "groq" = require Groq; "browser" = never call the backend TTS provider (the
+    # frontend uses its Web Speech API voices instead).
+    tts_provider: str = "auto"
+    groq_tts_model: str = "canopylabs/orpheus-v1-english"
+    groq_tts_voice: str = "hannah"   # one of: autumn diana hannah austin daniel troy
+    groq_tts_timeout_seconds: float = 8.0
+    # Orpheus accepts at most 200 characters per request. Longer text is rejected.
+    tts_max_input_chars: int = 200
 
     # Optional override; defaults to the packaged app/data/sign_vocabulary.json.
     avatar_vocabulary_path: Optional[str] = None
@@ -187,6 +199,8 @@ class Settings(BaseSettings):
     rate_limit_word: str = "30/min"
     rate_limit_compose: str = "20/min"
     rate_limit_history_write: str = "30/min"
+    # Free Groq tier allows 10 RPM on Orpheus; keep the backend tighter than that.
+    rate_limit_tts: str = "9/min"
     # Tune per deployment via SIGNSAGE_RATE_LIMIT_*.
 
     @field_validator("cors_origins", mode="before")

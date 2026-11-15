@@ -22,6 +22,39 @@ Current high-level position:
 Historical sections below retain their original dates and evidence. A dated
 historical result is not automatically the current state.
 
+## 2b. Live Interpreter UI/UX redesign, sentence-level Auto-Speak (2026-11-15)
+
+- Live Interpreter rebuilt around a dark-themed ShadCN `Interpretation` panel
+  (status badge: waiting / recognising / composing / composed / not-confidently-recognised),
+  explicit `Recognition mode → Recognised words → Sentence construction → Interpretation
+  → Audio output` structure; pale-green panel removed; camera and controls stack vertically
+  below `lg`. WebSocket, session, pause/reconnect/clear, and Basic-preview paths preserved.
+- `Browse Signs` sheet replaced by a Help button (ShadCN AlertDialog) linking to
+  `https://indiansignlanguage.org/` (new tab). Static image-classify toggle retained
+  in the page header (alphabet A–Z only; word CNN remains unpromoted).
+- Word→sentence pipeline stays: deterministic rules → Groq refinement (only when no rule
+  matches; constrained prompt — every signed word must appear exactly once, only
+  `is/are/am/the/a/i/can/could` may be added, reordering allowed for English grammar,
+  content words can never be invented; unverifiable output falls back to a comma-join)
+  → comma-join fallback. Content word reordering enabled 2026-11-15 (gloss order ≠ English
+  order); every input word must still appear exactly once. Groq is a constrained
+  composer, not an ISL grammar model — no linguistic-accuracy claim is made.
+- Auto-Speak speaks completed interpretations only (composed sentences / final WS
+  results), deduped by text, never intermediate predictions; Speak = manual playback of
+  the current interpretation.
+- TTS: backend `POST /api/v1/speech/speak` proxies Groq Orpheus
+  (`canopylabs/orpheus-v1-english`, ≤200 chars, wav) when `SIGNSAGE_GROQ_API_KEY` is set
+  (`SIGNSAGE_TTS_PROVIDER=auto|groq|browser`); browser Web Speech API is the automatic
+  fallback. Key stays server-side. Free tier ≈ 10 RPM / 100 RPD / 3.6K tokens/day;
+  Orpheus is English + Saudi Arabic only; no Hindi/Bengali voice exists in the provider.
+- Known blocker (operator action): the Orpheus model requires one-time terms acceptance
+  by the Groq org admin (console playground → model → accept); until then the endpoint
+  returns 503 `TTS_UNAVAILABLE` and the frontend falls back to browser voices.
+- Groq chat compose now uses `reasoning_effort="low"` + 256 max tokens with
+  `openai/gpt-oss-20b` (llama-3.3-70b-versatile is removed by Groq); failure falls back
+  once to allam-2-7b, then to the comma-join. No fabricated content is possible in any
+  fallback path.
+
 # SignSage Status & Roadmap
 
 Where the project stands, what was verified, what blocks production, and the

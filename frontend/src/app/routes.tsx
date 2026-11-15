@@ -9,7 +9,6 @@ import PrivacyPage from "@/features/privacy/PrivacyPage";
 import TranslatePage from "@/features/translate/TranslatePage";
 import TextToSignPage from "@/features/text-to-sign/TextToSignPage";
 import HistoryPage from "@/features/history/HistoryPage";
-import SavedSignsPage from "@/features/saved/SavedSignsPage";
 import SettingsPage from "@/features/settings/SettingsPage";
 import HelpPage from "@/features/help/HelpPage";
 
@@ -70,12 +69,14 @@ export const router = createBrowserRouter([
         element: <HistoryPage />,
       },
       {
-        path: "custom-glossary",
-        element: <SavedSignsPage />,
-      },
-      {
         path: "settings",
         element: <SettingsPage />,
+      },
+      {
+        // Unknown /app/* paths land in the interpreter, matching the
+        // top-level wildcard-redirect convention instead of a blank page.
+        path: "*",
+        element: <Navigate to="/app" replace />,
       },
     ],
   },

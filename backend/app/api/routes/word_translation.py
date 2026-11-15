@@ -36,7 +36,7 @@ from app.core.dependencies import get_optional_history_service, get_request_user
 from app.core.errors import SignSageError
 from app.core.ratelimit import rate_limit_dependency
 from app.core.security import AuthenticatedUser
-from app.domain.translation.entities import Direction, NewHistoryRecord, ResultType
+from app.domain.translation.entities import Direction, NewHistorySentence, ResultType
 from app.ml.device import resolve_torch_device
 from app.ml.word_classifier_adapter import WordClassifierAdapter, WordClassificationResult, resolve_word_model_dir
 from app.ml.word_sequence import WordSequencePipeline
@@ -381,7 +381,7 @@ async def sentence_recognition(
     if user and history and save_history and accepted:
         joined = " ".join(s.text for s in signs)
         confidence = float(np.mean([s.confidence for s in signs]))
-        history_saved, history_error = await history.try_record_word_checked(user, NewHistoryRecord(
+        history_saved, history_error = await history.try_record_sentence_checked(user, NewHistorySentence(
             direction=Direction.SIGN_TO_TEXT,
             output_text=sentence,
             result_type=ResultType.MODEL,
@@ -389,9 +389,10 @@ async def sentence_recognition(
             input_text=joined,
             gloss=joined,
             confidence=max(0.0, min(1.0, confidence)),
-            sequence=1,
             title=f"Sign to text: {sentence[:60]}",
             status="completed",
+            session_key=payload.get("client_session_key"),
+            client_key=payload.get("client_key"),
         ))
 
     return {
@@ -460,7 +461,7 @@ async def compose_sentence(
         accepted_words = [w for w in words if w != "rest"]
         joined_words = " ".join(accepted_words)
         title = f"Word recognition: {sentence[:60]}" if sentence else "Word recognition"
-        history_saved, history_error = await history.try_record_word_checked(user, NewHistoryRecord(
+        history_saved, history_error = await history.try_record_sentence_checked(user, NewHistorySentence(
             direction=Direction.SIGN_TO_TEXT,
             output_text=sentence,
             result_type=ResultType.MODEL,
@@ -468,9 +469,10 @@ async def compose_sentence(
             input_text=joined_words,
             gloss=joined_words,
             confidence=confidence,
-            sequence=1,
             title=title,
             status="completed",
+            session_key=payload.get("client_session_key"),
+            client_key=payload.get("client_key"),
         ))
 
     return {"sentence": sentence, "method": method, "history_saved": history_saved, "history_error": history_error}

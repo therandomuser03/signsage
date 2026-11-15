@@ -39,6 +39,10 @@ class SignToTextRequest(BaseModel):
     min_motion: Optional[float] = None
     min_confidence: Optional[float] = None
     save_history: bool = True  # only takes effect for signed-in users
+    # Idempotency/session scope: client_session_key groups sentences of one
+    # interaction; client_key dedupes retries of the same finalized sentence.
+    client_session_key: Optional[str] = Field(None, max_length=64)
+    client_key: Optional[str] = Field(None, max_length=64)
 
 
 class SignToTextResponse(BaseModel):

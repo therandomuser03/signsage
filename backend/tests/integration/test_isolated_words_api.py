@@ -5,6 +5,7 @@ import json
 import os
 
 import numpy as np
+import pytest
 import torch
 
 from app.ml.isolated_words import FEATURE_DIM, FEATURE_VERSION, IsolatedWordNet

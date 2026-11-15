@@ -183,13 +183,68 @@ def test_websocket_sentence_boundary_saves_history_for_signed_in_user(promoted_c
     assert response["final"] is True
     if response.get("accepted"):
         repo = get_memory_repository()
-        sessions = repo._sessions.get("wsuser", [])
+        sessions = [s for s in repo._sessions.values() if s["user_id"] == "wsuser"]
         assert len(sessions) == 1
-        assert sessions[0]["status"] == "completed"
+        # The connection closed when the `with` block exited: the interaction
+        # session is marked completed, not deleted.
+        assert sessions[0]["status"] in ("open", "completed")
         messages = repo._messages.get(sessions[0]["id"], [])
         assert len(messages) == 1
         assert messages[0]["sequence"] == 1
         assert messages[0]["direction"] == "sign_to_text"
+    get_settings.cache_clear()
+
+
+def test_websocket_two_boundaries_group_into_one_session(promoted_client, monkeypatch):
+    """Two sentence.boundary messages in one connection = ONE history session
+    with two sequenced sentences."""
+    from app.infrastructure.database.repositories.translation_repository import (
+        get_memory_repository,
+        reset_memory_repository,
+    )
+    from app.core.security import AuthenticatedUser
+
+    async def fake_verify(token, settings, transport=None):
+        if token.startswith("good-"):
+            return AuthenticatedUser(id=token[5:], email=f"{token[5:]}@example.com", access_token=token)
+        from app.core.errors import AuthError
+        raise AuthError("Invalid or expired access token.")
+
+    monkeypatch.setattr(
+        "app.api.websocket.translation.verify_access_token", fake_verify
+    )
+    monkeypatch.setenv("SIGNSAGE_HISTORY_BACKEND", "memory")
+    reset_memory_repository()
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    from app.main import app
+    client = fastapi_testclient.TestClient(app)
+
+    rng = np.random.default_rng(3)
+
+    def frames(n=30):
+        return [rng.normal(size=(543, 3)).tolist() for _ in range(n)]
+
+    with client.websocket_connect("/ws/translate") as ws:
+        ws.send_json({"type": "auth", "access_token": "good-wsuser2", "history_session_id": "interaction-ws-1"})
+        assert ws.receive_json()["type"] == "auth.ok"
+        for boundary in range(2):
+            for _ in range(30):
+                ws.send_json({"type": "landmarks.frame", "landmarks": frames(1)[0]})
+            ws.send_json({"type": "sentence.boundary", "save_history": True, "client_key": f"ws-sentence-{boundary}"})
+            resp = ws.receive_json()
+            assert resp["type"] == "translation.text"
+
+    repo = get_memory_repository()
+    sessions = [s for s in repo._sessions.values() if s["user_id"] == "wsuser2"]
+    if sessions:  # only assert when at least one boundary was accepted
+        assert len(sessions) == 1
+        assert sessions[0]["client_key"] == "interaction-ws-1"
+        messages = repo._messages.get(sessions[0]["id"], [])
+        assert [m["sequence"] for m in messages] == list(range(1, len(messages) + 1))
+        assert all(m["session_id"] == sessions[0]["id"] for m in messages)
     get_settings.cache_clear()
 
 

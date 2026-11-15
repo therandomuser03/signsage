@@ -146,3 +146,37 @@ test("malformed frames are ignored without callbacks or throws", () => {
   assert.equal(socket.modelUnavailable, false);
   socket.close();
 });
+
+test("auth message carries history_session_id when getHistorySessionId is set", async () => {
+  FakeSocket.reset();
+  const socket = new TranslationSocket({
+    url: "ws://x/ws/translate",
+    getAccessToken: async () => "tok-1",
+    getHistorySessionId: () => "interaction-1",
+    onTranslation: () => {},
+    webSocketFactory: (url: string) => new FakeSocket(url) as unknown as WebSocket,
+  });
+  socket.connect();
+  const fake = FakeSocket.instances[FakeSocket.instances.length - 1];
+  fake.serverOpen();
+  await sleep(20);
+  const auth = fake.sent.map((s) => JSON.parse(s)).find((m) => m.type === "auth");
+  assert.deepEqual(auth, { type: "auth", access_token: "tok-1", history_session_id: "interaction-1" });
+  socket.close();
+});
+
+test("sentenceBoundary forwards client_key for idempotent history writes", () => {
+  FakeSocket.reset();
+  const socket = new TranslationSocket({
+    url: "ws://x/ws/translate",
+    onTranslation: () => {},
+    webSocketFactory: (url: string) => new FakeSocket(url) as unknown as WebSocket,
+  });
+  socket.connect();
+  const fake = FakeSocket.instances[FakeSocket.instances.length - 1];
+  fake.serverOpen();
+  socket.sentenceBoundary(true, "sentence-key-1");
+  const boundary = fake.sent.map((s) => JSON.parse(s)).find((m) => m.type === "sentence.boundary");
+  assert.deepEqual(boundary, { type: "sentence.boundary", save_history: true, client_key: "sentence-key-1" });
+  socket.close();
+});

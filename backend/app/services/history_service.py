@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 from app.core.config import Settings
 from app.core.errors import AuthError, HistoryUnavailableError, NotFoundError
 from app.core.security import AuthenticatedUser
-from app.domain.translation.entities import HistoryRecord, NewHistoryRecord, Direction, ResultType
+from app.domain.translation.entities import NewHistorySentence, SessionRecord
 from app.infrastructure.database.repositories.translation_repository import (
     SupabaseTranslationRepository,
     TranslationRepository,
@@ -46,55 +46,88 @@ class HistoryService:
     def __init__(self, repository: TranslationRepository):
         self._repo = repository
 
-    async def try_record(self, user: AuthenticatedUser, record: NewHistoryRecord) -> Optional[str]:
-        """Save a record; return its id, or None if saving failed (never raises). Deprecated shape; see add_word_recognition."""
+    # ------------------------------------------------------------- recording
+    async def record_sentence(
+        self, user: AuthenticatedUser, record: NewHistorySentence
+    ) -> Tuple[str, bool]:
+        """Persist one completed sentence. Returns (session_id, duplicated). Raises on failure."""
+        session_id, _, duplicated = await self._repo.record_sentence(user, record)
+        return session_id, duplicated
+
+    async def try_record_sentence(
+        self, user: AuthenticatedUser, record: NewHistorySentence
+    ) -> Optional[str]:
+        """Save a sentence; return its session id, or None if saving failed (never raises)."""
         try:
-            return (await self._repo.add(user, record)).id
+            session_id, _ = await self.record_sentence(user, record)
+            return session_id
         except Exception as exc:  # noqa: BLE001 -- history must not break translation
             _log_failure("record", exc)
             return None
 
-    async def try_record_word(self, user: AuthenticatedUser, record: NewHistoryRecord) -> Optional[str]:
-        """Save a session + message row; return the session id or None (never raises)."""
+    async def try_record_sentence_checked(
+        self, user: AuthenticatedUser, record: NewHistorySentence
+    ) -> Tuple[bool, Optional[str]]:
+        """Like try_record_sentence but also returns a compact error string on failure."""
         try:
-            return await self._repo.add_word_recognition(user, record)
+            await self.record_sentence(user, record)
+            return True, None
         except Exception as exc:  # noqa: BLE001 -- history must not break translation
             _log_failure("record", exc)
-            return None
-
-    async def try_record_word_checked(
-        self, user: AuthenticatedUser, record: NewHistoryRecord
-    ) -> tuple[bool, Optional[str]]:
-        """Like try_record_word but also returns a compact error string on failure.
-
-        Returns (saved: bool, history_error: str | None).
-        history_error format: "<step>:<http_status>:<pg_code>" — never contains tokens or payload text.
-        """
-        try:
-            result = await self._repo.add_word_recognition(user, record)
-            return result is not None, None
-        except Exception as exc:  # noqa: BLE001
-            _log_failure("record", exc)
-            step = (getattr(exc, "step", None) or "unknown").replace(" ", "_")
+            step = getattr(exc, "step", None) or "record"
             status = getattr(exc, "status", None)
-            pg_code = getattr(exc, "pg_code", None)
-            return False, f"{step}:{status}:{pg_code}"
+            code = getattr(exc, "pg_code", None)
+            return False, f"{step.replace(' ', '_')}:{status}:{code}"
 
-    async def list(self, user: AuthenticatedUser, limit: int, offset: int) -> Tuple[List[HistoryRecord], int]:
+    async def close_session(self, user: AuthenticatedUser, session_key: str) -> None:
+        """Best-effort: mark the interaction's history session completed. Never raises."""
         try:
-            return await self._repo.list(user, limit, offset)
+            await self._repo.close_session(user, session_key)
+        except Exception as exc:  # noqa: BLE001 -- best-effort bookkeeping
+            _log_failure("close", exc)
+
+    # --------------------------------------------------------------- listing
+    async def list(
+        self,
+        user: AuthenticatedUser,
+        limit: int,
+        offset: int,
+        direction: Optional[str] = None,
+        query: Optional[str] = None,
+        order: str = "newest",
+    ) -> Tuple[List[SessionRecord], int]:
+        try:
+            return await self._repo.list_sessions(user, limit, offset, direction, query, order)
         except Exception as exc:
             _log_failure("list", exc)
             raise
 
-    async def delete(self, user: AuthenticatedUser, record_id: str) -> None:
+    async def get(self, user: AuthenticatedUser, session_id: str) -> SessionRecord:
         try:
-            deleted = await self._repo.delete(user, record_id)
+            session = await self._repo.get_session(user, session_id)
+        except Exception as exc:
+            _log_failure("get", exc)
+            raise
+        if session is None:
+            raise NotFoundError("Translation session not found.")
+        return session
+
+    # --------------------------------------------------------------- deletion
+    async def delete(self, user: AuthenticatedUser, session_id: str) -> None:
+        try:
+            deleted = await self._repo.delete_session(user, session_id)
         except Exception as exc:
             _log_failure("delete", exc)
             raise
         if not deleted:
-            raise NotFoundError("History entry not found.")
+            raise NotFoundError("Translation session not found.")
+
+    async def delete_many(self, user: AuthenticatedUser, ids: List[str]) -> int:
+        try:
+            return await self._repo.delete_sessions(user, ids)
+        except Exception as exc:
+            _log_failure("bulk delete", exc)
+            raise
 
     async def clear(self, user: AuthenticatedUser) -> int:
         try:
@@ -104,7 +137,7 @@ class HistoryService:
             raise
 
     async def selfcheck(self, user: AuthenticatedUser) -> dict:
-        """Insert a session titled 'selfcheck' and one message, read them back, delete both."""
+        """Record a sentence, read the session back, delete it; step-by-step status."""
         try:
             return await self._repo.selfcheck(user)
         except Exception as exc:  # noqa: BLE001

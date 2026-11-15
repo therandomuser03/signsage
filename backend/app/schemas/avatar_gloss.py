@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field
 class AvatarGlossRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
     save_history: bool = True  # only takes effect for signed-in users
+    # Idempotency/session scope: client_session_key groups sentences of one
+    # interaction; client_key dedupes retries of the same finalized sentence.
+    client_session_key: Optional[str] = Field(None, max_length=64)
+    client_key: Optional[str] = Field(None, max_length=64)
 
 
 class AvatarGlossResponse(BaseModel):

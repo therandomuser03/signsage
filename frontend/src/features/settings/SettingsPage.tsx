@@ -240,7 +240,7 @@ export default function SettingsPage() {
             backend receives numerical landmark representations.
           </p>
           <p>
-            Saved signs are history records. Deleting them here removes
+            Saved translations are history records. Deleting them here removes
             them everywhere.
           </p>
         </div>
@@ -278,7 +278,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-medium">Delete all history</p>
               <p className="text-sm text-foreground/55">
-                Removes every saved translation, including saved signs.
+                Removes every saved translation.
               </p>
             </div>
             <AlertDialog>
@@ -289,7 +289,7 @@ export default function SettingsPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete all history?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Every saved translation and saved sign will be
+                    Every saved translation will be
                     permanently removed. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>

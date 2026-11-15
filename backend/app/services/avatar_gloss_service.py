@@ -105,12 +105,16 @@ async def _groq_gloss(text: str, settings: Settings, vocabulary: FrozenSet[str])
         return None
 
     system, user = _build_prompt(text, vocabulary)
-    body = {
+    body: dict = {
         "model": settings.groq_model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        # Reasoning models (gpt-oss/qwen) need headroom for hidden reasoning
+        # tokens or they return empty content; 256 fits a short gloss list.
+        "max_tokens": 256,
         "temperature": 0,
-        "max_tokens": 64,
     }
+    if any(tag in settings.groq_model for tag in ("gpt-oss", "qwen")):
+        body["reasoning_effort"] = "low"
     headers = {"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"}
     url = f"{settings.groq_base_url.rstrip('/')}/chat/completions"
 

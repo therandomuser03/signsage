@@ -6,7 +6,7 @@ Verified authority: `docs/MASTER.md`, `docs/STATUS_AND_ROADMAP.md`, `docs/develo
 - Frontend: React + TypeScript + Vite (`frontend/src/`). Browser-side MediaPipe Holistic extraction (`landmarks.ts`), WebSocket `/ws/translate`, REST endpoints (`endpoints.ts`).
 - Backend: FastAPI (`backend/app/`), Python 3.13, `.venv`. WebSocket translation (`api/websocket/translation.py`), REST health/capabilities/models (`api/routes/`).
 - ML pipeline: adapter registry (`app/ml/adapters/`), preprocessing (`normalization.py`, `landmarks.py`), inference (`continuous_sign.py`, `decoder.py`).
-- Auth: Supabase JWT (`auth/v1/user`), RLS (`migrations/001_translation_sessions.sql`), history isolation per user.
+- Auth: Supabase JWT (`auth/v1/user`), RLS (`migrations/001_translation_sessions.sql`, `migrations/002_history_sessions.sql`), history isolation per user; translation history is session-based (one interaction = one `translation_sessions` row; completed sentences in `translation_messages`).
 - Deployment: `render.yaml`, Docker (`Dockerfile`, `fetch_bundle.sh`), no baked weights.
 
 ## Key contracts (pinned in `docs/architecture/end-to-end-contract.md`)

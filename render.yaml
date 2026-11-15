@@ -48,10 +48,16 @@ services:
       # Required only when SIGNSAGE_BUNDLE_URL points to a private HF Hub repo.
       - key: SIGNSAGE_HF_TOKEN
         sync: false
-      # Optional: Supabase (auth/history), Groq/Ollama (avatar gloss).
+      # Optional: Supabase (auth/history), Groq/Ollama (avatar gloss, TTS).
       - key: SIGNSAGE_SUPABASE_URL
         sync: false
       - key: SIGNSAGE_SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: SIGNSAGE_GROQ_API_KEY
         sync: false
+      # Auto-Speak TTS (Orpheus). Defaults are fine; groq is used only when the
+      # GROQ key above is set. Set SIGNSAGE_TTS_PROVIDER=browser to disable backend TTS.
+      - key: SIGNSAGE_TTS_PROVIDER
+        value: "auto"
+      - key: SIGNSAGE_GROQ_TTS_VOICE
+        value: "hannah"

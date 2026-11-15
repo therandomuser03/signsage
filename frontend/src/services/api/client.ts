@@ -1,7 +1,8 @@
 import type {
   AvatarGlossRequest, AvatarGlossResponse, AvatarVocabularyResponse, CapabilitiesResponse,
+  BulkDeleteRequest,
   ComposeRequest, ComposeResponse, DeletedResponse, HealthResponse, HistoryListResponse,
-  HistorySelfcheckResponse,
+  HistorySelfcheckResponse, HistorySessionDetail,
   ImageClassifyRequest, ImageClassifyResponse, LandmarkFramePayload, MeResponse, ModelsResponse,
   SentenceRecognitionResponse,
   SignToTextRequest, SignToTextResponse, VideoTranslationResponse, WordRecognitionResponse,
@@ -102,15 +103,60 @@ export class ApiClient {
   word = (req: { frames: LandmarkFramePayload[]; true_label?: string }, opts?: RequestOpts) =>
     this.request<WordRecognitionResponse>("POST", endpoints.word, req, opts);
 
-  sentence = (req: { frames: LandmarkFramePayload[]; save_history?: boolean }, opts?: RequestOpts) =>
+  /** Proxy for the backend /api/v1/speech/speak endpoint (Groq Orpheus when
+   *  configured; 503 otherwise — callers fall back to browser speech). */
+  speakWav = async (text: string, voice?: string): Promise<Blob> => {
+    const path = endpoints.speechSpeak;
+    const token = this.getAccessToken ? await this.getAccessToken() : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await this.fetchImpl(this.baseUrl + path, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(voice ? { text, voice } : { text }),
+    });
+    if (!res.ok) {
+      let code: string | undefined;
+      try {
+        const body = (await res.json()) as { code?: string };
+        code = body?.code;
+      } catch {
+        /* ignore non-JSON error bodies */
+      }
+      throw new ApiError(
+        res.status,
+        code ?? (res.status === 422 ? "VALIDATION_ERROR" : "HTTP_ERROR"),
+        "Speech service unavailable.",
+      );
+    }
+    return res.blob();
+  };
+
+  sentence = (
+    req: { frames: LandmarkFramePayload[]; save_history?: boolean; client_session_key?: string; client_key?: string },
+    opts?: RequestOpts,
+  ) =>
     this.request<SentenceRecognitionResponse>("POST", endpoints.sentence, req, opts);
 
   compose = (req: ComposeRequest, opts?: RequestOpts) =>
     this.request<ComposeResponse>("POST", endpoints.compose, req, opts);
 
-  listHistory = (limit = 20, offset = 0) =>
-    this.request<HistoryListResponse>("GET", `${endpoints.history}?limit=${limit}&offset=${offset}`);
+  listHistory = (
+    limit = 20,
+    offset = 0,
+    opts: { direction?: "sign_to_text" | "text_to_sign"; q?: string; sort?: "newest" | "oldest" } = {},
+  ) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (opts.direction) params.set("direction", opts.direction);
+    if (opts.q) params.set("q", opts.q);
+    if (opts.sort) params.set("sort", opts.sort);
+    return this.request<HistoryListResponse>("GET", `${endpoints.history}?${params.toString()}`);
+  };
+  getHistorySession = (id: string) =>
+    this.request<HistorySessionDetail>("GET", endpoints.historyItem(id));
   deleteHistoryItem = (id: string) => this.request<DeletedResponse>("DELETE", endpoints.historyItem(id));
+  deleteHistoryItems = (ids: string[]) =>
+    this.request<DeletedResponse>("POST", endpoints.historyBulkDelete, { ids } satisfies BulkDeleteRequest);
   clearHistory = () => this.request<DeletedResponse>("DELETE", endpoints.history);
   historySelfcheck = () => this.request<HistorySelfcheckResponse>("GET", endpoints.historySelfcheck);
 }

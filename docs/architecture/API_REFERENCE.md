@@ -9,9 +9,17 @@ Verified contracts: `docs/architecture/end-to-end-contract.md` (authoritative pi
 - `POST /api/v1/translation/sign-to-text` → `SignToTextRequest/Response`. 503 `MODEL_NOT_PROMOTED` when gate closed (correct behavior — not 500, not fabricated output).
 - `POST /api/v1/classification/image?task=alphabet` → `label` (A-Z), `confidence`, `accepted`, `reason`, `model_version=signsage-image-alphabet`.
 - `POST /api/v1/classification/image?task=word` → 20-class word; unpromoted.
+- `POST /api/v1/speech/speak` → `{text, voice?}` → `audio/wav` (Groq Orpheus, `canopylabs/orpheus-v1-english`, ≤200 chars, voices autumn/diana/hannah/austin/daniel/troy). Rate-limited per client (`SIGNSAGE_RATE_LIMIT_TTS`, default 9/min). 503 `TTS_UNAVAILABLE` when unconfigured, over the character limit, rate-limited, or the provider fails → frontend falls back to browser Web Speech voices. Requires one-time terms acceptance for the model in the Groq console (org admin).
 - `POST /api/v1/text-to-sign` → gloss IDs (`HELLO`, `THANK_YOU`, etc.) from 14-sign vocabulary. Deterministic mapping; never invents IDs.
 - `GET /api/v1/auth/me` → user info or 401 (`UNAUTHORIZED`).
-- `GET /api/v1/history` → user-isolated translation history; requires auth; 401 without.
+- `GET /api/v1/history` → user-isolated, session-based translation history; requires auth; 401 without. Supports `limit`, `offset`, `direction`, `q`, `sort`. Sessions embed their completed sentences.
+- `GET /api/v1/history/{id}` → one session with its sentences, chronologically ordered; 404 for another user's id.
+- `DELETE /api/v1/history/{id}` → delete one session (sentences cascade); 404 for another user's id.
+- `POST /api/v1/history/bulk-delete` → `{"ids": [...]}` deletes the caller's own sessions among the ids.
+- `DELETE /api/v1/history` → delete ALL of the caller's sessions (and sentences).
+- `POST /api/v1/translation/word` → isolated-word recognition (gated by `SIGNSAGE_WORD_MODE_ENABLED` + `word_model/`); returns `word, confidence, accepted, top3, threshold, model_version, status`.
+- `POST /api/v1/translation/sentence` → phrase capture → ordered glosses → English sentence; `method` is `llm` (Groq, constrained to the signed words) or `fallback` (rule-based/comma-join; the LLM can never add content words — output is guard-checked, unverifiable output falls back to comma-join).
+- `POST /api/v1/translation/compose` → same composition from a client-held word list; `save_history` + `client_session_key`/`client_key` group sentences under one session (idempotent writes).
 
 ## WebSocket (`/ws/translate` — unversioned)
 - Auth first message: `{"type":"auth"}` with JWT from Supabase.

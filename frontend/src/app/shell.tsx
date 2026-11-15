@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  Bookmark,
   History,
   House,
   Languages,
@@ -61,7 +60,6 @@ const INTERPRET_NAV = [
 
 const LIBRARY_NAV = [
   { to: "/app/translation-log", label: "Translation Log", icon: History },
-  { to: "/app/custom-glossary", label: "Custom Glossary", icon: Bookmark },
 ];
 
 const TITLES: Record<string, string> = {
@@ -69,7 +67,6 @@ const TITLES: Record<string, string> = {
   "/app/interpreter": "Live Interpreter",
   "/app/generator": "Sign Generator",
   "/app/translation-log": "Translation Log",
-  "/app/custom-glossary": "Custom Glossary",
   "/app/settings": "Settings",
 };
 

@@ -204,7 +204,7 @@ def test_sentence_history_saved_true_for_signed_in_user(make_client, monkeypatch
     body = response.json()
     assert body["history_saved"] is True
     repo = get_memory_repository()
-    sessions = repo._sessions.get("sentences", [])
+    sessions = [s for s in repo._sessions.values() if s["user_id"] == "sentences"]
     assert len(sessions) == 1
     messages = repo._messages.get(sessions[0]["id"], [])
     assert len(messages) == 1

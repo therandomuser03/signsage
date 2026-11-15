@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsx --test src/services/websocket/connection.test.ts src/services/websocket/client.test.ts src/features/translate/sessionStatus.test.ts src/features/translate/gestureCatalog.test.ts src/features/translate/phrase.test.ts src/features/translate/visibility.test.ts src/features/translate/wordVocab.test.ts src/features/text-to-sign/services/proceduralSigns.test.ts src/features/text-to-sign/services/assetExists.test.ts src/features/text-to-sign/services/shouldUseVrm.test.ts src/features/text-to-sign/signUi.test.ts src/features/text-to-sign/hooks/useSpeechInput.test.ts src/services/api/client.test.ts src/features/auth/googleOAuth.test.ts src/features/translate/details.test.ts src/features/translate/autoSegmenter.test.ts",
+    "test": "tsx --test src/services/websocket/connection.test.ts src/services/websocket/client.test.ts src/features/translate/sessionStatus.test.ts src/features/translate/phrase.test.ts src/features/translate/visibility.test.ts src/features/translate/wordVocab.test.ts src/features/text-to-sign/services/proceduralSigns.test.ts src/features/text-to-sign/services/assetExists.test.ts src/features/text-to-sign/services/shouldUseVrm.test.ts src/features/text-to-sign/signUi.test.ts src/features/text-to-sign/hooks/useSpeechInput.test.ts src/services/api/client.test.ts src/features/auth/googleOAuth.test.ts src/features/translate/details.test.ts src/features/translate/speech.test.ts src/features/translate/autoSegmenter.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

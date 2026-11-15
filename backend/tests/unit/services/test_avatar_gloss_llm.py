@@ -43,7 +43,7 @@ async def test_groq_success_is_used_and_request_is_well_formed(monkeypatch):
     assert r.gloss == ["HELLO", "THANK_YOU"] and r.source == "llm:groq"
     assert seen["url"] == "https://api.groq.com/openai/v1/chat/completions"
     assert seen["auth"] == "Bearer gsk_test"
-    assert seen["json"]["model"] == "llama-3.3-70b-versatile"
+    assert seen["json"]["model"] == "openai/gpt-oss-20b"
     assert VOCAB <= VOCAB  # sanity
 
 

@@ -8,6 +8,8 @@ export const endpoints = {
   history: "/api/v1/history",
   historySelfcheck: "/api/v1/history/selfcheck",
   historyItem: (id: string) => `/api/v1/history/${encodeURIComponent(id)}`,
+  historyBulkDelete: "/api/v1/history/bulk-delete",
+  speechSpeak: "/api/v1/speech/speak",
   signToText: "/api/v1/translation/sign-to-text",
   avatarGloss: "/api/v1/text-to-sign",
   avatarVocabulary: "/api/v1/text-to-sign/vocabulary",

@@ -6,8 +6,9 @@ import {
   Info,
   Pause,
   Play,
+  LifeBuoy,
+  Loader2,
   PlugZap,
-  Speaker,
   Square,
   Volume2,
   VolumeX,
@@ -67,7 +68,19 @@ import {
   transportLabel,
 } from "./sessionStatus";
 import { HolisticExtractor, type HolisticFrame } from "./landmarks";
-import { BrowseSignsSheet } from "./gestureCatalog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
+import { useSpeech } from "./speech";
+import { InterpretationPanel, type InterpretationStatus } from "./InterpretationPanel";
 import { loadPrefs } from "@/features/settings/preferences";
 
 type Phase =
@@ -166,6 +179,10 @@ export default function TranslatePage() {
   const streamRef = useRef<MediaStream | null>(null);
   const extractorRef = useRef<HolisticExtractor | null>(null);
   const socketRef = useRef<TranslationSocket | null>(null);
+  // New key per translation interaction (start → stop). Grouping key for
+  // session-based history: all sentences of one interaction, even across
+  // socket reconnects, land on one history session.
+  const historySessionIdRef = useRef<string | null>(null);
   const rafRef = useRef(0);
   const lastSendRef = useRef(0);
   const lastDetectRef = useRef(0);
@@ -187,7 +204,7 @@ export default function TranslatePage() {
   const [modelError, setModelError] = useState<string | null>(null);
   const [results, setResults] = useState<TranslationTextMessage[]>([]);
   const [partial, setPartial] = useState<TranslationTextMessage | null>(null);
-  const [browseOpen, setBrowseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [framesSent, setFramesSent] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
@@ -225,6 +242,8 @@ export default function TranslatePage() {
   const [wordConfidences, setWordConfidences] = useState<number[]>([]);
   const [wordCountdown, setWordCountdown] = useState(0);
   const [composedSentence, setComposedSentence] = useState<string | null>(null);
+  const [composedMethod, setComposedMethod] = useState<string | null>(null);
+  const [composedSignCount, setComposedSignCount] = useState<number | null>(null);
   const wordRafRef = useRef(0);
   const wordLastDetectRef = useRef(0);
   const wordFramesRef = useRef<HolisticFrame[]>([]);
@@ -243,8 +262,6 @@ export default function TranslatePage() {
   const [composedHistorySaved, setComposedHistorySaved] = useState<boolean | null>(null);
   const [composeHistoryError, setComposeHistoryError] = useState<string | null>(null);
   const [phraseHistorySaved, setPhraseHistorySaved] = useState<boolean | null>(null);
-  /** Snapshot of the Settings save-history preference (read at mount). */
-  const [saveHistory] = useState(() => loadPrefs().saveHistory);
   /** Selected phrase duration in ms (6 / 10 / 15 s). */
   const [phraseDurationMs, setPhraseDurationMs] = useState(PHRASE_RECORD_DURATION_MS);
   /** Remaining seconds during phrase recording (shown next to End early). */
@@ -294,13 +311,8 @@ export default function TranslatePage() {
   const pumpAutoRef = useRef<() => void>(() => {});
   const makeSentenceRef = useRef<(opts?: { clearWordsAfter?: boolean }) => void>(() => {});
 
-  // --- Voice output for the composed sentence (browser speech synthesis) ---
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const [autoSpeak, setAutoSpeak] = useState(false);
-  /** True once window.speechSynthesis is present and voices are loaded. */
-  const [speechReady, setSpeechReady] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
+  // --- Speech engine (Groq Orpheus via backend, browser fallback) ---
+  const speech = useSpeech();
 
   // --- Static image classification (REST, alphabet / word) ---
   const [imageClassifyMode, setImageClassifyMode] = useState(false);
@@ -501,6 +513,9 @@ export default function TranslatePage() {
     const socket = new TranslationSocket({
       url: config.wsUrl,
       getAccessToken,
+      // Sent with the auth message; stable across reconnects of this
+      // interaction so history groups all of its sentences into one session.
+      getHistorySessionId: () => historySessionIdRef.current,
       // Bounded auto-reconnect: the backend keeps per-connection state, so a
       // reconnect starts a fresh backend session. close() cancels retries.
       maxReconnectAttempts: 5,
@@ -522,6 +537,10 @@ export default function TranslatePage() {
           setResults((prev) => [msg, ...prev]);
           if (msg.accepted && msg.text) {
             setAcceptedSigns((prev) => [...prev, msg.text]);
+            // Auto-Speak speaks FINAL translations only, deduped by text.
+            if (loadPrefs().autoSpeak) {
+              void speech.speak(msg.text, { dedupe: true });
+            }
           }
         } else {
           setPartial(msg);
@@ -591,6 +610,9 @@ export default function TranslatePage() {
     framesSentRef.current = 0;
     setFramesSent(0);
     everOpenRef.current = false;
+    // A new translation interaction begins: fresh history-session scope.
+    // (Reconnects within this interaction keep the same key.)
+    historySessionIdRef.current = crypto.randomUUID();
     // A new session must never present the previous session's final as
     // current: drop stale results, partials, and model errors here.
     setResults([]);
@@ -647,7 +669,8 @@ export default function TranslatePage() {
     disableAutoMode();
     const socket = socketRef.current;
     if (socket && socket.status === "open" && framesSentRef.current > 0) {
-      socket.sentenceBoundary(loadPrefs().saveHistory);
+      // Fresh client key: retrying the same stop() never double-saves the sentence.
+      socket.sentenceBoundary(loadPrefs().saveHistory, crypto.randomUUID());
     }
     cancelAnimationFrame(rafRef.current);
     extractorRef.current?.close();
@@ -655,6 +678,7 @@ export default function TranslatePage() {
     socketRef.current?.close();
     socketRef.current = null;
     stopTracks();
+    historySessionIdRef.current = null;
     setPartial(null);
     setElapsed(0);
     lastDetectRef.current = 0;
@@ -837,7 +861,15 @@ export default function TranslatePage() {
 
     const requestPayload = {
       frames: frames?.map((f) => ({ landmarks: f.landmarks })) ?? [],
-      ...(captureKind === "phrase" ? { save_history: loadPrefs().saveHistory } : {}),
+      ...(captureKind === "phrase"
+        ? {
+            save_history: loadPrefs().saveHistory,
+            ...(historySessionIdRef.current
+              ? { client_session_key: historySessionIdRef.current }
+              : {}),
+            client_key: crypto.randomUUID(),
+          }
+        : {}),
       ...(trueLabel ? { true_label: trueLabel } : {}),
     };
     const payloadSize = JSON.stringify(requestPayload).length;
@@ -980,48 +1012,13 @@ export default function TranslatePage() {
     setWordResult(null);
     setWordError(null);
     setComposedSentence(null);
+    setComposedMethod(null);
+    setComposedSignCount(null);
     setPhraseResult(null);
     setComposedHistorySaved(null);
     setPhraseHistorySaved(null);
     setComposeHistoryError(null);
     setLastDetails(null);
-  }, []);
-
-  const speak = useCallback(
-    (text: string) => {
-      const synth = synthRef.current;
-      if (!synth || !speechReady) return;
-      synth.cancel(); // cancel anything in progress first
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      const voices = synth.getVoices();
-      for (const pref of ["en-IN", "en-GB", "en-US"]) {
-        const voice = voices.find((v) => v.lang.startsWith(pref));
-        if (voice) {
-          utterance.lang = voice.lang;
-          break;
-        }
-      }
-      utteranceRef.current = utterance;
-      utterance.onend = () => {
-        setSpeaking(false);
-        utteranceRef.current = null;
-      };
-      utterance.onerror = () => {
-        setSpeaking(false);
-        utteranceRef.current = null;
-      };
-      setSpeaking(true);
-      synth.speak(utterance);
-    },
-    [speechReady],
-  );
-
-  const stopSpeaking = useCallback(() => {
-    const synth = synthRef.current;
-    if (synth) synth.cancel();
-    setSpeaking(false);
-    utteranceRef.current = null;
   }, []);
 
   const makeSentence = useCallback(async (opts?: { clearWordsAfter?: boolean }) => {
@@ -1037,11 +1034,15 @@ export default function TranslatePage() {
         words: wordList,
         confidences: wordConfidences,
         save_history: loadPrefs().saveHistory,
+        client_session_key: historySessionIdRef.current ?? undefined,
+        client_key: crypto.randomUUID(),
       }, {
         retries: 1,
         timeoutMs: 60_000,
       });
       setComposedSentence(result.sentence);
+      setComposedMethod(result.method ?? null);
+      setComposedSignCount(wordList.length);
       setComposedHistorySaved(result.history_saved ?? false);
       setComposeHistoryError(result.history_error ?? null);
       // Keep the last 5 sentences for this session; the auto-mode panel renders them.
@@ -1086,33 +1087,6 @@ export default function TranslatePage() {
       }
     });
   }, []);
-
-  // Voice output: feature-detect and load voices asynchronously.
-  useEffect(() => {
-    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
-    synthRef.current = synth ?? null;
-    if (!synth) {
-      setSpeechReady(false);
-      return undefined;
-    }
-    const onVoicesChanged = () => {
-      setSpeechReady(synth.getVoices().length > 0);
-    };
-    onVoicesChanged();
-    if (synth.getVoices().length === 0) {
-      synth.addEventListener("voiceschanged", onVoicesChanged);
-    }
-    return () => {
-      synth.cancel();
-      synth.removeEventListener("voiceschanged", onVoicesChanged);
-    };
-  }, []);
-
-  // Auto-speak the composed sentence when toggled on (default off).
-  useEffect(() => {
-    if (!autoSpeak || !composedSentence || !speechReady) return;
-    speak(composedSentence);
-  }, [autoSpeak, composedSentence, speechReady]);
 
   // --- Auto mode wiring: lifecycle, serial /word queue, countdown line ---
   // Latest values for the segmenter creation (enableAutoMode reads refs).
@@ -1297,13 +1271,36 @@ export default function TranslatePage() {
     makeSentenceRef.current = makeSentence;
   }, [makeSentence]);
 
+  // --- Interpretation derivation (unified panel feed) ---
+  const phraseSentence = phraseResult?.accepted ? phraseResult.sentence : null;
+  const currentSentence = composedSentence ?? phraseSentence;
+  const usingPhrase = !composedSentence && phraseSentence !== null;
+  const interpretationStatus: InterpretationStatus = wordProcessing
+    ? "composing"
+    : currentSentence
+      ? "composed"
+      : phraseResult && !phraseResult.accepted
+        ? "failed"
+        : wordList.length > 0
+          ? "recognising"
+          : "waiting";
+  const interpretationProvenance = {
+    method: usingPhrase ? (phraseResult?.method ?? null) : composedMethod,
+    signs: usingPhrase ? (phraseResult?.gloss_sequence?.length ?? null) : composedSignCount,
+    model: usingPhrase ? (phraseResult?.model_version ?? null) : null,
+    saved: usingPhrase ? (phraseHistorySaved ?? null) : (composedHistorySaved ?? null),
+    historyError: usingPhrase ? (phraseResult?.history_error ?? null) : composeHistoryError,
+  };
+  const interpretationGlosses = usingPhrase ? (phraseResult?.gloss_sequence ?? null) : null;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-semibold tracking-tight">Live Interpreter</h1>
-          <p className="mt-1 max-w-2xl text-sm text-foreground/55">
-            Camera preview with a limited rule-based recognizer (5 static hand shapes). For the trained model (8 words plus a rest (no-sign) class), use Word recognition.
+          <p className="mt-1 max-w-xl text-sm leading-6 text-foreground/55">
+            Sign in front of the camera and SignSage interprets your signs. Use Word recognition for
+            the trained model, or Basic preview for the 5-shape demo recognizer.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -1312,9 +1309,10 @@ export default function TranslatePage() {
             variant="outline"
             size="sm"
             className="rounded-full px-4"
-            onClick={() => setBrowseOpen(true)}
+            onClick={() => setHelpOpen(true)}
           >
-            Browse Signs
+            <LifeBuoy aria-hidden="true" />
+            Help
           </Button>
           <Button
             type="button"
@@ -1598,6 +1596,9 @@ export default function TranslatePage() {
         )}
         </div>
         <div className="flex min-h-64 flex-col rounded-xl border border-foreground/10 bg-card lg:col-span-2 lg:min-h-0">
+          <p className="border-b border-foreground/10 px-4 pb-2 pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/45">
+            Recognition mode
+          </p>
           <Tabs
             value={activeTab}
             onValueChange={(v) => setTab(v as InterpreterTab)}
@@ -1605,7 +1606,7 @@ export default function TranslatePage() {
           >
             <TabsList className="mx-4 mt-3 grid w-[calc(100%-2rem)] grid-cols-2">
               <TabsTrigger value="word">Word recognition</TabsTrigger>
-              <TabsTrigger value="rule">Basic preview (5 shapes)</TabsTrigger>
+              <TabsTrigger value="rule">Basic preview</TabsTrigger>
             </TabsList>
 
             <TabsContent value="word" className="flex-1 px-4 pb-4 pt-2">
@@ -1626,7 +1627,7 @@ export default function TranslatePage() {
                         Trained model
                       </p>
                       <span
-                        className="max-w-45 truncate text-[10px] text-foreground/40"
+                        className="max-w-40 truncate text-[10px] text-foreground/40"
                         title={capabilities?.word_recognition_label}
                       >
                         {capabilities?.word_recognition_label}
@@ -1784,21 +1785,14 @@ export default function TranslatePage() {
                     </div>
                   )}
 
-                  {!running && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-fit rounded-full"
-                      disabled={busy}
-                      onClick={() => void start()}
-                    >
-                      <Play aria-hidden="true" />
-                      Start camera
-                    </Button>
-                  )}
+                  {/* Start/stop lives on the camera stage and the session bar — no third button here. */}
 
-                  {/* Record controls */}
+                  {/* Sentence construction */}
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+                      Sentence construction
+                    </p>
+                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
@@ -1897,49 +1891,6 @@ export default function TranslatePage() {
                     </div>
                   )}
 
-                  {/* Experimental phrase capture: ordered gloss chips + composed sentence */}
-                  {phraseResult && (
-                    <div className="rounded-md border border-green-500/25 bg-green-50/50 px-3 py-2">
-                      <p className="text-xs font-semibold text-green-700 mb-1">
-                        Interpretation of recognised words (experimental)
-                      </p>
-                      {phraseResult.accepted && phraseResult.gloss_sequence.length > 0 ? (
-                        <>
-                          <div className="flex flex-wrap gap-2 mb-2" aria-label="Recognised words">
-                            {phraseResult.gloss_sequence.map((g, i) => (
-                              <Badge
-                                key={`${g.gloss}-${i}`}
-                                variant="secondary"
-                                className="px-3 py-1 text-sm"
-                              >
-                                {g.gloss}
-                              </Badge>
-                            ))}
-                          </div>
-                          <p className="text-sm text-green-900">{phraseResult.sentence}</p>
-                          <p className="mt-1 text-xs text-green-700/70">
-                            Method: {phraseResult.method === "llm" ? "AI-composed from the sign sequence" : "rule-based from the sign sequence"}
-                            {" · "}glosses {phraseResult.gloss_sequence.map((g) => g.gloss).join(", ")}
-                          </p>
-                          {saveHistory && phraseHistorySaved !== null && (
-                            <p className="mt-1 text-[11px] text-green-700/70">
-                              {phraseHistorySaved
-                                ? "Saved to history"
-                                : phraseResult.history_error
-                                  ? `Not saved: ${phraseResult.history_error}`
-                                  : "Not saved (sign in to save history)"}
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <p className="text-sm text-foreground/60">
-                          Didn't catch that, please try again.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Last recognition result */}
                   {wordResult && (
                     <div className="rounded-md bg-foreground/5 px-3 py-2">
                       <p className="text-xs font-semibold text-foreground/60 mb-1">
@@ -2060,61 +2011,15 @@ export default function TranslatePage() {
                     </div>
                   )}
 
-                  {/* Composed sentence */}
-                  {composedSentence && (
-                    <div className="rounded-md bg-green-50/50 border border-green-500/25 px-3 py-2">
-                      <p className="text-xs font-semibold text-green-700 mb-1">
-                        Interpretation of recognised words
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <p className="text-sm text-green-900 flex-1">{composedSentence}</p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={!speechReady}
-                          onClick={() => {
-                            stopSpeaking();
-                            speak(composedSentence);
-                          }}
-                          title={
-                            speechReady
-                              ? undefined
-                              : "Voice not available in this browser"
-                          }
-                        >
-                          {speaking ? <VolumeX size={14} /> : <Speaker size={14} />}
-                          {speaking ? "Stopping…" : "Speak"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={autoSpeak ? "default" : "outline"}
-                          onClick={() => setAutoSpeak((prev) => !prev)}
-                          aria-pressed={autoSpeak}
-                          title={
-                            speechReady
-                              ? undefined
-                              : "Voice not available in this browser"
-                          }
-                        >
-                          {autoSpeak ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                          {autoSpeak ? "Auto-speak on" : "Auto-speak off"}
-                        </Button>
-                      </div>
-                      <p className="mt-1 text-xs text-green-700/70">
-                        Method: composed from {wordList.length} recognised word(s)
-                      </p>
-                      {saveHistory && composedHistorySaved !== null && (
-                        <p className="mt-1 text-[11px] text-green-700/70">
-                          {composedHistorySaved
-                            ? "Saved to history"
-                            : composeHistoryError
-                              ? `Not saved: ${composeHistoryError}`
-                              : "Not saved (sign in to save history)"}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {/* Unified interpretation panel: sentence + audio output */}
+                  <InterpretationPanel
+                    sentence={currentSentence}
+                    status={interpretationStatus}
+                    provenance={interpretationProvenance}
+                    glossSequence={interpretationGlosses}
+                    emptyHint={interpretationStatus === "failed" ? "Didn't catch that, please try again." : undefined}
+                    speech={speech}
+                  />
 
                   {/* Dev-only labeled capture panel (VITE_CAPTURE_MODE === "true"). Hidden entirely otherwise. */}
                   {captureEnabled && capabilities?.word_recognition_enabled && (
@@ -2229,6 +2134,41 @@ export default function TranslatePage() {
                             ? "Partial result from the live window — keep signing; press Stop to finalize."
                             : `accepted · ${display.result_type} · ${scoreLabel} ${display.confidence.toFixed(2)}`}
                         </p>
+                        {!showingPartial && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="rounded-full"
+                              disabled={speech.speechState === "loading"}
+                              onClick={() => {
+                                if (speech.speechState === "speaking" || speech.speechState === "loading") {
+                                  speech.stop();
+                                } else {
+                                  void speech.speak(display.text);
+                                }
+                              }}
+                              title="Speak this interpretation"
+                            >
+                              {speech.speechState === "loading" ? (
+                                <Loader2 aria-hidden="true" className="animate-spin" />
+                              ) : speech.speechState === "speaking" ? (
+                                <VolumeX aria-hidden="true" />
+                              ) : (
+                                <Volume2 aria-hidden="true" />
+                              )}
+                              {speech.speechState === "speaking" ? "Stop" : "Speak"}
+                            </Button>
+                            <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground/70">
+                              <Switch
+                                checked={speech.prefs.autoSpeak}
+                                onCheckedChange={(v) => speech.setAutoSpeak(v === true)}
+                                aria-label="Auto-Speak final interpretations"
+                              />
+                              Auto-Speak
+                            </label>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>
@@ -2430,7 +2370,26 @@ export default function TranslatePage() {
         </div>
       )}
 
-      <BrowseSignsSheet open={browseOpen} onOpenChange={setBrowseOpen} />
+      <AlertDialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Indian Sign Language Reference</AlertDialogTitle>
+            <AlertDialogDescription>
+              Need help learning or checking an Indian Sign Language gesture? Visit the
+              Indian Sign Language Portal, which provides a searchable collection of ISL
+              signs with reference images and videos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => window.open("https://indiansignlanguage.org/", "_blank", "noopener,noreferrer")}
+            >
+              Visit ISL Portal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

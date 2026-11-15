@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-_FUNCTION_WORDS = frozenset({"is", "are", "am", "the", "a", "i"})
+_FUNCTION_WORDS = frozenset({"is", "are", "am", "the", "a", "i", "can", "could"})
 # Forbidden adjacent token pairs / endings the LLM must never produce.
 _FORBIDDEN_BIGRAMS = {("is", "a"), ("a", "the"), ("the", "a"), ("is", "is")}
 _MAX_WORDS = 8  # cap on recognised words fed to the composer
@@ -94,10 +94,11 @@ def guard_llm_output(output: str, input_words: list[str]) -> str | None:
     All must hold, else None:
       * non-empty; no digits, quotes or markdown
       * every output token is an input word or a function word
-        ({is, are, am, the, a, I})
-      * every input word appears in the output, in the same order and with
-        the same count
-      * at most len(input) + 3 output words
+        ({is, are, am, the, a, i, can, could})
+      * every input word appears in the output with the same count;
+        content-word reordering is allowed (gloss order != English order),
+        but no input word may be dropped or duplicated
+      * at most len(input) + 4 output words
       * no word immediately repeated in the output
       * none of: "is a", "a the", "the a", "is is", "a ."
     """
@@ -114,9 +115,11 @@ def guard_llm_output(output: str, input_words: list[str]) -> str | None:
     if any(t not in allowed for t in low):
         return None
     # Input word budget.
-    if len(low) > len(input_words) + 3:
+    if len(low) > len(input_words) + 4:
         return None
-    # Every input word in the output, same order, same count.
+    # Count preservation: every input word appears exactly as often as in
+    # the input. Reordering is allowed (English word order differs from ISL
+    # gloss order); dropped or duplicated content words are not.
     input_low = [w.lower() for w in input_words]
     from collections import Counter
 
@@ -125,10 +128,6 @@ def guard_llm_output(output: str, input_words: list[str]) -> str | None:
     for word, needed in input_count.items():
         if output_count.get(word, 0) != needed:
             return None
-    # Order: input must be a subsequence of the output tokens.
-    it = iter(low)
-    if not all(any(t == w for t in it) for w in input_low):
-        return None
     # No word immediately repeated.
     if any(low[i] == low[i + 1] for i in range(len(low) - 1)):
         return None

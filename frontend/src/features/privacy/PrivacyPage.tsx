@@ -26,6 +26,11 @@ const SECTIONS = [
     body: "Each processed frame becomes 543 points — body pose, facial mesh, and both hands — each with x, y, and z coordinates. This numerical representation is what travels to the backend for interpretation. It describes movement geometry, not appearance: no faces, no rooms, no backgrounds.",
   },
   {
+    value: "groq",
+    title: "Third-party AI services (Groq)",
+    body: "Recognised words and composed sentences may be sent to Groq to refine sentences and generate speech. Camera video is never sent in the live path; only hand, body and face landmarks are.",
+  },
+  {
     value: "translation",
     title: "Translation data",
     body: "When saving is enabled, the backend stores the text result of a translation — input text, output text, direction, confidence, and model version. When saving is off, results live only in the current session and disappear when you leave. You control this per session from Settings.",
@@ -38,7 +43,7 @@ const SECTIONS = [
   {
     value: "control",
     title: "Your control",
-    body: "Camera access can be revoked at any time in the browser. Saving can be switched off in Settings. History and saved signs can be deleted individually or wiped entirely from History and Settings. There is no hidden retention: what the interface lets you delete is actually deleted.",
+    body: "Camera access can be revoked at any time in the browser. Saving can be switched off in Settings. Saved history entries can be deleted individually or wiped entirely from History and Settings. There is no hidden retention: what the interface lets you delete is actually deleted.",
   },
 ];
 

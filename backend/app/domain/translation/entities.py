@@ -1,10 +1,10 @@
 """Translation domain entities."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 
 class Direction(str, Enum):
@@ -36,29 +36,80 @@ class TranslationResult:
 
 
 @dataclass
-class NewHistoryRecord:
+class NewHistorySentence:
+    """One completed/finalized sentence to persist, scoped to a session.
+
+    Nothing here is an intermediate prediction. Intermediate model output
+    never becomes a history row.
+
+    session_key: interaction-scoped idempotency key. All sentences sharing it
+        belong to one translation session. The repository get-or-creates the
+        session, so WebSocket reconnects / retries never fork a new session.
+        When unset, each sentence gets its own fresh session (one-shot
+        translations).
+    client_key: sentence-level idempotency key. A retry/duplicate delivery of
+        the same finalized sentence collapses instead of inserting twice.
+    """
     direction: Direction
     output_text: str
     result_type: ResultType
     model_version: str
     input_text: Optional[str] = None
-    confidence: Optional[float] = None
-    # Word-recognition session/message fields (optional; existing flows leave them unset).
     gloss: Optional[str] = None
-    sequence: Optional[int] = None
+    confidence: Optional[float] = None
+    session_key: Optional[str] = None
+    client_key: Optional[str] = None
     title: Optional[str] = None
-    status: Optional[str] = None
+    status: str = "open"
 
 
 @dataclass
-class HistoryRecord:
+class SentenceRecord:
+    id: str
+    session_id: str
+    sequence_number: int
+    direction: Direction
+    input_text: Optional[str]
+    output_text: str
+    gloss: Optional[str]
+    confidence: Optional[float]
+    model_version: str
+    result_type: ResultType
+    created_at: datetime
+
+
+@dataclass
+class SessionRecord:
     id: str
     user_id: str
     direction: Direction
-    output_text: str
-    result_type: ResultType
-    model_version: str
+    title: Optional[str]
+    status: str
     created_at: datetime
-    input_text: Optional[str] = None
-    confidence: Optional[float] = None
-    title: Optional[str] = None
+    ended_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    sentences: List[SentenceRecord] = field(default_factory=list)
+
+    @property
+    def sentence_count(self) -> int:
+        return len(self.sentences)
+
+    @property
+    def first_sentence(self) -> Optional[SentenceRecord]:
+        return self.sentences[0] if self.sentences else None
+
+    @property
+    def model_version(self) -> str:
+        """Model of the first recorded sentence, or '' when unknown."""
+        first = self.first_sentence
+        return first.model_version if first else ""
+
+    @property
+    def result_type(self) -> ResultType:
+        first = self.first_sentence
+        return first.result_type if first else ResultType.MODEL
+
+    @property
+    def preview(self) -> str:
+        first = self.first_sentence
+        return first.output_text if first else (self.title or "")

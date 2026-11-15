@@ -70,6 +70,10 @@ export interface ComposeRequest {
   words: string[];
   confidences?: number[];
   save_history?: boolean;
+  /** Interaction-scoped idempotency key: groups sentences of one interaction. */
+  client_session_key?: string;
+  /** Per-sentence idempotency key: retries of one finalized sentence collapse. */
+  client_key?: string;
 }
 
 export interface ComposeResponse {
@@ -102,6 +106,8 @@ export interface MeResponse {
 export interface AvatarGlossRequest {
   text: string;
   save_history?: boolean;
+  client_session_key?: string;
+  client_key?: string;
 }
 
 export interface AvatarGlossResponse {
@@ -124,6 +130,8 @@ export interface SignToTextRequest {
   min_motion?: number | null;
   min_confidence?: number | null;
   save_history?: boolean;
+  client_session_key?: string;
+  client_key?: string;
 }
 
 export interface SignToTextResponse {
@@ -136,23 +144,51 @@ export interface SignToTextResponse {
   history_id?: string | null;
 }
 
-export interface HistoryItem {
-  id: string;
+/** One completed sentence inside a translation session. */
+export interface HistorySentence {
+  sequence_number: number;
   direction: Direction;
   input_text?: string | null;
+  /** Original gloss sequence, when available. */
+  gloss?: string | null;
   output_text: string;
   confidence?: number | null;
   model_version: string;
   result_type: ResultType;
   created_at: string;
+}
+
+/** One translation interaction. The History page lists these. */
+export interface HistorySessionSummary {
+  id: string;
+  direction: Direction;
   title?: string | null;
+  status: string;
+  created_at: string;
+  ended_at?: string | null;
+  /** Number of completed sentences in this session. */
+  sentence_count: number;
+  /** First sentence of the session (or its title when empty). */
+  preview: string;
+  /** Model of the first recorded sentence ('' when unknown). */
+  model_version: string;
+  result_type: ResultType;
+}
+
+export interface HistorySessionDetail extends HistorySessionSummary {
+  /** All completed sentences, chronologically ordered. */
+  sentences: HistorySentence[];
 }
 
 export interface HistoryListResponse {
-  items: HistoryItem[];
+  items: HistorySessionSummary[];
   total: number;
   limit: number;
   offset: number;
+}
+
+export interface BulkDeleteRequest {
+  ids: string[];
 }
 
 export interface DeletedResponse {

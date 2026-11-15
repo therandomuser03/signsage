@@ -8,6 +8,9 @@ export interface TranslationSocketOptions {
   url: string;
   /** Optional. If it returns a token, the socket authenticates right after opening (enables history). */
   getAccessToken?: () => Promise<string | null>;
+  /** Optional. Interaction-scoped key sent in the auth message: every sentence
+   *  of this interaction is grouped into ONE history session, even across reconnects. */
+  getHistorySessionId?: () => string | null | undefined;
   onTranslation: (message: TranslationTextMessage) => void;
   onError?: (message: ErrorMessage) => void;
   onAuthenticated?: (userId: string) => void;
@@ -66,8 +69,12 @@ export class TranslationSocket {
     return this.post({ type: "landmarks.frame", landmarks });
   }
 
-  sentenceBoundary(saveHistory = true): boolean {
-    return this.post({ type: "sentence.boundary", save_history: saveHistory });
+  sentenceBoundary(saveHistory = true, clientKey?: string): boolean {
+    return this.post({
+      type: "sentence.boundary",
+      save_history: saveHistory,
+      ...(clientKey ? { client_key: clientKey } : {}),
+    });
   }
 
   private post(message: ClientMessage): boolean {
@@ -76,7 +83,13 @@ export class TranslationSocket {
 
   private async authenticate(): Promise<void> {
     const token = this.opts.getAccessToken ? await this.opts.getAccessToken() : null;
-    if (token) this.post({ type: "auth", access_token: token });
+    if (!token) return;
+    const historySessionId = this.opts.getHistorySessionId?.();
+    this.post({
+      type: "auth",
+      access_token: token,
+      ...(historySessionId ? { history_session_id: historySessionId } : {}),
+    });
   }
 
   private handle(data: string): void {

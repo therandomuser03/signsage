@@ -124,6 +124,8 @@ privacy, limitations, and app entry — never advertise unsupported accuracy.
 | 543 image-space landmarks | Pose + face + hands, minus duplicated world block | Adopted |
 | `video_id` split | Blocks same-video segment leakage | Adopted |
 | Groq → Ollama → deterministic gloss fallback | Graceful degradation | Adopted |
+| Optional backend TTS (Groq Orpheus) → browser Web Speech fallback | Natural voice without shipping keys to the browser; never hard-fails | Adopted (2026-11-15) |
+| LLM-constrained sentence composer (rules → guarded Groq → comma-join) | Signed words can never be invented; degradation is deterministic | Adopted |
 | Notebook separate from serving | Different lifecycles/reproducibility needs | Adopted |
 | No raw-camera upload / relay / photoreal avatar / high-stakes use | Privacy-by-construction; deferred/out of scope | Adopted / Deferred / Out of scope |
 

@@ -84,6 +84,11 @@ class HistoryUnavailableError(SignSageError):
         self.pg_message = pg_message
 
 
+class TtsUnavailableError(SignSageError):
+    code = "TTS_UNAVAILABLE"
+    status_code = 503
+
+
 class NotFoundError(SignSageError):
     code = "NOT_FOUND"
     status_code = 404

@@ -44,6 +44,8 @@ def make_client(monkeypatch):
         monkeypatch.setenv("SIGNSAGE_SUPABASE_URL", "https://test.supabase.co")
         monkeypatch.setenv("SIGNSAGE_SUPABASE_PUBLISHABLE_KEY", "pub")
         monkeypatch.setenv("SIGNSAGE_HISTORY_BACKEND", "memory")
+        # Hermetic: never hit the real Groq API from integration tests.
+        monkeypatch.setenv("SIGNSAGE_GROQ_API_KEY", "")
         monkeypatch.setenv("SIGNSAGE_MODEL_PROMOTED", "false")
         monkeypatch.setenv("SIGNSAGE_ALLOW_UNPROMOTED_DEV", "true")
         monkeypatch.setattr(
@@ -123,7 +125,7 @@ def test_compose_saves_history_for_signed_in_user(make_client):
     assert body["sentence"] == "Hello, help, me."
     assert body["method"] == "fallback"
 
-    sessions = repo._sessions.get("user1", [])
+    sessions = [s for s in repo._sessions.values() if s["user_id"] == "user1"]
     assert len(sessions) == 1
     assert sessions[0]["direction"] == "sign_to_text"
     assert sessions[0]["status"] == "completed"
@@ -195,7 +197,7 @@ def test_compose_confidence_clamped(make_client):
     body = response.json()
     assert body["sentence"] == "Water."
 
-    sessions = repo._sessions.get("user2", [])
+    sessions = [s for s in repo._sessions.values() if s["user_id"] == "user2"]
     assert len(sessions) == 1
     messages = repo._messages.get(sessions[0]["id"], [])
     assert len(messages) == 1
@@ -218,7 +220,7 @@ def test_compose_no_confidences_means_null_confidence(make_client):
     )
     assert response.status_code == 200
 
-    sessions = repo._sessions.get("user3", [])
+    sessions = [s for s in repo._sessions.values() if s["user_id"] == "user3"]
     assert len(sessions) == 1
     messages = repo._messages.get(sessions[0]["id"], [])
     assert len(messages) == 1

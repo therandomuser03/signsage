@@ -120,7 +120,9 @@ def test_landmark_component_order_matches_backend():
     "app.schemas.avatar_gloss:AvatarVocabularyResponse",
     "app.schemas.translation:SignToTextRequest", "app.schemas.translation:SignToTextResponse",
     "app.schemas.translation:LandmarkFramePayload",
-    "app.schemas.history:HistoryItem", "app.schemas.history:HistoryListResponse", "app.schemas.history:DeletedResponse",
+    "app.schemas.history:HistorySessionSummary", "app.schemas.history:HistorySessionDetail",
+    "app.schemas.history:HistorySentence", "app.schemas.history:HistoryListResponse",
+    "app.schemas.history:BulkDeleteRequest", "app.schemas.history:DeletedResponse",
     "app.schemas.common:ErrorResponse",
 ])
 def test_every_backend_schema_field_is_declared_in_frontend_types(model_path):
