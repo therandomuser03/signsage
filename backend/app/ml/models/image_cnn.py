@@ -15,6 +15,8 @@ from typing import Optional
 import torch
 from torch import nn
 
+from app.ml.device import resolve_torch_device
+
 
 class SmallImageCNN(nn.Module):
     def __init__(self, n_classes: int, img_size: int = 64, n_channels: int = 3):
@@ -71,7 +73,8 @@ class SmallImageCNN(nn.Module):
         if not labels_path.is_file():
             raise FileNotFoundError(f"Labels file not found: {labels_path}")
 
-        payload = torch.load(model_path, map_location=device or "cpu")
+        torch_device = resolve_torch_device(device)
+        payload = torch.load(model_path, map_location=torch_device)
         if "state_dict" not in payload or "model_config" not in payload:
             raise ValueError("Checkpoint is missing 'state_dict'/'model_config'.")
 
@@ -89,7 +92,7 @@ class SmallImageCNN(nn.Module):
         index_to_label = {int(v): k for k, v in label_to_index.items()}
         classes = labels["classes"]
 
-        torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        torch_device = resolve_torch_device(device)
         model.to(torch_device)
 
         return cls._BundleModel(model=model, device=torch_device,

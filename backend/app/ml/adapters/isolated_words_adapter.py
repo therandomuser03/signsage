@@ -6,7 +6,7 @@ Evaluation from metadata.json: NO-GO (accuracy 0.611, not signer-independent).
 Not promoted to production translation pipeline.
 """
 from __future__ import annotations
-import json, sys, os
+import json, sys, os, warnings
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +14,7 @@ import numpy as np
 import torch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from isolated_words import IsolatedWordNet, prepare_isolated_features, MIN_CONFIDENCE, FEATURE_VERSION, FRAME_COUNT
+from device import resolve_torch_device
 
 class IsolatedWordAdapterError(RuntimeError):
     pass
@@ -33,7 +34,12 @@ class IsolatedWordAdapter:
         self.n_classes = len(self.labels)
         self.feature_version = meta.get("feature_version", FEATURE_VERSION)
         self.confidence_threshold = confidence_threshold
-        self.device = torch.device(device if (torch.cuda.is_available() or device == "cpu") else "cpu")
+        self.device = resolve_torch_device(device)
+        # Resolved "cuda" (or cuda:N) on a box without CUDA falls back to cpu,
+        # as before, instead of crashing in .to().
+        if self.device.type == "cuda" and not torch.cuda.is_available():
+            warnings.warn("CUDA requested but unavailable; using CPU.")
+            self.device = torch.device("cpu")
         self.model = IsolatedWordNet(self.n_classes)
         state_path = self.bundle_dir / "model.pt"
         state = torch.load(str(state_path), map_location=self.device, weights_only=False)

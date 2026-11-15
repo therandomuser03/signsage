@@ -37,6 +37,7 @@ from app.core.errors import SignSageError
 from app.core.ratelimit import rate_limit_dependency
 from app.core.security import AuthenticatedUser
 from app.domain.translation.entities import Direction, NewHistoryRecord, ResultType
+from app.ml.device import resolve_torch_device
 from app.ml.word_classifier_adapter import WordClassifierAdapter, WordClassificationResult, resolve_word_model_dir
 from app.ml.word_sequence import WordSequencePipeline
 from app.services.gloss_composer import compose_words
@@ -119,6 +120,7 @@ def load_word_adapter_at_startup(settings: Settings) -> None:
     global _word_adapter, _word_adapter_loaded, _word_adapter_dir
     if not settings.word_mode_enabled:
         return
+    logger.info("WORD_MODE: device=%s", resolve_torch_device(settings.device))
     model_dir = resolve_word_model_dir(settings)
     if _word_adapter_loaded and _word_adapter_dir == model_dir:
         return

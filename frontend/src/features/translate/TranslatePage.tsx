@@ -3,6 +3,7 @@ import {
   Camera,
   CircleAlert,
   Eraser,
+  Info,
   Pause,
   Play,
   PlugZap,
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/tabs";
 import { config } from "@/app/config";
 import { apiClient, NetworkError } from "@/services/api/instance";
+import { ApiError } from "@/services/api/errors";
 import { getAccessToken, onAuthChange } from "@/services/supabase/auth";
 import { TranslationSocket } from "@/services/websocket/client";
 import type { ConnectionStatus } from "@/services/websocket/connection";
@@ -34,13 +36,20 @@ import type { TranslationTextMessage } from "@/services/websocket/protocol";
 import type {
   CapabilitiesResponse,
   ImageClassifyResponse,
+  LandmarkFramePayload,
   VideoTranslationResponse,
   WordRecognitionResponse,
   SentenceRecognitionResponse,
 } from "@/types/api";
 import { showSignPhraseButton } from "@/features/translate/phrase";
 import { showLegacyUpload, showWordRecognitionCard } from "@/features/translate/visibility";
-import { type CaptureDetails, detailsToJson } from "@/features/translate/details";
+import { type CaptureDetails, detailsToJson, formatDetailsCompact } from "@/features/translate/details";
+import {
+  AUTO_SEGMENTER_DEFAULTS,
+  AutoSegmenter,
+  type AutoEvent,
+  type SegmentStats,
+} from "./autoSegmenter";
 import {
   defaultInterpreterTab,
   splitWordVocab,
@@ -76,6 +85,59 @@ const DETECT_INTERVAL_MS = 80; // MediaPipe runs far faster than the backend can
 const WORD_RECORD_DURATION_MS = 2500; // 2.5 s capture window
 const PHRASE_RECORD_DURATION_MS = 10_000; // 10 s capture window for the experimental "Sign a phrase" flow
 const WORD_COUNTDOWN_SECONDS = 3;
+
+/** One auto-mode segment's detail entry (extends the capture Details shape). */
+interface SegmentLogEntry extends CaptureDetails {
+  handFrames: number;
+  durationMs: number;
+}
+interface QueuedSegment {
+  frames: LandmarkFramePayload[];
+  stats: SegmentStats;
+}
+/** Build a Details-compatible log entry for one auto-mode segment. */
+function buildSegmentLogEntry(
+  frames: LandmarkFramePayload[],
+  stats: SegmentStats,
+  overlay: {
+    roundTripMs: number;
+    predictedLabel?: string | null;
+    confidence?: number;
+    threshold?: number;
+    accepted?: boolean;
+    top3?: Array<{ label: string; probability: number }>;
+    modelVersion?: string;
+    status: string;
+  },
+): SegmentLogEntry {
+  let leftPresent = 0;
+  let rightPresent = 0;
+  for (const f of frames) {
+    const lm = f.landmarks;
+    const left = lm.slice(501, 522).some((p) => p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
+    const right = lm.slice(522, 543).some((p) => p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
+    if (left) leftPresent += 1;
+    if (right) rightPresent += 1;
+  }
+  const n = Math.max(frames.length, 1);
+  return {
+    kind: "word",
+    framesCaptured: stats.frames,
+    effectiveFps: stats.durationMs > 0 ? (stats.frames * 1000) / stats.durationMs : 0,
+    leftHandFraction: leftPresent / n,
+    rightHandFraction: rightPresent / n,
+    roundTripMs: overlay.roundTripMs,
+    predictedLabel: overlay.predictedLabel ?? null,
+    confidence: overlay.confidence ?? 0,
+    threshold: overlay.threshold,
+    accepted: overlay.accepted ?? false,
+    top3: overlay.top3 ?? [],
+    modelVersion: overlay.modelVersion,
+    status: overlay.status,
+    handFrames: stats.handFrames,
+    durationMs: stats.durationMs,
+  };
+}
 
 function drawOverlay(
   canvas: HTMLCanvasElement,
@@ -193,6 +255,45 @@ export default function TranslatePage() {
   /** Last completed capture details for the Details disclosure panel. */
   const [lastDetails, setLastDetails] = useState<CaptureDetails | null>(null);
 
+  // --- Auto mode (hands-free) for the Word tab ---
+  // Uses the existing camera/HolisticExtractor pipeline and the existing
+  // /word + /compose endpoints; the segmenter is a pure timestamped state
+  // machine (see autoSegmenter.ts). Auto mode is off by default.
+  const [autoMode, setAutoMode] = useState(false);
+  const [autoGapMs, setAutoGapMs] = useState(AUTO_SEGMENTER_DEFAULTS.gapMs);
+  const [autoSentencePauseMs, setAutoSentencePauseMs] = useState(
+    AUTO_SEGMENTER_DEFAULTS.sentencePauseMs,
+  );
+  const [autoSettingsOpen, setAutoSettingsOpen] = useState(false);
+  /** Displayed auto-mode state line — recomputed 4x/s while Auto mode is on. */
+  const [autoStateLine, setAutoStateLine] = useState("Waiting for a sign");
+  /** Small muted per-segment note (e.g. "Didn't catch that"). */
+  const [autoNote, setAutoNote] = useState<string | null>(null);
+  /** Set on HTTP 429 / network failure: Auto mode pauses for 5 s. */
+  const [autoPausedMessage, setAutoPausedMessage] = useState<string | null>(null);
+  /** Last 10 auto segments (includes rejected ones). */
+  const [segmentLog, setSegmentLog] = useState<SegmentLogEntry[]>([]);
+  const [inflightCount, setInflightCount] = useState(0);
+  const [queuedCount, setQueuedCount] = useState(0);
+  /** Last 5 composed sentences, newest first — kept while mounted. */
+  const [recentSentences, setRecentSentences] = useState<
+    Array<{ sentence: string; saved: boolean | null }>
+  >([]);
+  const autoSegRef = useRef<AutoSegmenter | null>(null);
+  const autoModeRef = useRef(autoMode);
+  /** Serial /word queue: at most 3 waiting segments (+ 1 in flight). */
+  const autoQueueRef = useRef<QueuedSegment[]>([]);
+  const autoInflightRef = useRef(0);
+  const autoPausedRef = useRef(false);
+  /** Bumped on toggle/teardown so in-flight responses are dropped. */
+  const autoGenerationRef = useRef(0);
+  const gapRef = useRef(autoGapMs);
+  const pauseRef = useRef(autoSentencePauseMs);
+  /** Callback held in a ref so the RAF loop (stable) can invoke fresh closures. */
+  const handleAutoEventRef = useRef<(ev: AutoEvent) => void>(() => {});
+  const pumpAutoRef = useRef<() => void>(() => {});
+  const makeSentenceRef = useRef<(opts?: { clearWordsAfter?: boolean }) => void>(() => {});
+
   // --- Voice output for the composed sentence (browser speech synthesis) ---
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -302,6 +403,21 @@ export default function TranslatePage() {
     }
 
     if (!frame) return;
+
+    // Auto mode: feed every detected frame, including hands-absent ones
+    // (the gap of absence is what closes a segment).
+    if (
+      autoModeRef.current &&
+      !autoPausedRef.current &&
+      phaseRef.current === "live" &&
+      autoSegRef.current
+    ) {
+      const events = autoSegRef.current.pushFrame({
+        tMs: now,
+        landmarks: frame.landmarks,
+      });
+      for (const ev of events) handleAutoEventRef.current(ev);
+    }
 
     if (phaseRef.current !== "live") return;
     if (frame.detected) setLastSeenAt(Date.now());
@@ -489,6 +605,35 @@ export default function TranslatePage() {
     rafRef.current = requestAnimationFrame(loop);
   }, [connectSocket, loop]);
 
+  // The toggle handler owns create/destroy (event handlers may set state);
+  // stop() calls disableAutoMode too — clearing buffers and timers.
+  const enableAutoMode = useCallback(() => {
+    autoGenerationRef.current += 1;
+    autoModeRef.current = true;
+    autoSegRef.current = new AutoSegmenter({
+      gapMs: gapRef.current,
+      sentencePauseMs: pauseRef.current,
+    });
+    setAutoMode(true);
+  }, []);
+
+  const disableAutoMode = useCallback(() => {
+    autoGenerationRef.current += 1;
+    autoModeRef.current = false;
+    autoSegRef.current = null;
+    autoQueueRef.current = [];
+    autoInflightRef.current = 0;
+    autoPausedRef.current = false;
+    setAutoMode(false);
+    setQueuedCount(0);
+    setInflightCount(0);
+    setAutoNote(null);
+    setAutoPausedMessage(null);
+    setSegmentLog([]);
+    setAutoSettingsOpen(false);
+    setAutoStateLine("Waiting for a sign");
+  }, []);
+
   const pause = useCallback(() => {
     if (phaseRef.current === "live") setPhase("paused");
   }, []);
@@ -498,6 +643,8 @@ export default function TranslatePage() {
   }, []);
 
   const stop = useCallback(() => {
+    // Stopping the camera tears down Auto mode entirely (buffers, timers).
+    disableAutoMode();
     const socket = socketRef.current;
     if (socket && socket.status === "open" && framesSentRef.current > 0) {
       socket.sentenceBoundary(loadPrefs().saveHistory);
@@ -512,7 +659,7 @@ export default function TranslatePage() {
     setElapsed(0);
     lastDetectRef.current = 0;
     setPhase("idle");
-  }, [stopTracks]);
+  }, [stopTracks, disableAutoMode]);
 
   const clearResults = useCallback(() => {
     setResults([]);
@@ -877,8 +1024,13 @@ export default function TranslatePage() {
     utteranceRef.current = null;
   }, []);
 
-  const makeSentence = useCallback(async () => {
-    if (wordList.length === 0) return;
+  const makeSentence = useCallback(async (opts?: { clearWordsAfter?: boolean }) => {
+    if (wordList.length === 0) {
+      // Nothing to compose; disarm the auto-mode pause clock too so a
+      // manually emptied list can't re-fire sentenceDue forever.
+      autoSegRef.current?.resetAcceptedWords();
+      return;
+    }
     setComposedSentence(null);
     try {
       const result = await apiClient.compose({
@@ -892,6 +1044,17 @@ export default function TranslatePage() {
       setComposedSentence(result.sentence);
       setComposedHistorySaved(result.history_saved ?? false);
       setComposeHistoryError(result.history_error ?? null);
+      // Keep the last 5 sentences for this session; the auto-mode panel renders them.
+      setRecentSentences((prev) =>
+        [{ sentence: result.sentence, saved: result.history_saved ?? false }, ...prev].slice(0, 5),
+      );
+      // The accepted words are consumed into this sentence — the auto-mode
+      // pause countdown disarms until the next segment closes.
+      autoSegRef.current?.resetAcceptedWords();
+      if (opts?.clearWordsAfter) {
+        setWordList([]);
+        setWordConfidences([]);
+      }
     } catch (err: any) {
       setWordError(
         err instanceof NetworkError
@@ -950,6 +1113,189 @@ export default function TranslatePage() {
     if (!autoSpeak || !composedSentence || !speechReady) return;
     speak(composedSentence);
   }, [autoSpeak, composedSentence, speechReady]);
+
+  // --- Auto mode wiring: lifecycle, serial /word queue, countdown line ---
+  // Latest values for the segmenter creation (enableAutoMode reads refs).
+  useEffect(() => {
+    gapRef.current = autoGapMs;
+    pauseRef.current = autoSentencePauseMs;
+    autoSegRef.current?.updateConfig({ gapMs: autoGapMs, sentencePauseMs: autoSentencePauseMs });
+  }, [autoGapMs, autoSentencePauseMs]);
+
+  // 5-second pause after HTTP 429 / network failure, then Auto mode resumes.
+  useEffect(() => {
+    if (!autoPausedMessage) return undefined;
+    autoPausedRef.current = true;
+    const id = window.setTimeout(() => {
+      setAutoPausedMessage(null);
+      autoPausedRef.current = false;
+    }, 5000);
+    return () => {
+      window.clearTimeout(id);
+      autoPausedRef.current = false;
+    };
+  }, [autoPausedMessage]);
+
+  // Re-render the state line 4x per second while Auto mode is on.
+  // setState happens only inside the interval (never synchronously).
+  useEffect(() => {
+    if (!autoMode) return undefined;
+    const compute = () => {
+      const seg = autoSegRef.current;
+      const phase = seg?.getPhase() ?? "waiting";
+      const remaining =
+        autoPausedMessage || phase !== "waiting" || !seg
+          ? null
+          : seg.getSentenceCountdownMs(performance.now());
+      const line = autoPausedMessage
+        ? `Paused — ${autoPausedMessage}`
+        : phase !== "waiting"
+          ? "Signing..."
+          : inflightCount > 0 || queuedCount > 0
+            ? "Recognising..."
+            : remaining !== null
+              ? `Sentence in ${(remaining / 1000).toFixed(1)}s`
+              : "Waiting for a sign";
+      setAutoStateLine(line);
+    };
+    const id = window.setInterval(compute, 250);
+    return () => window.clearInterval(id);
+  }, [autoMode, autoPausedMessage, inflightCount, queuedCount]);
+
+  const appendSegmentLog = useCallback((entry: SegmentLogEntry) => {
+    setSegmentLog((prev) => [entry, ...prev].slice(0, 10));
+  }, []);
+
+  const pumpAutoQueue = useCallback(async () => {
+    if (autoInflightRef.current > 0 || autoPausedRef.current) return;
+    const item = autoQueueRef.current.shift();
+    if (!item) {
+      setQueuedCount(0);
+      return;
+    }
+    autoInflightRef.current += 1;
+    setInflightCount(autoInflightRef.current);
+    setQueuedCount(autoQueueRef.current.length);
+    const generation = autoGenerationRef.current;
+    const t0 = performance.now();
+    const { frames, stats } = item;
+    try {
+      const result = await apiClient.word(
+        { frames },
+        { retries: 1, timeoutMs: 60_000 },
+      );
+      const roundTripMs = performance.now() - t0;
+      if (generation !== autoGenerationRef.current) return; // switched off mid-flight
+      appendSegmentLog(
+        buildSegmentLogEntry(frames, stats, {
+          roundTripMs,
+          predictedLabel: result.word,
+          confidence: result.confidence,
+          threshold: result.threshold,
+          accepted: result.accepted,
+          top3: result.top3,
+          modelVersion: result.model_version,
+          status: result.status,
+        }),
+      );
+      if (result.accepted && result.word) {
+        setWordList((prev) => [...prev, result.word!]);
+        setWordConfidences((prev) => [...prev, result.confidence]);
+        autoSegRef.current?.noteWordAccepted();
+        setAutoNote(null);
+      } else {
+        setAutoNote("Didn't catch that");
+      }
+    } catch (err: unknown) {
+      const roundTripMs = performance.now() - t0;
+      if (generation !== autoGenerationRef.current) return;
+      const isRateLimit = err instanceof ApiError && err.status === 429;
+      const message =
+        err instanceof NetworkError
+          ? "Server is waking up, please wait — try again."
+          : isRateLimit
+            ? (err as ApiError).message || "Too many requests — pausing Auto mode."
+            : err instanceof Error
+              ? err.message
+              : "Word recognition failed.";
+      appendSegmentLog(
+        buildSegmentLogEntry(frames, stats, {
+          roundTripMs,
+          status: isRateLimit
+            ? "rate_limited"
+            : err instanceof NetworkError
+              ? "network_error"
+              : "error",
+          accepted: false,
+        }),
+      );
+      if (isRateLimit || err instanceof NetworkError) {
+        // Rate limited or offline: drop the queued segments and pause.
+        autoQueueRef.current = [];
+        setQueuedCount(0);
+        setAutoPausedMessage(message);
+      }
+      setAutoNote(message);
+    } finally {
+      autoInflightRef.current = Math.max(0, autoInflightRef.current - 1);
+      setInflightCount(autoInflightRef.current);
+      pumpAutoRef.current();
+    }
+  }, [appendSegmentLog]);
+
+  useEffect(() => {
+    pumpAutoRef.current = () => {
+      void pumpAutoQueue();
+    };
+  }, [pumpAutoQueue]);
+
+  const enqueueAutoSegment = useCallback(
+    (segment: QueuedSegment) => {
+      if (autoPausedRef.current) return; // paused (429 / network): ignore segments
+      if (autoQueueRef.current.length >= 3) {
+        // Serial queue full (3 waiting + 1 in flight): skip this sign.
+        setAutoNote("Too busy — a sign was skipped.");
+        appendSegmentLog(
+          buildSegmentLogEntry(segment.frames, segment.stats, {
+            roundTripMs: 0,
+            status: "dropped_queue_full",
+            accepted: false,
+          }),
+        );
+        return;
+      }
+      autoQueueRef.current.push(segment);
+      setQueuedCount(autoQueueRef.current.length);
+      void pumpAutoQueue();
+    },
+    [appendSegmentLog, pumpAutoQueue],
+  );
+
+  const handleAutoEvent = useCallback(
+    (ev: AutoEvent) => {
+      if (ev.type === "sentenceDue") {
+        // Same function the Make sentence button uses; clears the word list on success.
+        void makeSentenceRef.current?.({ clearWordsAfter: true });
+        return;
+      }
+      if (ev.type === "segmentReady") {
+        enqueueAutoSegment({
+          frames: ev.frames.map((f) => ({
+            landmarks: f.landmarks as unknown as number[][],
+          })),
+          stats: ev.stats,
+        });
+      }
+    },
+    [enqueueAutoSegment],
+  );
+
+  useEffect(() => {
+    handleAutoEventRef.current = handleAutoEvent;
+  }, [handleAutoEvent]);
+  useEffect(() => {
+    makeSentenceRef.current = makeSentence;
+  }, [makeSentence]);
 
   return (
     <div className="space-y-5">
@@ -1303,6 +1649,141 @@ export default function TranslatePage() {
                     Sign one word at a time, then press Make sentence
                   </p>
 
+                  {/* Auto mode (hands-free) — visible only while the camera is running */}
+                  {running && (
+                    <div className="rounded-md border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-semibold text-foreground/80">
+                              Auto mode (hands-free)
+                            </p>
+                            {/* Settings popover: word gap + sentence pause */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                aria-label="Auto mode settings"
+                                aria-expanded={autoSettingsOpen}
+                                onClick={() => setAutoSettingsOpen((v) => !v)}
+                                className="rounded p-1 text-foreground/45 hover:bg-foreground/10 hover:text-foreground/70"
+                              >
+                                <Info size={14} aria-hidden="true" />
+                              </button>
+                              {autoSettingsOpen && (
+                                <div className="absolute left-0 z-20 mt-1 w-60 rounded-md border border-foreground/15 bg-card p-2.5 shadow-lg">
+                                  <label
+                                    htmlFor="auto-gap"
+                                    className="block text-[11px] font-medium text-foreground/70"
+                                  >
+                                    Word gap (lower hands between signs)
+                                  </label>
+                                  <select
+                                    id="auto-gap"
+                                    className="mt-1 w-full rounded border border-foreground/20 bg-background px-2 py-1 text-xs"
+                                    value={autoGapMs}
+                                    onChange={(e) => setAutoGapMs(Number(e.target.value))}
+                                  >
+                                    <option value={500}>0.5 s</option>
+                                    <option value={700}>0.7 s</option>
+                                    <option value={1000}>1.0 s</option>
+                                  </select>
+                                  <label
+                                    htmlFor="auto-pause"
+                                    className="mt-2 block text-[11px] font-medium text-foreground/70"
+                                  >
+                                    Sentence pause
+                                  </label>
+                                  <select
+                                    id="auto-pause"
+                                    className="mt-1 w-full rounded border border-foreground/20 bg-background px-2 py-1 text-xs"
+                                    value={autoSentencePauseMs}
+                                    onChange={(e) => setAutoSentencePauseMs(Number(e.target.value))}
+                                  >
+                                    <option value={1500}>1.5 s</option>
+                                    <option value={2000}>2 s</option>
+                                    <option value={3000}>3 s</option>
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <p className="mt-0.5 text-[11px] leading-snug text-foreground/55">
+                            Sign a word, lower your hands for about a second, then sign the next. After a 2-second pause the sentence appears.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={autoMode ? "default" : "outline"}
+                          aria-pressed={autoMode}
+                          onClick={() => (autoMode ? disableAutoMode() : enableAutoMode())}
+                          className="shrink-0 rounded-full"
+                        >
+                          {autoMode ? "On" : "Off"}
+                        </Button>
+                      </div>
+                      {autoMode && (
+                        <div className="mt-2 border-t border-foreground/10 pt-2">
+                          <p className="text-[11px] font-medium text-foreground/70" role="status" aria-live="polite">
+                            {autoStateLine}
+                          </p>
+                          {autoNote && (
+                            <p className="mt-0.5 text-[11px] text-foreground/50">{autoNote}</p>
+                          )}
+                          {recentSentences.length > 0 && (
+                            <div className="mt-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                                Recent sentences
+                              </p>
+                              <ul className="mt-0.5 space-y-0.5">
+                                {recentSentences.map((s, i) => (
+                                  <li key={`${i}-${s.sentence}`} className="text-[11px] leading-snug text-foreground/60">
+                                    {s.sentence}
+                                    {s.saved !== null && (
+                                      <span className="text-foreground/40">
+                                        {" "}· {s.saved ? "Saved" : "Not saved"}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {segmentLog.length > 0 && (
+                            <details className="mt-1.5 rounded-md border border-foreground/10 text-[11px]">
+                              <summary className="flex cursor-pointer select-none items-center justify-between gap-2 px-3 py-1.5 text-foreground/60 hover:text-foreground">
+                                <span>Segments ({segmentLog.length})</span>
+                                <button
+                                  type="button"
+                                  className="ml-auto rounded px-2 py-0.5 text-[10px] text-foreground/50 hover:bg-foreground/10"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    void navigator.clipboard?.writeText(
+                                      JSON.stringify(
+                                        segmentLog.map((d) => formatDetailsCompact(d)),
+                                        null,
+                                        2,
+                                      ),
+                                    );
+                                  }}
+                                >
+                                  Copy
+                                </button>
+                              </summary>
+                              <div className="max-h-36 space-y-0.5 overflow-y-auto px-3 pb-2 pt-1 font-mono text-[10px] text-foreground/60">
+                                {segmentLog.map((d, i) => (
+                                  <p key={i} className="whitespace-nowrap">
+                                    {d.framesCaptured} fr · {d.handFrames} hf · {d.durationMs} ms · rt {d.roundTripMs.toFixed(0)} ms · {d.predictedLabel ?? "—"} · {(d.confidence ?? 0).toFixed(2)} · {d.accepted ? "accepted" : "rejected"}
+                                  </p>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {!running && (
                     <Button
                       type="button"
@@ -1398,7 +1879,7 @@ export default function TranslatePage() {
                       variant="outline"
                       size="sm"
                       disabled={wordList.length === 0}
-                      onClick={makeSentence}
+                      onClick={() => void makeSentence()}
                     >
                       Make sentence
                     </Button>
@@ -1539,6 +2020,11 @@ export default function TranslatePage() {
                         {wordList.map((w, i) => (
                           <div key={i} className="flex items-center gap-1 bg-muted rounded-full px-3 py-1.5 text-xs">
                             <span className="font-medium">{w}</span>
+                            {autoMode && wordConfidences[i] !== undefined && (
+                              <span className="font-mono text-[10px] text-foreground/55">
+                                {wordConfidences[i].toFixed(2)}
+                              </span>
+                            )}
                             <Button
                               type="button"
                               variant="ghost"

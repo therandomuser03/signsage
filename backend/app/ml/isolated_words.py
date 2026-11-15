@@ -11,6 +11,11 @@ import numpy as np
 import torch
 from torch import nn
 
+try:
+    from app.ml.device import resolve_torch_device
+except ImportError:  # imported as top-level "isolated_words" by isolated_words_adapter's sys.path hack
+    from device import resolve_torch_device
+
 
 FEATURE_VERSION = "pose_hands_root_scale_v1"
 FRAME_COUNT = 64
@@ -137,7 +142,7 @@ class IsolatedWordAdapter:
         digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
         if digest != metadata.get("checkpoint_sha256"):
             raise ValueError("Isolated-word checkpoint checksum does not match metadata")
-        torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        torch_device = resolve_torch_device(device)
         payload = torch.load(checkpoint, map_location=torch_device, weights_only=True)
         model = IsolatedWordNet(len(labels)).to(torch_device)
         model.load_state_dict(payload["state_dict"])

@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from app.ml.device import resolve_torch_device
 from app.ml.preprocessing.sign_features_v3 import N_FRAMES as _V3_FRAMES
 from app.ml.preprocessing.sign_features_v3 import (
     FEAT_DIM as _V3_FEAT_DIM,
@@ -145,7 +146,7 @@ class WordClassifierAdapter:
         checkpoint = root / "model.pt"
         if not checkpoint.is_file():
             raise FileNotFoundError(f"word model checkpoint not found: {checkpoint}")
-        torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        torch_device = resolve_torch_device(device)
 
         # Load weights only (no arbitrary code execution).
         payload = torch.load(checkpoint, map_location=torch_device, weights_only=True)

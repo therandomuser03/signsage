@@ -19,6 +19,7 @@ from typing import Optional, List
 import numpy as np
 import torch
 from torch import nn
+from app.ml.device import resolve_torch_device
 from transformers import T5Config, T5ForConditionalGeneration, T5Tokenizer
 
 repo_root = Path(__file__).resolve().parents[4]
@@ -45,9 +46,10 @@ class ISLiMAdapter:
 
     def __init__(self, checkpoint_path: Optional[str | Path] = None,
                  device: str = "cpu", tokenizer_name: str = "t5-small"):
-        self.device = torch.device(device if (torch.cuda.is_available() or device == "cpu") or device == "cuda" else "cpu")
-        # If GPU unavailable but cuda requested, fall back safely
-        if device == "cuda" and not torch.cuda.is_available():
+        self.device = resolve_torch_device(device)
+        # Resolved "cuda" (or cuda:N) on a box without CUDA falls back to cpu,
+        # as before, instead of crashing in .to().
+        if self.device.type == "cuda" and not torch.cuda.is_available():
             warnings.warn("CUDA requested but unavailable; using CPU.")
             self.device = torch.device("cpu")
         visual_cfg = self.ENCODER_CFG.copy()

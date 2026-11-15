@@ -33,6 +33,26 @@ def test_adapter_loads_word_v3_bundle():
 
 
 @pytest.mark.skipif(not BUNDLE_DIR.is_dir(), reason="models/word_v3/ bundle not present")
+def test_adapter_loads_with_auto_device_and_golden_logits(monkeypatch):
+    # "auto" must resolve instead of crashing torch.device(). Force the
+    # no-CUDA branch so the test is deterministic on GPU machines too.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    adapter = WordClassifierAdapter.load(BUNDLE_DIR, device="auto")
+    assert adapter.device == torch.device("cpu")
+    arr = _golden_input()
+    result = adapter.classify(arr)
+    assert result.status == "ok"
+    assert result.label == "hello"
+    from app.ml.preprocessing.sign_features_v3 import extract_features as v3
+
+    features = v3(arr, layout="signsage")
+    with torch.inference_mode():
+        logits = adapter.model(torch.from_numpy(features[None]).float())[0]
+    expected = torch.tensor(_golden_logits())
+    assert torch.allclose(logits, expected, atol=1e-4), f"maxdiff={(logits - expected).abs().max().item():.2e}"
+
+
+@pytest.mark.skipif(not BUNDLE_DIR.is_dir(), reason="models/word_v3/ bundle not present")
 def test_golden_vector_reproduces_expected_logits():
     adapter = WordClassifierAdapter.load(BUNDLE_DIR, device="cpu")
     arr = _golden_input()

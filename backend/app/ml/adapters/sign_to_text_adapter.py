@@ -17,6 +17,7 @@ from typing import Optional
 import torch
 
 from app.ml.contracts.inference_contract import DeploymentContract
+from app.ml.device import resolve_torch_device
 from app.ml.inference.sign_to_text import greedy_decode_ids
 from app.ml.models.sign_to_text import SignTransformer
 from app.ml.postprocessing.confidence import compute_confidence, passes_acceptance_gate
@@ -104,7 +105,7 @@ class SignToTextAdapter:
 
         bundle_dir = Path(bundle_dir)
         contract = DeploymentContract.from_bundle(bundle_dir)
-        torch_device = torch.device(device) if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        torch_device = resolve_torch_device(device)
 
         checkpoint_path = bundle_dir / contract.model.checkpoint_path
         if not checkpoint_path.is_file():
