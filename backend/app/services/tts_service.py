@@ -1,7 +1,8 @@
 """Text-to-speech via Groq Orpheus (optional provider).
 
 Design rules:
-  * The Groq API key never leaves the backend (SIGNSAGE_GROQ_API_KEY).
+  * The Groq API key never leaves the backend. Uses SIGNSAGE_GROQ_TTS_API_KEY
+    when set (dedicated voice-model key), else SIGNSAGE_GROQ_API_KEY.
   * Only completed, user-visible interpretations are sent -- never
     intermediate predictions -- and the text is never logged.
   * Orpheus input is capped at 200 characters (provider limit); longer text
@@ -27,9 +28,14 @@ logger = logging.getLogger(__name__)
 GROQ_ORPHEUS_VOICES = frozenset({"autumn", "diana", "hannah", "austin", "daniel", "troy"})
 
 
+def _tts_api_key(settings: Settings) -> Optional[str]:
+    """The dedicated TTS key when set, else the shared Groq key."""
+    return settings.groq_tts_api_key or settings.groq_api_key
+
+
 def tts_provider_available(settings: Settings) -> bool:
     """True when the backend is configured to attempt a Groq synthesis."""
-    return settings.tts_provider in ("auto", "groq") and bool(settings.groq_api_key)
+    return settings.tts_provider in ("auto", "groq") and bool(_tts_api_key(settings))
 
 
 async def synthesize_speech(
@@ -45,8 +51,9 @@ async def synthesize_speech(
     """
     if settings.tts_provider == "browser":
         raise TtsUnavailableError("Browser TTS selected; backend provider is not used.")
-    if not settings.groq_api_key:
-        raise TtsUnavailableError("TTS provider is not configured (SIGNSAGE_GROQ_API_KEY).")
+    api_key = _tts_api_key(settings)
+    if not api_key:
+        raise TtsUnavailableError("TTS provider is not configured (SIGNSAGE_GROQ_TTS_API_KEY or SIGNSAGE_GROQ_API_KEY).")
 
     text = (text or "").strip()
     if not text:
@@ -67,7 +74,7 @@ async def synthesize_speech(
         "response_format": "wav",
     }
     headers = {
-        "Authorization": f"Bearer {settings.groq_api_key}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     url = settings.groq_base_url.rstrip("/") + "/audio/speech"

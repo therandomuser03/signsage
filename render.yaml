@@ -55,9 +55,13 @@ services:
         sync: false
       - key: SIGNSAGE_GROQ_API_KEY
         sync: false
-      # Auto-Speak TTS (Orpheus). Defaults are fine; groq is used only when the
-      # GROQ key above is set. Set SIGNSAGE_TTS_PROVIDER=browser to disable backend TTS.
+      # Auto-Speak TTS (Orpheus). Defaults are fine; groq is used only when a TTS key
+      # is set. Set SIGNSAGE_TTS_PROVIDER=browser to disable backend TTS.
       - key: SIGNSAGE_TTS_PROVIDER
         value: "auto"
       - key: SIGNSAGE_GROQ_TTS_VOICE
         value: "hannah"
+      # Optional: dedicated key for the voice model (its own Groq quota).
+      # Falls back to SIGNSAGE_GROQ_API_KEY when unset. Never commit values.
+      - key: SIGNSAGE_GROQ_TTS_API_KEY
+        sync: false

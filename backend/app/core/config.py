@@ -131,9 +131,13 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = 6.0
 
     # ===== Text-to-speech (Auto-Speak) =====
-    # "auto" = use Groq when SIGNSAGE_GROQ_API_KEY is set (browser fallback otherwise),
+    # "auto" = use Groq when a TTS key is set (browser fallback otherwise),
     # "groq" = require Groq; "browser" = never call the backend TTS provider (the
     # frontend uses its Web Speech API voices instead).
+    # Optional dedicated key for the voice model, so the TTS path can be billed
+    # to its own Groq account/quota instead of SIGNSAGE_GROQ_API_KEY. Falls
+    # back to groq_api_key when unset.
+    groq_tts_api_key: Optional[str] = None
     tts_provider: str = "auto"
     groq_tts_model: str = "canopylabs/orpheus-v1-english"
     groq_tts_voice: str = "hannah"   # one of: autumn diana hannah austin daniel troy

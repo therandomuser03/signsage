@@ -116,3 +116,30 @@ def test_tts_provider_available():
     assert tts_service.tts_provider_available(_settings()) is True
     assert tts_service.tts_provider_available(_settings(groq_api_key=None)) is False
     assert tts_service.tts_provider_available(_settings(tts_provider="browser")) is False
+
+
+async def test_dedicated_tts_key_wins_over_shared_key():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.headers["authorization"] == "Bearer tts-key"
+        return httpx.Response(200, content=_wav_bytes(), headers={"content-type": "audio/wav"})
+
+    audio = await tts_service.synthesize_speech(
+        TEXT, _settings(groq_api_key="shared-key", groq_tts_api_key="tts-key"), transport=_client(handler)
+    )
+    assert audio.startswith(b"RIFF")
+
+
+async def test_shared_key_used_when_no_dedicated_tts_key():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.headers["authorization"] == "Bearer shared-key"
+        return httpx.Response(200, content=_wav_bytes(), headers={"content-type": "audio/wav"})
+
+    audio = await tts_service.synthesize_speech(
+        TEXT, _settings(groq_api_key="shared-key"), transport=_client(handler)
+    )
+    assert audio.startswith(b"RIFF")
+
+
+def test_tts_provider_available_with_dedicated_key_only():
+    assert tts_service.tts_provider_available(_settings(groq_api_key=None, groq_tts_api_key="tts-key")) is True
+    assert tts_service.tts_provider_available(_settings(groq_api_key=None, groq_tts_api_key=None)) is False

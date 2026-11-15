@@ -378,9 +378,9 @@ export function InterpretationPanel({
             <p className="mt-2 flex items-start gap-1 text-[10px] leading-snug text-foreground/45">
               <Sparkles aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
               Groq Orpheus (free tier ≈100 requests/day, ~3.6K tokens/day, 200 characters per request, English only)
-              requires the backend to have SIGNSAGE_GROQ_API_KEY and a one-time terms acceptance for the model in the
-              Groq console. If Groq is missing, rate-limited, or not accepted, SignSage falls back to browser voices
-              automatically. Playback speed applies to browser voices only.
+              requires SIGNSAGE_GROQ_TTS_API_KEY (or SIGNSAGE_GROQ_API_KEY) on the backend and a one-time terms
+              acceptance for the model in the Groq console. If Groq is missing, rate-limited, or not accepted,
+              SignSage falls back to browser voices automatically. Playback speed applies to browser voices only.
             </p>
           </div>
         )}

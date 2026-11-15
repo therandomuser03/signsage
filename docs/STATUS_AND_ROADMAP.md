@@ -43,7 +43,8 @@ historical result is not automatically the current state.
   results), deduped by text, never intermediate predictions; Speak = manual playback of
   the current interpretation.
 - TTS: backend `POST /api/v1/speech/speak` proxies Groq Orpheus
-  (`canopylabs/orpheus-v1-english`, ≤200 chars, wav) when `SIGNSAGE_GROQ_API_KEY` is set
+  (`canopylabs/orpheus-v1-english`, ≤200 chars, wav) when `SIGNSAGE_GROQ_TTS_API_KEY` (a dedicated voice-model key)
+  is set, falling back to `SIGNSAGE_GROQ_API_KEY`
   (`SIGNSAGE_TTS_PROVIDER=auto|groq|browser`); browser Web Speech API is the automatic
   fallback. Key stays server-side. Free tier ≈ 10 RPM / 100 RPD / 3.6K tokens/day;
   Orpheus is English + Saudi Arabic only; no Hindi/Bengali voice exists in the provider.
