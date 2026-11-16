@@ -50,8 +50,10 @@ sign_to_text_deployment.json
 ```
 
 Use the bundle produced by the SignSage export pipeline. Do not substitute
-the ISLiM or Sanket checkpoints, or the mobile TorchScript files: repository
-audits say those candidates are not integrated with the backend adapter.
+the ISLiM or Sanket checkpoints, or any mobile TorchScript exports (the
+`mobile/` folder was removed from the repository in the 2026-11-17 cleanup):
+repository audits say those candidates are not integrated with the backend
+adapter.
 The current Sign-to-Text evaluations are NO-GO, so storing or loading a
 checkpoint does not make it appropriate to serve. Keep
 `SIGNSAGE_MODEL_PROMOTED=false` unless a future model passes the documented

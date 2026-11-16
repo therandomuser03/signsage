@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   History,
   House,
@@ -21,9 +21,9 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -45,6 +45,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { ModeToggle } from "@/components/mode-toggle";
+import { toast } from "@/components/ui/toast";
 import { SignSageLogo } from "@/components/logo";
 import { apiClient } from "@/services/api/instance";
 import { getAccessToken, onAuthChange, signOut } from "@/services/supabase/auth";
@@ -73,6 +74,7 @@ const TITLES: Record<string, string> = {
 function UserArea() {
   const [email, setEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const live = { current: true };
@@ -136,20 +138,32 @@ const resolve = async () => {
         <span className="min-w-0 flex-1 truncate text-sm font-medium group-data-[collapsible=icon]:hidden">{email}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate font-normal text-foreground/60">
-          {email}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => {
-            void signOut().then(() => {
-              setEmail(null);
-            });
-          }}
-        >
-          <LogOut aria-hidden="true" />
-          Sign out
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="truncate font-normal text-foreground/60">
+            {email}
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => {
+              void signOut()
+                .catch((e: unknown) => {
+                  // Local session is cleared by supabase-js even on remote failure,
+                  // so the user is logged out either way — land them on login.
+                  toast.add({
+                    title: "Signed out (with a warning)",
+                    description: e instanceof Error ? e.message : "Request failed.",
+                    type: "warning",
+                  });
+                })
+                .finally(() => {
+                  setEmail(null);
+                  navigate("/login", { replace: true });
+                });
+            }}
+          >
+            <LogOut aria-hidden="true" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -12,19 +12,15 @@ Contract from ISLIM_ARCHITECTURE_COMPATIBILITY_REPORT.md:
 """
 from __future__ import annotations
 
-import sys, os, warnings
+import warnings
 from pathlib import Path
 from typing import Optional, List
 
 import numpy as np
 import torch
-from torch import nn
 from app.ml.device import resolve_torch_device
+from app.ml.adapters.islim_encoder import KeypointToVideoEncoder
 from transformers import T5Config, T5ForConditionalGeneration, T5Tokenizer
-
-repo_root = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(repo_root / "mobile"))
-from encoder import KeypointToVideoEncoder  # type: ignore
 
 
 class ISLiMAdapterError(RuntimeError):

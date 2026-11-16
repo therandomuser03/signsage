@@ -98,6 +98,7 @@ const DETECT_INTERVAL_MS = 80; // MediaPipe runs far faster than the backend can
 const WORD_RECORD_DURATION_MS = 2500; // 2.5 s capture window
 const PHRASE_RECORD_DURATION_MS = 10_000; // 10 s capture window for the experimental "Sign a phrase" flow
 const WORD_COUNTDOWN_SECONDS = 3;
+const LANDMARK_COLOR = "rgba(34, 197, 94, 0.4)"; // 40% opacity to prevent obscuring the camera feed
 
 /** One auto-mode segment's detail entry (extends the capture Details shape). */
 interface SegmentLogEntry extends CaptureDetails {
@@ -410,7 +411,7 @@ export default function TranslatePage() {
       frame = extractor.detect(video, now);
       if (frame) {
         lastDetectRef.current = now;
-        drawOverlay(canvas, frame, "#22c55e");
+        drawOverlay(canvas, frame, LANDMARK_COLOR);
       }
     }
 
@@ -738,7 +739,7 @@ export default function TranslatePage() {
       frame = extractor.detect(video, now);
       if (frame) {
         wordLastDetectRef.current = now;
-        drawOverlay(canvasRef.current!, frame, "#22c55e");
+        drawOverlay(canvasRef.current!, frame, LANDMARK_COLOR);
       }
     }
 

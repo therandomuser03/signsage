@@ -79,3 +79,6 @@ graphify-out/
 /research/image_classification/artifacts/alphabet/train.npz
 
 FDMSE-ISL.zip
+
+# Signer reference clips (private)
+data/videos/

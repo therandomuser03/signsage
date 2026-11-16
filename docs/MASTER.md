@@ -157,7 +157,7 @@ frontend/   Vite + React UI (app/, features/, services/, components/)
 research/   Training notebooks + Phase-0 record + eval artifacts (never serving code)
 models/     External-candidate weight mirror (not SignSage-trained)
 docs/       This map: 5 authorities + AGENTS + reference/ pins
-tools/      Read-only inventory script
+data/       Dataset manifests; signer reference clips (data/videos/, gitignored)
 render.yaml Render blueprint (bundle via fetch_bundle.sh at start)
 ```
 

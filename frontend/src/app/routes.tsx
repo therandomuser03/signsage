@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppShell } from "./shell";
 import { DevAvatarRoute } from "./devAvatar";
+import { RequireGuest } from "./RequireGuest";
 import LandingPage from "@/features/landing/LandingPage";
 import AboutPage from "@/features/about/AboutPage";
 import { LoginPage, SignupPage, StartPage } from "@/features/auth/AuthPages";
@@ -16,7 +17,11 @@ import HelpPage from "@/features/help/HelpPage";
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <LandingPage />,
+    element: (
+      <RequireGuest>
+        <LandingPage />
+      </RequireGuest>
+    ),
   },
   {
     path: "/about",

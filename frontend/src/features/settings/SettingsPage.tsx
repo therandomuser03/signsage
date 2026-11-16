@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FlaskConical } from "lucide-react";
 import {
   Alert,
@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { config } from "@/app/config";
 import { ModeToggle } from "@/components/mode-toggle";
+import { toast } from "@/components/ui/toast";
 import { apiClient } from "@/services/api/instance";
 import { ApiError } from "@/services/api/errors";
 import { getAccessToken, signOut } from "@/services/supabase/auth";
@@ -31,6 +32,7 @@ import type { HistorySelfcheckResponse, MeResponse } from "@/types/api";
 import { loadPrefs, savePrefs, type TranslationPrefs } from "./preferences";
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const [backend, setBackend] = useState<"checking" | "online" | "offline">("checking");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [accountState, setAccountState] = useState<"checking" | "ready">("checking");
@@ -165,7 +167,22 @@ export default function SettingsPage() {
               <div className="py-3.5">
                 <Button
                   variant="outline"
-                  onClick={() => void signOut().then(() => setMe(null))}
+                  onClick={() =>
+                    void signOut()
+                      .catch((e: unknown) => {
+                        // Local session is cleared by supabase-js even on remote failure,
+                        // so the user is logged out either way — land them on login.
+                        toast.add({
+                          title: "Signed out (with a warning)",
+                          description: e instanceof Error ? e.message : "Request failed.",
+                          type: "warning",
+                        });
+                      })
+                      .finally(() => {
+                        setMe(null);
+                        navigate("/login", { replace: true });
+                      })
+                  }
                 >
                   Sign out
                 </Button>

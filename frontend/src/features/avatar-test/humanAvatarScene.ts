@@ -26,8 +26,9 @@ export interface SceneStats {
 }
 
 const DEG = Math.PI / 180;
-/** Curl direction sign per hand (verified visually on the real GLB). */
-const CURL_SIGN: Record<HandSide, number> = { L: -1, R: -1 };
+/** Curl direction sign per hand. Fingers flex about local X (bone_dir is
+ * local Y everywhere — verified from the GLB); the sign picks palm-ward curl. */
+const CURL_SIGN: Record<HandSide, number> = { L: 1, R: 1 };
 /** Arm raise sign per hand (raises the relaxed arms into a signing stance). */
 const ARM_SIGN: Record<HandSide, number> = { L: 1, R: 1 };
 /** Elbow bend sign per hand (flex forearm forward about local X). */

@@ -18,55 +18,6 @@ import { BlurFade } from "@/components/ui/blur-fade";
 import { NoiseTexture } from "@/components/ui/noise-texture";
 import { useTheme } from "@/components/theme-provider";
 
-function ProductPreview() {
-  return (
-    <div className="overflow-hidden rounded-3xl border border-transparent bg-card shadow-2xl shadow-black/5">
-      <div className="flex items-center justify-between border-b border-transparent px-5 py-4">
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-green-500 motion-safe:animate-pulse" />
-          <span className="text-sm font-medium">Sign → Text</span>
-        </div>
-
-        <span className="text-xs text-foreground/50">Live</span>
-      </div>
-
-      <div className="grid min-h-105 place-items-center bg-muted">
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-28 w-28 items-center justify-center rounded-full bg-muted-foreground/10">
-            <div className="h-16 w-16 rounded-full bg-muted-foreground/20" />
-          </div>
-
-          <p className="text-sm text-foreground/40">
-            Camera feed
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-5 border-t border-transparent p-6">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-foreground/40">
-            Detected sign
-          </p>
-
-          <p className="text-2xl font-semibold tracking-tight">
-            HELLO
-          </p>
-        </div>
-
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-foreground/40">
-            Translation
-          </p>
-
-          <p className="text-xl text-foreground/70">
-            Hello!
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const HOW_IT_WORKS = [
   {
     number: "01",
@@ -229,7 +180,15 @@ export default function LandingPage() {
             className="animate-rise mt-20 md:mt-28"
             style={{ animationDelay: "360ms" }}
           >
-            <ProductPreview />
+            <img
+              src="/demo.png"
+              alt="SignSage Live Interpreter — live camera feed with the composed sentence “No.” from the sign sequence"
+              width={1508}
+              height={1043}
+              loading="lazy"
+              decoding="async"
+              className="w-full rounded-3xl border border-transparent bg-card shadow-2xl shadow-black/5"
+            />
           </div>
         </div>
       </section>

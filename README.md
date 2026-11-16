@@ -55,12 +55,13 @@ signsage/
 ├── docs/            Master plan, status reports, architecture contracts, guides
 ├── outputs/         Research outputs & generated reports
 ├── models/          Model metadata (weights are gitignored; fetched at runtime)
+├── data/            Dataset manifests; signer reference clips (data/videos/ is gitignored)
 └── render.yaml      Render blueprint for backend + model disk
 ```
 
-Ignored by git (not committed): `graphify-out/` (knowledge-graph artifacts), `staging_kaggle_results/` (Kaggle scratch), `videos/`, dataset zips, `*.pt`/`*.pth`, `node_modules/`, `.venv/`.
+Ignored by git (not committed): `graphify-out/` (knowledge-graph artifacts), `staging_kaggle_results/` (Kaggle scratch), `data/videos/`, dataset zips, `*.pt`/`*.pth`, `node_modules/`, `.venv/`.
 
-**Suggested cleanup** (not done, to avoid losing work): `mobile/` (~4 GB ISLiM build artifacts), `outputs/` (~300 MB) and `verified_checkpoint/` (~490 MB) could be archived to an external drive or a private artifact store. `docs/references.bib` and `research/FDMSE/` are new; both are intentionally tracked.
+**Workspace cleanup (2026-11-17)**: `mobile/`, `tools/`, `verified_checkpoint/`, ISLiM mobile TorchScript exports and dataset zips were removed; signer reference clips moved to `data/videos/`. Historical cleanup reports live in `docs/reports/`.
 
 ## Getting started
 
