@@ -5,7 +5,7 @@ import type {
   HistorySelfcheckResponse, HistorySessionDetail,
   ImageClassifyRequest, ImageClassifyResponse, LandmarkFramePayload, MeResponse, ModelsResponse,
   SentenceRecognitionResponse,
-  SignToTextRequest, SignToTextResponse, VideoTranslationResponse, WordRecognitionResponse,
+  SignToTextRequest, SignToTextResponse, TranscribeResponse, VideoTranslationResponse, WordRecognitionResponse,
 } from "../../types/api";
 import { endpoints } from "./endpoints";
 import { ApiError, NetworkError } from "./errors";
@@ -103,17 +103,22 @@ export class ApiClient {
   word = (req: { frames: LandmarkFramePayload[]; true_label?: string }, opts?: RequestOpts) =>
     this.request<WordRecognitionResponse>("POST", endpoints.word, req, opts);
 
-  /** Proxy for the backend /api/v1/speech/speak endpoint (Groq Orpheus when
-   *  configured; 503 otherwise — callers fall back to browser speech). */
-  speakWav = async (text: string, voice?: string): Promise<Blob> => {
+  /** Proxy for the backend /api/v1/speech/speak endpoint (Piper or Groq Orpheus
+   *  when configured; 503 otherwise — callers fall back to browser speech).
+   *  `provider` sends the user's picker choice so "groq"/"piper" are honoured
+   *  even when SIGNSAGE_TTS_PROVIDER=auto. */
+  speakWav = async (text: string, voice?: string, provider?: "auto" | "piper" | "groq"): Promise<Blob> => {
     const path = endpoints.speechSpeak;
     const token = this.getAccessToken ? await this.getAccessToken() : null;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    const body: { text: string; voice?: string; provider?: string } = { text };
+    if (voice) body.voice = voice;
+    if (provider) body.provider = provider;
     const res = await this.fetchImpl(this.baseUrl + path, {
       method: "POST",
       headers,
-      body: JSON.stringify(voice ? { text, voice } : { text }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       let code: string | undefined;
@@ -137,6 +142,20 @@ export class ApiClient {
     opts?: RequestOpts,
   ) =>
     this.request<SentenceRecognitionResponse>("POST", endpoints.sentence, req, opts);
+
+  /** Server transcription (mic fallback): multipart audio → Groq Whisper via the backend.
+   *  No auth required; the backend rate-limits (10/min) and never stores the clip. */
+  transcribe = async (file: Blob, filename = "clip.webm"): Promise<TranscribeResponse> => {
+    const path = endpoints.speechTranscribe;
+    const form = new FormData();
+    form.append("file", file, filename);
+    const res = await this.fetchImpl(this.baseUrl + path, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) throw await ApiError.fromResponse(res);
+    return (await res.json()) as TranscribeResponse;
+  };
 
   compose = (req: ComposeRequest, opts?: RequestOpts) =>
     this.request<ComposeResponse>("POST", endpoints.compose, req, opts);

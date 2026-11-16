@@ -299,8 +299,9 @@ export function InterpretationPanel({
           </label>
 
           {speech.audit?.via === "browser" && prefs.ttsProvider !== "browser" && (
-            <span className="text-[11px] text-foreground/45" title="Groq was unavailable; browser voice used.">
+            <span className="text-[11px] text-foreground/45" title="Server voice was unavailable; browser voice used.">
               Using browser voice
+              {speech.audit.code && <span className="ml-1 font-mono">{speech.audit.code}</span>}
             </span>
           )}
           {speech.audit?.error && (
@@ -332,11 +333,12 @@ export function InterpretationPanel({
                 <span className="text-[11px] font-medium text-foreground/55">Voice provider</span>
                 <select
                   value={prefs.ttsProvider}
-                  onChange={(e) => speech.setTtsProvider(e.target.value as "auto" | "groq" | "browser")}
+                  onChange={(e) => speech.setTtsProvider(e.target.value as "auto" | "piper" | "groq" | "browser")}
                   className="mt-1 w-full rounded border border-foreground/20 bg-background px-2 py-1.5 text-xs"
                   aria-label="Voice provider"
                 >
-                  <option value="auto">Auto (Groq if available, else browser)</option>
+                  <option value="auto">Auto (Piper server voice, else browser)</option>
+                  <option value="piper">Piper (server) — free, offline</option>
                   <option value="groq">Groq Orpheus — natural voice</option>
                   <option value="browser">Browser voice — free, offline-ish</option>
                 </select>
@@ -377,10 +379,12 @@ export function InterpretationPanel({
             </div>
             <p className="mt-2 flex items-start gap-1 text-[10px] leading-snug text-foreground/45">
               <Sparkles aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
-              Groq Orpheus (free tier ≈100 requests/day, ~3.6K tokens/day, 200 characters per request, English only)
-              requires SIGNSAGE_GROQ_TTS_API_KEY (or SIGNSAGE_GROQ_API_KEY) on the backend and a one-time terms
-              acceptance for the model in the Groq console. If Groq is missing, rate-limited, or not accepted,
-              SignSage falls back to browser voices automatically. Playback speed applies to browser voices only.
+              Piper (server) is the free, offline default when the backend ships the voice. Groq Orpheus (free tier
+              ≈100 requests/day, ~3.6K tokens/day, 200 characters per request, English only) is used only when you pick
+              it (or SIGNSAGE_TTS_PROVIDER=groq on the server); it requires SIGNSAGE_GROQ_TTS_API_KEY (or
+              SIGNSAGE_GROQ_API_KEY) and a one-time terms acceptance for the model in the Groq console. If the server
+              voice is missing, rate-limited, or not accepted, SignSage falls back to browser voices automatically.
+              Playback speed applies to browser voices only.
             </p>
           </div>
         )}

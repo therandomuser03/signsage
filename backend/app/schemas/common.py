@@ -42,7 +42,9 @@ class CapabilitiesResponse(BaseModel):
     word_recognition_threshold: Optional[float] = None
     word_recognition_model_version: Optional[str] = None
     word_recognition_label: str = "sign-sequence to sentence interpretation (8 words plus a rest (no-sign) class), adapted to one signer"
-
+    # Server-side Piper voice availability (free, offline TTS)
+    tts_piper_available: Optional[bool] = None
+    tts_piper_reason: Optional[str] = None
 
 class ModelInfo(BaseModel):
     id: str

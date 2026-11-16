@@ -17,15 +17,26 @@ function installSpeechRecognition(Ctor: unknown) {
 }
 
 test("speechErrorMessage maps known error codes to user-facing messages", () => {
-  assert.equal(speechErrorMessage("not-allowed"), "Microphone blocked. Allow access and try again.");
-  assert.equal(speechErrorMessage("network"), "Network failure. Check your connection and try again.");
+  assert.equal(
+    speechErrorMessage("not-allowed"),
+    "Microphone blocked. Allow mic access (lock icon → Site settings → Microphone → Allow), reload, and try again.",
+  );
+  assert.equal(
+    speechErrorMessage("network"),
+    "This browser blocks the speech service. Switching to server transcription.",
+  );
   assert.equal(speechErrorMessage("audio-capture"), "No microphone found. Connect a microphone and try again.");
   assert.equal(
     speechErrorMessage("service-not-allowed"),
-    "Speech service not allowed. Type instead.",
+    "This browser blocks the speech service. Switching to server transcription.",
   );
-  assert.equal(speechErrorMessage("no-match"), "No speech recognized. Try again.");
-  assert.equal(speechErrorMessage("unknown-error"), "Speech recognition failed. Type instead.");
+  assert.equal(speechErrorMessage("no-speech"), "Nothing heard. Speak after the beep and check the level bar.");
+  assert.equal(
+    speechErrorMessage("language-not-supported"),
+    "This browser does not support that language. Switch to en-US or use server transcription.",
+  );
+  assert.equal(speechErrorMessage("no-match"), "Didn't catch that. Speak clearly and try again.");
+  assert.equal(speechErrorMessage("unknown-error"), "Speech recognition failed. Try again or type instead.");
 });
 
 test("createRecognizer returns null when SpeechRecognition is unavailable", () => {

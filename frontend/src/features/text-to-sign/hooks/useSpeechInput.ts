@@ -1,13 +1,15 @@
 // SignSage — microphone input via the browser's built-in speech recognition.
-// No dependency, no backend call: uses window.SpeechRecognition when the
-// browser provides it and reports `supported: false` otherwise (Firefox,
-// some mobile browsers) so the UI can hide/disable honestly.
+// Uses window.SpeechRecognition when the browser provides it and reports
+// `supported: false` otherwise (Firefox, some mobile browsers) so the UI can
+// switch to the server transcription fallback honestly.
 //
-// Defaults to English (en-IN) but the locale is configurable. Only final
-// transcripts are committed to the input field; interim results are exposed
-// separately as a live preview so the same text is never inserted twice.
+// Flow: getUserMedia FIRST (permission + a live AnalyserNode level meter),
+// then recognition. Defaults to en-IN; en-US is selectable in the UI. Only
+// final transcripts are committed to the input field; interim results are
+// exposed separately as a live preview so the same text is never inserted twice.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createLevelMeter, micErrorMessage, playStartBeep, type LevelMeter } from "./audioLevel";
 
 export type Rec = {
   start: () => void;
@@ -35,25 +37,43 @@ export function createRecognizer(lang: string): Rec | null {
 export function speechErrorMessage(error: string): string {
   switch (error) {
     case "not-allowed":
-      return "Microphone blocked. Allow access and try again.";
-    case "network":
-      return "Network failure. Check your connection and try again.";
+      return "Microphone blocked. Allow mic access (lock icon → Site settings → Microphone → Allow), reload, and try again.";
     case "audio-capture":
       return "No microphone found. Connect a microphone and try again.";
+    case "no-speech":
+      return "Nothing heard. Speak after the beep and check the level bar.";
+    case "network":
+      return "This browser blocks the speech service. Switching to server transcription.";
     case "service-not-allowed":
-      return "Speech service not allowed. Type instead.";
+      return "This browser blocks the speech service. Switching to server transcription.";
+    case "language-not-supported":
+      return "This browser does not support that language. Switch to en-US or use server transcription.";
     case "no-match":
-      return "No speech recognized. Try again.";
+      return "Didn't catch that. Speak clearly and try again.";
     default:
-      return "Speech recognition failed. Type instead.";
+      return "Speech recognition failed. Try again or type instead.";
   }
 }
+
+/** True for the two browser errors that mean "this speech service is unusable":
+ *  the UI switches to the server transcription fallback when it sees these. */
+export function isSpeechServiceBlocked(error: string): boolean {
+  return error === "network" || error === "service-not-allowed";
+}
+
+const LEVEL_POLL_MS = 100;
 
 export function useSpeechInput({ lang = "en-IN" }: { lang?: string } = {}) {
   const [supported] = useState(() => createRecognizer(lang) !== null);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Raw SpeechRecognition error code (network, service-not-allowed, ...)
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [level, setLevel] = useState(0);
   const recRef = useRef<Rec | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const meterRef = useRef<LevelMeter | null>(null);
+  const levelTimerRef = useRef<number | null>(null);
   // Last committed final transcript: guards against the service redelivering
   // the same final result and inserting it twice.
   const lastFinalRef = useRef("");
@@ -63,17 +83,61 @@ export function useSpeechInput({ lang = "en-IN" }: { lang?: string } = {}) {
   // empty transcript for an intentional cancellation).
   const userStoppedRef = useRef(false);
 
-  useEffect(() => () => recRef.current?.abort(), []);
+  const releaseMic = useCallback(() => {
+    if (levelTimerRef.current !== null) {
+      window.clearInterval(levelTimerRef.current);
+      levelTimerRef.current = null;
+    }
+    meterRef.current?.dispose();
+    meterRef.current = null;
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) track.stop();
+      streamRef.current = null;
+    }
+    setLevel(0);
+  }, []);
+
+  const attachMeter = useCallback((stream: MediaStream) => {
+    meterRef.current = createLevelMeter(stream);
+    levelTimerRef.current = window.setInterval(() => {
+      if (meterRef.current) setLevel(meterRef.current.level());
+    }, LEVEL_POLL_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      recRef.current?.abort();
+      releaseMic();
+    },
+    [releaseMic],
+  );
 
   const start = useCallback(
-    (onFinalTranscript: (text: string) => void, onInterimTranscript?: (text: string) => void) => {
+    async (onFinalTranscript: (text: string) => void, onInterimTranscript?: (text: string) => void) => {
       if (listening) return;
+      setError(null);
+      setErrorCode(null);
+
+      // 1. Microphone permission + level meter first.
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        setError(micErrorMessage(err));
+        return;
+      }
+
+      // 2. Then the recognizer (may not exist on this browser).
       const rec = createRecognizer(lang);
       if (!rec) {
+        for (const track of stream.getTracks()) track.stop();
         setError("Speech recognition is not supported in this browser. Type instead.");
         return;
       }
-      setError(null);
+      streamRef.current = stream;
+      attachMeter(stream);
+      playStartBeep();
+
       gotFinalRef.current = false;
       lastFinalRef.current = "";
       userStoppedRef.current = false;
@@ -98,14 +162,17 @@ export function useSpeechInput({ lang = "en-IN" }: { lang?: string } = {}) {
       };
       rec.onerror = (ev) => {
         setError(speechErrorMessage(ev.error));
+        setErrorCode(ev.error);
         setListening(false);
         recRef.current = null;
+        releaseMic();
       };
       rec.onend = () => {
         setListening(false);
         recRef.current = null;
+        releaseMic();
         if (!userStoppedRef.current && !gotFinalRef.current) {
-          setError("No speech recognized. Try again.");
+          setError("Nothing heard. Speak after the beep and check the level bar.");
         }
         userStoppedRef.current = false;
       };
@@ -114,9 +181,10 @@ export function useSpeechInput({ lang = "en-IN" }: { lang?: string } = {}) {
         setListening(true);
       } catch {
         setError("Speech recognition could not start. Type instead.");
+        releaseMic();
       }
     },
-    [listening, lang],
+    [listening, lang, attachMeter, releaseMic],
   );
 
   const stop = useCallback(() => {
@@ -126,7 +194,8 @@ export function useSpeechInput({ lang = "en-IN" }: { lang?: string } = {}) {
 
   const clearError = useCallback(() => {
     setError(null);
+    setErrorCode(null);
   }, []);
 
-  return { supported, listening, error, start, stop, clearError };
+  return { supported, listening, error, errorCode, level, start, stop, clearError };
 }

@@ -133,3 +133,13 @@ def test_every_backend_schema_field_is_declared_in_frontend_types(model_path):
     api_ts = _read("src/types/api.ts")
     for field in model.model_fields:
         assert re.search(rf"\b{field}\??:", api_ts), f"{class_name}.{field} is missing from frontend/src/types/api.ts"
+
+
+def test_capabilities_declares_piper_fields_on_both_sides():
+    """tts_piper_available / tts_piper_reason: backend schema and frontend types."""
+    from app.schemas.common import CapabilitiesResponse
+
+    for field in ("tts_piper_available", "tts_piper_reason"):
+        assert field in CapabilitiesResponse.model_fields, f"CapabilitiesResponse is missing {field}"
+        block = re.search(r"interface CapabilitiesResponse \{([\s\S]*?)\n\}", _read("src/types/api.ts")).group(1)
+        assert re.search(rf"\b{field}\??:", block), f"CapabilitiesResponse.{field} is missing from frontend/src/types/api.ts"

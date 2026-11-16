@@ -9,7 +9,7 @@ from app.services import tts_service
 
 
 def test_speak_returns_wav(make_client, monkeypatch):
-    async def fake(text, settings, voice=None, transport=None):
+    async def fake(text, settings, voice=None, transport=None, provider=None):
         assert text == "Hello, how are you?"
         return b"RIFF" + b"\x00" * 60
 
@@ -22,7 +22,7 @@ def test_speak_returns_wav(make_client, monkeypatch):
 
 
 def test_speak_fallback_signal_when_provider_unavailable(make_client, monkeypatch):
-    async def fake(text, settings, voice=None, transport=None):
+    async def fake(text, settings, voice=None, transport=None, provider=None):
         raise TtsUnavailableError("TTS provider rejected the configured API key.")
 
     monkeypatch.setattr(tts_service, "synthesize_speech", fake)
@@ -33,7 +33,7 @@ def test_speak_fallback_signal_when_provider_unavailable(make_client, monkeypatc
 
 
 def test_speak_rejects_overlong_input(make_client):
-    c = make_client(groq_api_key="test-key", tts_provider="auto")
+    c = make_client(groq_api_key="test-key", tts_provider="groq")
     r = c.post("/api/v1/speech/speak", json={"text": "x" * 201})
     # Rejected before any network call: 503 TTS_UNAVAILABLE (fallback signal)
     assert r.status_code == 503
@@ -46,8 +46,9 @@ def test_speak_rejects_empty_text(make_client):
 
 
 def test_speak_reports_rate_limit_or_unavailable_without_api_key(make_client):
-    # No SIGNSAGE_GROQ_API_KEY configured → provider unavailable, never a 500.
+    # No server voice configured → 503 with a machine code, never a 500.
+    # (auto resolves to Piper, which is absent in this environment.)
     c = make_client()
     r = c.post("/api/v1/speech/speak", json={"text": "Hello."})
     assert r.status_code == 503
-    assert r.json()["code"] == "TTS_UNAVAILABLE"
+    assert r.json()["code"] == "TTS_UNCONFIGURED"

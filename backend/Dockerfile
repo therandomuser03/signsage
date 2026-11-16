@@ -21,6 +21,23 @@ RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu "torch>=2
  && pip install . \
  && chmod -R a+rX word_model
 
+# Free offline server voice (PART: Piper TTS). en_US-kristin-medium:
+# US female, trained on public-domain LibriVox recordings; see
+# docs/THIRD_PARTY_NOTICES.md. Downloaded at BUILD time; the build FAILS if
+# either file is missing or the .onnx is smaller than 10 MB. If the files are
+# absent at runtime (e.g. this step is skipped), the app falls back to
+# downloading them into SIGNSAGE_PIPER_CACHE (default /tmp/piper) on first use.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+ && mkdir -p /srv/voices \
+ && curl -fSL --retry 3 --connect-timeout 20 -o /srv/voices/en_US-kristin-medium.onnx \
+      https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kristin/medium/en_US-kristin-medium.onnx \
+ && curl -fSL --retry 3 --connect-timeout 20 -o /srv/voices/en_US-kristin-medium.onnx.json \
+      https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kristin/medium/en_US-kristin-medium.onnx.json \
+ && test "$(stat -c%s /srv/voices/en_US-kristin-medium.onnx)" -ge 10485760 \
+ && test "$(stat -c%s /srv/voices/en_US-kristin-medium.onnx.json)" -ge 512 \
+ && chmod -R a+rX /srv/voices \
+ && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 # Model weights are NOT baked into the image (they're ~100 MB and change per run).
 # Mount or download the promoted deployment bundle here at deploy time.
 ENV SIGNSAGE_MODEL_BUNDLE_DIR=/models/signsage_deployment_bundle \

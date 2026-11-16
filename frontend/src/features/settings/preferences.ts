@@ -3,7 +3,7 @@
 // Only preferences the app actually honors. Read by the translation pages at
 // action time; nothing here is decorative.
 
-export type TtsProvider = "auto" | "groq" | "browser";
+export type TtsProvider = "auto" | "groq" | "piper" | "browser";
 
 export interface TranslationPrefs {
   /** Sent as save_history on sentence boundaries and gloss requests. */
@@ -12,7 +12,8 @@ export interface TranslationPrefs {
   mirrorPreview: boolean;
   /** Speak completed interpretations automatically. */
   autoSpeak: boolean;
-  /** Audio provider: "auto" = Groq Orpheus when configured, browser voices otherwise;
+  /** Audio provider: "auto" = Piper (server) when available, else browser voices;
+   *  "piper" = backend Piper only (falls back to browser voices on failure);
    *  "groq" = backend Groq Orpheus (falls back to browser voices on failure);
    *  "browser" = Web Speech API only, no backend call. */
   ttsProvider: TtsProvider;
@@ -43,7 +44,7 @@ export function coercePrefs(parsed: unknown): TranslationPrefs {
     ? Math.min(2, Math.max(0.5, p.speechRate))
     : DEFAULTS.speechRate;
   const provider: TtsProvider =
-    p.ttsProvider === "groq" || p.ttsProvider === "browser" || p.ttsProvider === "auto"
+    p.ttsProvider === "groq" || p.ttsProvider === "browser" || p.ttsProvider === "auto" || p.ttsProvider === "piper"
       ? p.ttsProvider
       : DEFAULTS.ttsProvider;
   return {

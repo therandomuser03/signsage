@@ -21,6 +21,7 @@ from app.ml.word_classifier_adapter import resolve_word_model_dir
 from app.schemas.common import CapabilitiesResponse, ModelInfo, ModelsResponse
 from app.services.avatar_gloss_service import load_vocabulary
 from app.services.history_service import build_history_service
+from app.services import tts_service
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         word_vocab,
         word_threshold,
     ) = _resolve_word_capabilities(settings)
+    piper_ok, piper_reason = tts_service.piper_status(settings)
     return CapabilitiesResponse(
         api_version="v1",
         websocket_path="/ws/translate",
@@ -132,6 +134,8 @@ def capabilities(settings: Settings = Depends(get_settings)) -> CapabilitiesResp
         word_recognition_threshold=word_threshold,
         word_recognition_model_version=word_version,
         word_recognition_label="sign-sequence to sentence interpretation (8 words plus a rest (no-sign) class), adapted to one signer",
+        tts_piper_available=piper_ok,
+        tts_piper_reason=piper_reason,
     )
 
 

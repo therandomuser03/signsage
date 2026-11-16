@@ -10,6 +10,7 @@ export const endpoints = {
   historyItem: (id: string) => `/api/v1/history/${encodeURIComponent(id)}`,
   historyBulkDelete: "/api/v1/history/bulk-delete",
   speechSpeak: "/api/v1/speech/speak",
+  speechTranscribe: "/api/v1/speech/transcribe",
   signToText: "/api/v1/translation/sign-to-text",
   avatarGloss: "/api/v1/text-to-sign",
   avatarVocabulary: "/api/v1/text-to-sign/vocabulary",

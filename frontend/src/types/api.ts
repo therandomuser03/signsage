@@ -39,6 +39,9 @@ export interface CapabilitiesResponse {
   word_recognition_threshold?: number | null;
   word_recognition_model_version?: string | null;
   word_recognition_label?: string;
+  // Server-side Piper voice availability (PART: free server TTS)
+  tts_piper_available?: boolean | null;
+  tts_piper_reason?: string | null;
 }
 
 export interface WordRecognitionResponse {
@@ -64,6 +67,10 @@ export interface SentenceRecognitionResponse {
   history_saved?: boolean;
   /** Set when the signed-in user's history save failed: "<step>:<http_status>:<pg_code>". Null otherwise. */
   history_error?: string | null;
+}
+
+export interface TranscribeResponse {
+  text: string;
 }
 
 export interface ComposeRequest {

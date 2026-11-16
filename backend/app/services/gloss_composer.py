@@ -18,7 +18,7 @@ import logging
 
 import httpx
 
-from app.ml.word_composer import compose_fallback, guard_llm_output
+from app.ml.word_composer import clean_words, compose_fallback, guard_llm_output
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,9 @@ def compose_words(words: list[str], vocab: set[str], settings) -> tuple[str, str
 
     Returns (sentence, method) where method is "llm" or "fallback".
     """
-    cleaned = [w for w in words if w != "rest" and w in vocab]
+    # Collapse consecutive duplicate words BEFORE any path runs — the rule
+    # path, the LLM path and the guard all see the deduped sequence.
+    cleaned = clean_words(words, vocab)
     if not cleaned:
         return "", "fallback"
 

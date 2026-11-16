@@ -389,3 +389,14 @@ def test_compose_history_saved_false_when_save_history_off(make_client):
     )
     assert response.status_code == 200
     assert response.json()["history_saved"] is False
+
+
+@pytest.mark.skipif(not os.path.isdir(BUNDLE_DIR), reason="models/word_v3/ bundle not present")
+def test_compose_collapses_consecutive_duplicate_words(make_client):
+    client = make_client(word_mode_enabled="true", word_model_dir=BUNDLE_DIR)
+    response = client.post("/api/v1/translation/compose", json={"words": ["water", "water"]})
+    assert response.status_code == 200
+    assert response.json()["sentence"] == "Water."
+    response = client.post("/api/v1/translation/compose", json={"words": ["hello", "hello", "help"]})
+    assert response.status_code == 200
+    assert response.json()["sentence"] == "Hello, help."

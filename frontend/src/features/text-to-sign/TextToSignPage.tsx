@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlert, Eraser, Mic, Play, RotateCcw, Sparkles, Square } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,8 @@ import {
 } from "@/features/text-to-sign/components/AvatarViewer";
 import { ProceduralAvatarViewer } from "@/features/text-to-sign/components/ProceduralAvatarViewer";
 import { useSignAnimation } from "@/features/text-to-sign/hooks/useSignAnimation";
-import { useSpeechInput } from "@/features/text-to-sign/hooks/useSpeechInput";
+import { useSpeechInput, isSpeechServiceBlocked } from "@/features/text-to-sign/hooks/useSpeechInput";
+import { useServerDictation } from "@/features/text-to-sign/hooks/useServerDictation";
 import {
   EXAMPLE_CHIPS,
   glossChipState,
@@ -67,8 +68,34 @@ export default function TextToSignPage() {
   const [glossError, setGlossError] = useState<string | null>(null);
   const [learnMore, setLearnMore] = useState(false);
   const [vocabIds, setVocabIds] = useState<string[] | null>(null);
-  const speech = useSpeechInput({ lang: "en-IN" });
+  const [dictatLang, setDictatLang] = useState<"en-IN" | "en-US">("en-IN");
+  const speech = useSpeechInput({ lang: dictatLang });
+  const dictation = useServerDictation();
   const [interimText, setInterimText] = useState("");
+  const fallbackTriggered = useRef(false);
+  const appendTranscript = useCallback(
+    (t: string) => {
+      setInterimText("");
+      setText((prev) => (prev ? `${prev} ${t}` : t).slice(0, MAX_CHARS));
+    },
+    [],
+  );
+
+  // Switch to the server transcription fallback when the browser's speech
+  // service is blocked (network / service-not-allowed).
+  useEffect(() => {
+    if (
+      speech.errorCode &&
+      isSpeechServiceBlocked(speech.errorCode) &&
+      dictation.supported &&
+      !fallbackTriggered.current
+    ) {
+      fallbackTriggered.current = true;
+      void dictation.start(appendTranscript);
+    }
+    if (!speech.errorCode) fallbackTriggered.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speech.errorCode, dictation.supported]);
 
   useEffect(() => {
     let live = true;
@@ -123,11 +150,11 @@ export default function TextToSignPage() {
     };
   }, []);
 
-  // Clear the live interim preview whenever a recognition session ends
+  // Clear the live interim preview whenever a capture session ends
   // (stop pressed, final committed, or session ended without a result).
   useEffect(() => {
-    if (!speech.listening) setInterimText("");
-  }, [speech.listening]);
+    if (!speech.listening && !dictation.recording) setInterimText("");
+  }, [speech.listening, dictation.recording]);
 
   const { perform, stop, replay, state, unavailableGlosses } = useSignAnimation(
     avatarRef,
@@ -284,40 +311,99 @@ export default function TextToSignPage() {
                     render={
                       <span>
                         <Button
-                          variant={speech.listening ? "destructive" : "outline"}
+                          variant={speech.listening || dictation.recording ? "destructive" : "outline"}
                           size="icon"
-                          disabled={!speech.supported || state.isPlaying}
+                          disabled={
+                            (!speech.supported && !dictation.supported) ||
+                            state.isPlaying ||
+                            dictation.uploading
+                          }
                           onClick={() =>
                             speech.listening
                               ? speech.stop()
-                              : speech.start(
-                                  (final) => {
-                                    setInterimText("");
-                                    setText((prev) =>
-                                      (prev ? `${prev} ${final}` : final).slice(0, MAX_CHARS)
-                                    );
-                                  },
-                                  (interim) => setInterimText(interim)
-                                )
+                              : dictation.recording
+                                ? dictation.stop()
+                                : speech.supported
+                                  ? void speech.start(
+                                      appendTranscript,
+                                      (interim) => setInterimText(interim),
+                                    )
+                                  : void dictation.start(appendTranscript)
                           }
-                          aria-label={speech.listening ? "Stop listening" : "Dictate with microphone"}
+                          aria-label={
+                            speech.listening
+                              ? "Stop listening"
+                              : dictation.recording
+                                ? "Stop recording"
+                                : "Dictate with microphone"
+                          }
                         >
-                          <Mic aria-hidden="true" className={speech.listening ? "motion-safe:animate-pulse" : ""} />
+                          <Mic
+                            aria-hidden="true"
+                            className={speech.listening || dictation.recording ? "motion-safe:animate-pulse" : ""}
+                          />
                         </Button>
                       </span>
                     }
                   />
                   <TooltipContent>
-                    {speech.supported
-                      ? speech.listening
-                        ? "Listening… press to stop."
-                        : "Dictate with your microphone."
-                      : "Speech recognition is not supported in this browser. Type instead."}
+                    {speech.listening
+                      ? "Listening… press to stop."
+                      : dictation.recording
+                        ? "Recording… press to stop."
+                        : speech.supported
+                          ? "Dictate with your microphone."
+                          : dictation.supported
+                            ? "Dictate via server transcription (sent to Groq; not stored)."
+                            : "Speech input is not available in this browser or on the server. Type instead."}
                   </TooltipContent>
                 </Tooltip>
               </div>
+              {(speech.supported || dictation.supported) && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <select
+                    value={dictatLang}
+                    onChange={(e) => setDictatLang(e.target.value as "en-IN" | "en-US")}
+                    disabled={speech.listening || dictation.recording}
+                    aria-label="Dictation language"
+                    className="rounded border border-foreground/20 bg-background px-1.5 py-1 text-[11px] text-foreground/75"
+                  >
+                    <option value="en-IN">English (India) · en-IN</option>
+                    <option value="en-US">English (US) · en-US</option>
+                  </select>
+                  {(speech.listening || dictation.recording) && (
+                    <div
+                      className="h-1.5 min-w-24 flex-1 overflow-hidden rounded bg-foreground/10"
+                      role="meter"
+                      aria-label="Microphone input level"
+                    >
+                      <div
+                        className="h-full bg-emerald-500 transition-[width] duration-100"
+                        style={{
+                          width: `${Math.round((speech.listening ? speech.level : dictation.level) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                  {dictation.recording && (
+                    <span className="flex items-center gap-2 text-xs text-foreground/60">
+                      <span className="inline-block h-2 w-2 rounded-full bg-red-500 motion-safe:animate-pulse" />
+                      Recording… {dictation.secondsLeft}s
+                      <Button type="button" size="sm" variant="destructive" onClick={dictation.stop}>
+                        Stop
+                      </Button>
+                    </span>
+                  )}
+                  {dictation.uploading && (
+                    <span className="text-xs text-foreground/60">Transcribing…</span>
+                  )}
+                </div>
+              )}
               {speech.error && (
                 <p className="text-xs text-destructive">{speech.error}</p>
+              )}
+              {dictation.error && (
+                <p className="text-xs text-destructive">{dictation.error}</p>
               )}
               {speech.listening && interimText && (
                 <p className="text-xs text-foreground/50">

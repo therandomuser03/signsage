@@ -131,3 +131,48 @@ def test_guard_accepts_faithful_output(output, words):
 )
 def test_guard_rejects(output, words):
     assert guard_llm_output(output, words) is None
+
+
+# --- Consecutive duplicates collapse before composing --------------------
+
+def test_compose_fallback_collapses_consecutive_duplicates():
+    assert compose_fallback(["water", "water"], VOCAB) == "Water."
+    assert compose_fallback(["hello", "hello", "help"], VOCAB) == "Hello, help."
+
+
+def test_gloss_composer_collapses_duplicates_rule_and_llm_paths(monkeypatch):
+    """compose_words (REST /sentence/compose, auto mode, WebSocket) dedupes
+    before the rule path AND before the LLM path + guard."""
+    from app.core.config import Settings
+    from app.services import gloss_composer
+
+    settings = Settings(_env_file=None, groq_api_key=None)
+    assert gloss_composer.compose_words(["water", "water"], VOCAB, settings) == ("Water.", "fallback")
+    assert gloss_composer.compose_words(["hello", "hello", "help"], VOCAB, settings) == ("Hello, help.", "fallback")
+
+    # LLM path: guard rejects "Water is water." ('water is water'), comma-join wins.
+    monkeypatch.setenv("SIGNSAGE_GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(gloss_composer, "_groq_chat", lambda *a, **k: "Water is water.")
+    llm_settings = Settings(_env_file=None, groq_api_key="test-key", groq_model="test-model")
+    sentence, method = gloss_composer.compose_words(["water", "where"], VOCAB, llm_settings)
+    assert sentence == "Water, where."
+    assert method == "fallback"
+
+
+@pytest.mark.parametrize(
+    "output, words",
+    [
+        ("Water is water.", ["water", "where"]),
+        ("water is water", ["water", "where"]),
+        ("Where are where?", ["where", "water"]),
+        ("water am water", ["water"]),
+    ],
+)
+def test_guard_rejects_x_is_x(output, words):
+    assert guard_llm_output(output, words) is None
+
+
+def test_guard_rejects_content_word_count_overflow_vs_cleaned_input():
+    # Input is cleaned upstream; even a legal-count-looking duplicate is rejected.
+    assert guard_llm_output("Water is water.", ["water"]) is None
+    assert guard_llm_output("Help help me.", ["help", "me"]) is None

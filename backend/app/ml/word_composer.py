@@ -27,7 +27,7 @@ def _first_cap(text: str) -> str:
     return text[:1].upper() + text[1:] if text else text
 
 
-def _clean_words(words: Iterable[str], vocab: set[str]) -> list[str]:
+def clean_words(words: Iterable[str], vocab: set[str]) -> list[str]:
     """Drop ``rest``, unknown words and consecutive duplicates; cap length."""
     cleaned: list[str] = []
     for word in words:
@@ -81,7 +81,7 @@ def _comma_join(cleaned: list[str]) -> str:
 
 def compose_fallback(words: list[str], vocab: set[str]) -> str:
     """Deterministic sentence from recognised words (no LLM). Rules first."""
-    cleaned = _clean_words(words, vocab)
+    cleaned = clean_words(words, vocab)
     ruled = _rule_sentence(cleaned)
     if ruled is not None:
         return ruled
@@ -97,9 +97,11 @@ def guard_llm_output(output: str, input_words: list[str]) -> str | None:
         ({is, are, am, the, a, i, can, could})
       * every input word appears in the output with the same count;
         content-word reordering is allowed (gloss order != English order),
-        but no input word may be dropped or duplicated
+        but no input word may be dropped, duplicated, or appear more
+        times than in the (already cleaned) input
       * at most len(input) + 4 output words
       * no word immediately repeated in the output
+      * no "X is/are/am X" pattern
       * none of: "is a", "a the", "the a", "is is", "a ."
     """
     text = (output or "").strip()
@@ -131,6 +133,10 @@ def guard_llm_output(output: str, input_words: list[str]) -> str | None:
     # No word immediately repeated.
     if any(low[i] == low[i + 1] for i in range(len(low) - 1)):
         return None
+    # "X is X" / "X are X" / "X am X" — never a faithful gloss sentence.
+    for i in range(len(low) - 2):
+        if low[i] == low[i + 2] and low[i + 1] in {"is", "are", "am"}:
+            return None
     # Forbidden bigrams / endings.
     for i in range(len(low) - 1):
         if (low[i], low[i + 1]) in _FORBIDDEN_BIGRAMS:

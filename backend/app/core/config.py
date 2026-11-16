@@ -131,9 +131,11 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = 6.0
 
     # ===== Text-to-speech (Auto-Speak) =====
-    # "auto" = use Groq when a TTS key is set (browser fallback otherwise),
-    # "groq" = require Groq; "browser" = never call the backend TTS provider (the
-    # frontend uses its Web Speech API voices instead).
+    # "auto"   = Piper (free, offline) when available, else HTTP 503 so the
+    #            frontend uses browser voices. Groq is NOT used on this path.
+    # "piper"  = Piper only. "groq" = Groq Orpheus only (SIGNSAGE_TTS_PROVIDER=groq
+    #            or the user picked it in the UI). "browser" = never call the
+    #            backend TTS provider (the frontend uses Web Speech voices).
     # Optional dedicated key for the voice model, so the TTS path can be billed
     # to its own Groq account/quota instead of SIGNSAGE_GROQ_API_KEY. Falls
     # back to groq_api_key when unset.
@@ -144,6 +146,12 @@ class Settings(BaseSettings):
     groq_tts_timeout_seconds: float = 8.0
     # Orpheus accepts at most 200 characters per request. Longer text is rejected.
     tts_max_input_chars: int = 200
+    # Piper (piper-tts) voice baked into the Docker image at build time
+    # (downloaded into /srv/voices) or downloaded on first use into piper_cache.
+    # en_US-kristin-medium: US female, LibriVox source, public domain.
+    piper_voice: str = "en_US-kristin-medium"
+    piper_dir: str = "/srv/voices"
+    piper_cache: str = "/tmp/piper"
 
     # Optional override; defaults to the packaged app/data/sign_vocabulary.json.
     avatar_vocabulary_path: Optional[str] = None
@@ -205,6 +213,8 @@ class Settings(BaseSettings):
     rate_limit_history_write: str = "30/min"
     # Free Groq tier allows 10 RPM on Orpheus; keep the backend tighter than that.
     rate_limit_tts: str = "9/min"
+    # Server transcription (Whisper) for the mic fallback: 10 per minute.
+    rate_limit_stt: str = "10/min"
     # Tune per deployment via SIGNSAGE_RATE_LIMIT_*.
 
     @field_validator("cors_origins", mode="before")

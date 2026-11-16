@@ -88,6 +88,21 @@ class TtsUnavailableError(SignSageError):
     code = "TTS_UNAVAILABLE"
     status_code = 503
 
+    def __init__(self, message: str, *, code: Optional[str] = None):
+        super().__init__(message)
+        if code is not None:
+            self.code = code
+
+
+class SttUnavailableError(SignSageError):
+    code = "STT_UNCONFIGURED"
+    status_code = 503
+
+    def __init__(self, message: str, *, code: Optional[str] = None):
+        super().__init__(message)
+        if code is not None:
+            self.code = code
+
 
 class NotFoundError(SignSageError):
     code = "NOT_FOUND"

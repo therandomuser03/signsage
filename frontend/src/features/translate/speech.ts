@@ -4,9 +4,12 @@
 // `speak`; intermediate predictions are never passed in). Order of
 // preference per the user's prefs:
 //
+//   "piper"   — backend Piper voice (WAV, free, offline). Falls back to
+//               browser voices when unavailable.
 //   "groq"    — backend Groq Orpheus (WAV). Falls back to browser voices
 //               when the backend is unavailable/misconfigured/limited.
-//   "auto"    — same as "groq" (backend first; browser fallback).
+//   "auto"    — backend Piper when available (Groq only when you pick it);
+//               browser fallback otherwise.
 //   "browser" — browser Web Speech API only; never calls the backend.
 //
 // API keys are NOT here: the browser asks the backend, which proxies Groq.
@@ -19,7 +22,9 @@ export type SpeechState = "idle" | "loading" | "speaking" | "error";
 /** Status of the last speech attempt. */
 export interface SpeechAudit {
   /** Which provider actually produced (or would have produced) the audio. */
-  via: "groq" | "browser" | "none";
+  via: "groq" | "piper" | "browser" | "none";
+  /** Machine code from the backend 503 (e.g. TTS_MODEL_TERMS_REQUIRED), when a server voice was tried. */
+  code?: string;
   /** Present when speaking failed. */
   error?: string;
 }
@@ -105,7 +110,10 @@ export function useSpeech() {
       const voices = browserVoices.length > 0 ? browserVoices : synth.getVoices();
       const voice = pickBrowserVoice(voices, prefs.browserVoiceURI);
       if (!voice) {
-        return { via: "none", error: "No browser voice is installed. Try another browser or enable Groq TTS." };
+        return {
+          via: "none",
+          error: `No browser voice is installed (${voices.length} detected). Linux: install speech-dispatcher and espeak-ng, then restart the browser. Or use Chrome or Edge.`,
+        };
       }
       synth.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
@@ -147,10 +155,12 @@ export function useSpeech() {
         return result;
       }
 
-      // Groq path: backend proxies Orpheus; any failure falls back to browser.
+      // Server path: backend Piper (auto/piper) or Groq Orpheus (groq);
+      // any failure falls back to browser voices.
       setSpeechState("loading");
+      const backendProvider = prefs.ttsProvider === "auto" ? undefined : prefs.ttsProvider;
       try {
-        const blob = await apiClient.speakWav(clean, prefs.groqTtsVoice);
+        const blob = await apiClient.speakWav(clean, prefs.groqTtsVoice, backendProvider);
         if (generationRef.current !== generation) return { via: "none" } as SpeechAudit; // stopped meanwhile
         const url = URL.createObjectURL(blob);
         audioUrlRef.current = url;
@@ -174,17 +184,18 @@ export function useSpeech() {
           return { via: "none" } as SpeechAudit;
         }
         setSpeechState("speaking");
-        const result: SpeechAudit = { via: "groq" };
+        const result: SpeechAudit = { via: backendProvider === "groq" ? "groq" : "piper" };
         setAudit(result);
         return result;
-      } catch {
+      } catch (err) {
         if (generationRef.current !== generation) return { via: "none" } as SpeechAudit;
+        const code = (err as { code?: string } | null)?.code;
         const result = speakWithBrowser(clean);
         if (result.via !== "none") setSpeechState("speaking");
         else setSpeechState("error");
         setAudit(result.via === "none"
-          ? { via: "none", error: result.error ?? "Audio is unavailable." }
-          : { via: "browser" });
+          ? { via: "none", error: result.error ?? "Audio is unavailable.", code }
+          : { via: "browser", code });
         return result;
       }
     },

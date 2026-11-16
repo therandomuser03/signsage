@@ -67,6 +67,11 @@ research/training/artifacts/**/*.pt
 frontend/dist/
 frontend/.next/
 
+# Piper voice files (downloaded at docker build time or into the runtime cache)
+*.onnx
+*.onnx.json
+/srv/voices/
+
 # TOON/cache
 graphify-out/
 # Large local SignSage training artifacts

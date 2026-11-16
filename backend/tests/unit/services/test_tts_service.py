@@ -12,13 +12,17 @@ TEXT = "Hello, can you help me?"
 def _settings(**overrides):
     base = dict(
         groq_api_key="test-key",
-        tts_provider="auto",
+        groq_tts_api_key=None,
+        tts_provider="groq",
         groq_tts_model="canopylabs/orpheus-v1-english",
         groq_tts_voice="hannah",
         tts_max_input_chars=200,
+        piper_voice="en_US-kristin-medium",
+        piper_dir="/srv/voices",
+        piper_cache="/tmp/piper",
     )
     base.update(overrides)
-    return Settings(**base)
+    return Settings(_env_file=None, **base)
 
 
 def _wav_bytes(n=64):
@@ -116,6 +120,9 @@ def test_tts_provider_available():
     assert tts_service.tts_provider_available(_settings()) is True
     assert tts_service.tts_provider_available(_settings(groq_api_key=None)) is False
     assert tts_service.tts_provider_available(_settings(tts_provider="browser")) is False
+    # auto/piper without a working piper install or voice files → False
+    assert tts_service.tts_provider_available(_settings(tts_provider="auto")) is False
+    assert tts_service.tts_provider_available(_settings(tts_provider="piper")) is False
 
 
 async def test_dedicated_tts_key_wins_over_shared_key():

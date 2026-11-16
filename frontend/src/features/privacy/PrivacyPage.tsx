@@ -28,7 +28,7 @@ const SECTIONS = [
   {
     value: "groq",
     title: "Third-party AI services (Groq)",
-    body: "Recognised words and composed sentences may be sent to Groq to refine sentences and generate speech. Camera video is never sent in the live path; only hand, body and face landmarks are.",
+    body: "Recognised words and composed sentences may be sent to Groq to refine sentences and generate speech. Camera video is never sent in the live path; only hand, body and face landmarks are. If you use the microphone fallback, a short recording is sent to Groq to be transcribed and is not stored by SignSage.",
   },
   {
     value: "translation",
