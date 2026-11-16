@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppShell } from "./shell";
+import { DevAvatarRoute } from "./devAvatar";
 import LandingPage from "@/features/landing/LandingPage";
 import AboutPage from "@/features/about/AboutPage";
 import { LoginPage, SignupPage, StartPage } from "@/features/auth/AuthPages";
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
       },
     ],
   },
+  ...(import.meta.env.DEV ? [{ path: "/dev/avatar", element: <DevAvatarRoute /> }] : []),
   {
     path: "*",
     element: <Navigate to="/" replace />,

@@ -110,7 +110,7 @@ const resolve = async () => {
 
   if (!email) {
     return (
-      <Button variant="ghost" size="sm" className="w-full justify-start" render={<Link to="/login" />}>
+      <Button variant="ghost" size="sm" className="w-full justify-start" nativeButton={false} render={<Link to="/login" />}>
         <LogIn aria-hidden="true" />
         <span className="group-data-[collapsible=icon]:hidden">Sign in</span>
       </Button>

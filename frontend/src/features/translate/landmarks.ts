@@ -80,12 +80,15 @@ export class HolisticExtractor {
     const fileset = await vision.FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
     );
+    // CPU delegate everywhere: the GPU delegate can hang indefinitely on
+    // software WebGL (SwiftShader/remote desktops), freezing "Initializing
+    // landmark detection". CPU is reliably fast enough for 543 points at 10-30 fps.
     [this.pose, this.face, this.hands] = await Promise.all([
       vision.PoseLandmarker.createFromOptions(fileset, {
         baseOptions: {
           modelAssetPath:
             "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-          delegate: "GPU",
+          delegate: "CPU",
         },
         runningMode: "VIDEO",
         numPoses: 1,
@@ -94,7 +97,7 @@ export class HolisticExtractor {
         baseOptions: {
           modelAssetPath:
             "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-          delegate: "GPU",
+          delegate: "CPU",
         },
         runningMode: "VIDEO",
         numFaces: 1,
@@ -103,7 +106,7 @@ export class HolisticExtractor {
         baseOptions: {
           modelAssetPath:
             "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-          delegate: "GPU",
+          delegate: "CPU",
         },
         runningMode: "VIDEO",
         numHands: 2,

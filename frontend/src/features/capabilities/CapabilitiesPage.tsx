@@ -136,7 +136,7 @@ export default function CapabilitiesPage() {
               Try them yourself.
             </h2>
             <div className="mt-8">
-              <Button className="px-6 py-3.5" render={<Link to="/start" />}>
+              <Button className="px-6 py-3.5" nativeButton={false} render={<Link to="/start" />}>
                 Start interpreting
               </Button>
             </div>

@@ -24,6 +24,7 @@ import {
   type AvatarViewerHandle,
 } from "@/features/text-to-sign/components/AvatarViewer";
 import { ProceduralAvatarViewer } from "@/features/text-to-sign/components/ProceduralAvatarViewer";
+import { HumanAvatarViewer } from "@/features/text-to-sign/components/HumanAvatarViewer";
 import { useSignAnimation } from "@/features/text-to-sign/hooks/useSignAnimation";
 import { useSpeechInput, isSpeechServiceBlocked } from "@/features/text-to-sign/hooks/useSpeechInput";
 import { useServerDictation } from "@/features/text-to-sign/hooks/useServerDictation";
@@ -45,6 +46,7 @@ import { apiClient } from "@/services/api/instance";
 import { loadPrefs } from "@/features/settings/preferences";
 
 const VRM_URL = "/models/avatar/signsage.vrm";
+const HUMAN_GLB_URL = "/models/signsage-human.glb";
 const MANIFEST_URL = "/models/avatar/manifest.json";
 const MAX_CHARS = 280;
 
@@ -61,6 +63,7 @@ export default function TextToSignPage() {
   const [manifest, setManifest] = useState<SignManifest | null>(null);
   const [manifestError, setManifestError] = useState(false);
   const [avatarReady, setAvatarReady] = useState<boolean | null>(null);
+  const [humanReady, setHumanReady] = useState<boolean | null>(null);
   const [mode, setMode] = useState<Mode>("dictionary");
   const [text, setText] = useState("");
   const [sequence, setSequence] = useState<GlossSequence | null>(null);
@@ -129,6 +132,16 @@ export default function TextToSignPage() {
         if (live) setAvatarReady(exists);
       } catch {
         if (live) setAvatarReady(false);
+      }
+    })();
+
+    // Human GLB (text-to-sign default): same existence check semantics.
+    (async () => {
+      try {
+        const exists = await assetExists(HUMAN_GLB_URL);
+        if (live) setHumanReady(exists);
+      } catch {
+        if (live) setHumanReady(false);
       }
     })();
 
@@ -215,6 +228,9 @@ export default function TextToSignPage() {
   // The VRM avatar needs hand-authored assets; the procedural avatar is
   // always available, so playback never depends on the HEAD check.
   const usingVrm = shouldUseVrm(avatarReady === true, manifest !== null);
+  // Human GLB is the default avatar in Text-to-Sign; VRM (if ever bundled) is
+  // kept as the pre-authored-clips fallback, procedural figure is last resort.
+  const usingHuman = humanReady === true;
 
   const progress =
     state.queue.length > 0 && state.currentIndex >= 0
@@ -236,11 +252,13 @@ export default function TextToSignPage() {
             {manifest ? `${Object.keys(manifest).length} signs` : "Loading library…"}
           </p>
           <p className="text-foreground/60">
-            {avatarReady === null
+            {avatarReady === null && humanReady === null
               ? "Checking avatar…"
               : usingVrm
                 ? "Avatar ready"
-                : "Procedural motion"}
+                : usingHuman
+                  ? "Human avatar ready"
+                  : "Procedural motion"}
           </p>
         </div>
       </div>
@@ -445,14 +463,22 @@ export default function TextToSignPage() {
             <p className="mt-1 text-xs text-foreground/60">
               {usingVrm
                 ? "Pre-authored clips on one avatar. No generative model involved."
-                : "Built-in 3D figure, one motion per sign. No generative model involved."}
+                : usingHuman
+                  ? "Human rig performing a generic articulation demo — not authored ISL. No generative model involved."
+                  : "Built-in 3D figure, one motion per sign. No generative model involved."}
             </p>
           </div>
           <div className="px-5 py-5">
             <div className="relative h-[420px] overflow-hidden rounded-lg bg-muted lg:h-[480px]">
               {manifest ? (
                 <>
-                  {usingVrm ? (
+                  {usingHuman ? (
+                    <HumanAvatarViewer
+                      ref={avatarRef}
+                      className="h-full w-full"
+                      caption="Human rig · articulation demo — not an ISL sign"
+                    />
+                  ) : usingVrm ? (
                     <AvatarViewer
                       ref={avatarRef}
                       vrmUrl={VRM_URL}
@@ -489,7 +515,9 @@ export default function TextToSignPage() {
             </div>
             {!usingVrm && manifest && (
               <div className="mt-2 text-xs text-foreground/60">
-                Illustrative animation, not a validated ISL sign.{" "}
+                {usingHuman
+                  ? "Articulation demonstration, not a validated ISL sign."
+                  : "Illustrative animation, not a validated ISL sign."}{" "}
                 <button
                   type="button"
                   onClick={() => setLearnMore((v) => !v)}
@@ -500,10 +528,9 @@ export default function TextToSignPage() {
                 </button>
                 {learnMore && (
                   <p className="mt-1 leading-5 text-foreground/55">
-                    The hand-authored VRM avatar and clips are not bundled here,
-                    so a built-in 3D figure performs a distinct motion per sign.
-                    Word lookup and sequencing are real; the movements are not
-                    authored ISL.
+                    {usingHuman
+                      ? "The human model is real and fully rigged, but no sign animations have been authored or verified for it yet, so each word plays the same generic articulation demo (arms, fingers, blink, mouth). Word lookup and sequencing are real; the movements are not ISL signs."
+                      : "The hand-authored VRM avatar and clips are not bundled here, so a built-in 3D figure performs a distinct motion per sign. Word lookup and sequencing are real; the movements are not authored ISL."}
                   </p>
                 )}
               </div>

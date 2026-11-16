@@ -139,10 +139,10 @@ export default function HowItWorksPage() {
               See it in action.
             </h2>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Button className="px-6 py-3.5" render={<Link to="/start" />}>
+              <Button className="px-6 py-3.5" nativeButton={false} render={<Link to="/start" />}>
                 Start interpreting
               </Button>
-              <Button variant="outline" className="px-6 py-3.5" render={<Link to="/capabilities" />}>
+              <Button variant="outline" className="px-6 py-3.5" nativeButton={false} render={<Link to="/capabilities" />}>
                 Explore capabilities
               </Button>
             </div>

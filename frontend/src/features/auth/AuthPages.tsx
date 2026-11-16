@@ -619,7 +619,7 @@ function AuthShell({
         maxOpacity={0.35}
       />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 sm:p-6">
-        <Button variant="ghost" size="sm" className="pointer-events-auto" render={<Link to="/" />}>
+        <Button variant="ghost" size="sm" className="pointer-events-auto" nativeButton={false} render={<Link to="/" />}>
           <ArrowLeft aria-hidden="true" />
           Back to Home
         </Button>

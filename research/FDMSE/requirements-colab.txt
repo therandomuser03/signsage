@@ -1,0 +1,22 @@
+# Additional dependencies for the Colab FDMSE-ISL training notebook.
+# torch, numpy, pandas and matplotlib ship with Colab and are intentionally
+# NOT listed here. Colab currently uses Python 3.12; the pins below keep
+# MediaPipe and OpenCV on versions with matching cp312 wheels.
+
+# MediaPipe Holistic (used for (T,543,3) landmark extraction)
+mediapipe>=0.10.14,<0.11
+
+# Headless video decoding on CPU (no display on Colab)
+opencv-python-headless>=4.9.0.80,<4.11
+
+# Metrics: precision/recall/macro-F1, confusion matrix, top-5
+scikit-learn>=1.3
+
+# RAM/disk diagnostics
+psutil>=5.9
+
+# Progress bars for the long extraction/caching loops
+tqdm>=4.66
+
+# Resumable download with Range support
+requests>=2.28

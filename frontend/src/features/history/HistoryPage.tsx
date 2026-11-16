@@ -428,7 +428,7 @@ export default function HistoryPage() {
             </EmptyHeader>
             {!filtering && (
               <EmptyContent>
-                <Button render={<a href="/app/interpreter" />}>Start interpreting</Button>
+                <Button nativeButton={false} render={<a href="/app/interpreter" />}>Start interpreting</Button>
               </EmptyContent>
             )}
           </Empty>

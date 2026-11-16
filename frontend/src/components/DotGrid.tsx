@@ -43,7 +43,8 @@ type DotGridProps = {
   baseColor?: string;
   activeColor?: string;
   showFaceLandmarks?: boolean;
-  faceLandmarks: any[];
+  /** Points in normalized [0,1] coordinates (MediaPipe FaceMesh layout). */
+  faceLandmarks?: { x: number; y: number; z?: number }[];
   proximity?: number;
   speedTrigger?: number;
   shockRadius?: number;
@@ -70,7 +71,7 @@ const DotGrid = ({
   className = '',
   style,
   showFaceLandmarks = false,
-  faceLandmarks
+  faceLandmarks = []
 }: DotGridProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);

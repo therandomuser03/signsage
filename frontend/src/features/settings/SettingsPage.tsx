@@ -176,7 +176,7 @@ export default function SettingsPage() {
               <p className="text-sm text-foreground/55">
                 You’re browsing as a guest. Sign in to sync history.
               </p>
-              <Button render={<Link to="/login" />}>Sign in</Button>
+              <Button nativeButton={false} render={<Link to="/login" />}>Sign in</Button>
             </div>
           )}
         </div>
