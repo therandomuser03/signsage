@@ -464,7 +464,7 @@ export default function TextToSignPage() {
               {usingVrm
                 ? "Pre-authored clips on one avatar. No generative model involved."
                 : usingHuman
-                  ? "Human rig performing a generic articulation demo — not authored ISL. No generative model involved."
+                  ? "Human rig performing sign motion retargeted from recordings (and 4 hand-authored approximations) — not validated ISL. No generative model involved."
                   : "Built-in 3D figure, one motion per sign. No generative model involved."}
             </p>
           </div>
@@ -476,7 +476,8 @@ export default function TextToSignPage() {
                     <HumanAvatarViewer
                       ref={avatarRef}
                       className="h-full w-full"
-                      caption="Human rig · articulation demo — not an ISL sign"
+                      caption="Human rig · motion from recorded/authored data — not a validated ISL sign"
+                      manifest={manifest}
                     />
                   ) : usingVrm ? (
                     <AvatarViewer
@@ -516,7 +517,7 @@ export default function TextToSignPage() {
             {!usingVrm && manifest && (
               <div className="mt-2 text-xs text-foreground/60">
                 {usingHuman
-                  ? "Articulation demonstration, not a validated ISL sign."
+                  ? "Sign motion retargeted from recorded MediaPipe landmarks and hand-authored approximations. Not a validated ISL sign."
                   : "Illustrative animation, not a validated ISL sign."}{" "}
                 <button
                   type="button"
@@ -529,7 +530,7 @@ export default function TextToSignPage() {
                 {learnMore && (
                   <p className="mt-1 leading-5 text-foreground/55">
                     {usingHuman
-                      ? "The human model is real and fully rigged, but no sign animations have been authored or verified for it yet, so each word plays the same generic articulation demo (arms, fingers, blink, mouth). Word lookup and sequencing are real; the movements are not ISL signs."
+                      ? "The human model is real and fully rigged. Sign motion is retargeted from recorded MediaPipe landmarks (HELLO, THANK_YOU — 21 samples each) or hand-authored approximations (PLEASE, FOOD, NAME, HOW — no recordings exist); WHERE is a single-sample clip needing review. Other library signs have no usable recording yet and show “no clip yet”. No motion has been reviewed by a fluent ISL signer; word lookup and sequencing are real, but none of the movements are validated ISL signs."
                       : "The hand-authored VRM avatar and clips are not bundled here, so a built-in 3D figure performs a distinct motion per sign. Word lookup and sequencing are real; the movements are not authored ISL."}
                   </p>
                 )}
@@ -604,11 +605,11 @@ export default function TextToSignPage() {
             {unavailableGlosses.length > 0 && (
               <Alert className="mt-3" variant="destructive">
                 <CircleAlert aria-hidden="true" />
-                <AlertTitle>Sign animation unavailable</AlertTitle>
+                <AlertTitle>No clip yet</AlertTitle>
                 <AlertDescription>
                   {unavailableGlosses.map((id) => (
                     <div key={id} className="mt-1">
-                      Sign animation unavailable for <span className="font-mono">{id}</span>
+                      No clip yet for <span className="font-mono">{id}</span> — waiting for recordings or signer review; never faked with the old demo motion
                     </div>
                   ))}
                 </AlertDescription>
@@ -696,18 +697,23 @@ export default function TextToSignPage() {
           The {availableSigns.length} signs in the library. Click one to see it performed.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {availableSigns.map((id) => (
+          {availableSigns.map((id) => {
+            const hasClip = Boolean(manifest?.[id]?.clip);
+            return (
             <button
               key={id}
               type="button"
               disabled={state.isPlaying || !manifest}
               onClick={() => void playSign(id)}
-              aria-label={`Play sign ${id}`}
+              aria-label={hasClip ? `Play sign ${id}` : `No clip yet for ${id}`}
+              title={hasClip ? (manifest?.[id]?.authored ? "Authored approximation — not validated ISL" : "Retargeted from recordings — not validated ISL") : (manifest?.[id]?.noClipReason ?? "No clip yet")}
               className="rounded-full border border-foreground/15 bg-muted px-3 py-1.5 font-mono text-xs text-foreground/80 transition-colors hover:border-green-600/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
             >
               {id}
+              {!hasClip && <span aria-hidden="true" className="ml-1 text-[10px] text-foreground/45">no clip</span>}
             </button>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>

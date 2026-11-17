@@ -324,6 +324,24 @@ export class HumanAvatarScene {
     for (const [name, v] of Object.entries(values)) this.setMorphTarget(name, v);
   }
 
+  /**
+   * Apply a baked clip frame: every bone returns to rest, then bones listed in
+   * `localQuats` are set to the given absolute local quaternions. Bones absent
+   * from the frame stay at rest. Idempotent; drives clip playback.
+   */
+  applyClip(localQuats: Record<string, [number, number, number, number]>) {
+    for (const [key, rest] of this.restQuaternions) {
+      const bone = this.bones.get(key);
+      if (bone) bone.quaternion.copy(rest);
+    }
+    for (const [name, q] of Object.entries(localQuats)) {
+      const key = sanitizeBoneName(name);
+      const bone = this.bones.get(key);
+      if (bone) bone.quaternion.set(q[0], q[1], q[2], q[3]);
+    }
+    this.invalidate();
+  }
+
   resetPose() {
     for (const side of ["L", "R"] as HandSide[]) {
       for (const { finger } of FINGERS) this.curls[side][finger] = 0;

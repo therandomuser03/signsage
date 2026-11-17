@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppShell } from "./shell";
 import { DevAvatarRoute } from "./devAvatar";
+import { VerifyClipsPage } from "@/features/avatar-test/VerifyClipsPage";
 import { RequireGuest } from "./RequireGuest";
 import LandingPage from "@/features/landing/LandingPage";
 import AboutPage from "@/features/about/AboutPage";
@@ -86,7 +87,12 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  ...(import.meta.env.DEV ? [{ path: "/dev/avatar", element: <DevAvatarRoute /> }] : []),
+  ...(import.meta.env.DEV
+    ? [
+        { path: "/dev/avatar", element: <DevAvatarRoute /> },
+        { path: "/dev/verify-clips", element: <VerifyClipsPage /> },
+      ]
+    : []),
   {
     path: "*",
     element: <Navigate to="/" replace />,

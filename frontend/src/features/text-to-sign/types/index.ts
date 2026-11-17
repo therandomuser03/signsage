@@ -11,6 +11,19 @@ export interface SignManifestEntry {
   animationUrl: string;
   /** Optional: seconds. If omitted, read from the loaded THREE.AnimationClip. */
   durationSeconds?: number;
+  /** Path to the JSON clip for the human GLB (per-frame local bone quaternions),
+   * or null when no clip ships yet — the UI must show "no clip yet" then. */
+  clip?: string | null;
+  /** Where the clip motion came from. */
+  source?: "retarget" | "authored-approximation" | null;
+  /** True for hand-authored approximations (PLEASE/FOOD/NAME/HOW). */
+  authored?: boolean;
+  /** Recorded samples behind the clip (0 = authored). */
+  samplesUsed?: number;
+  /** True when the clip must be reviewed by an ISL signer (single-sample/authored). */
+  needsReview?: boolean;
+  /** Why no clip ships (when clip is null). */
+  noClipReason?: string;
 }
 
 /** The full library, keyed by gloss ID for O(1) lookup. */
