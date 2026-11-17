@@ -128,6 +128,7 @@ privacy, limitations, and app entry — never advertise unsupported accuracy.
 | LLM-constrained sentence composer (rules → guarded Groq → comma-join) | Signed words can never be invented; degradation is deterministic | Adopted |
 | Notebook separate from serving | Different lifecycles/reproducibility needs | Adopted |
 | No raw-camera upload / relay / photoreal avatar / high-stakes use | Privacy-by-construction; deferred/out of scope | Adopted / Deferred / Out of scope |
+| Per-sign JSON clips on the MakeHuman GLB, retargeted from recorded MediaPipe landmarks (or authored approximations) | Data-driven motion beats procedural demos; honest labels stay until signer review | Adopted (2026-11-17, not ISL-validated) |
 
 Promotion rule: a checkpoint is promoted only on a documented evaluation with
 baselines and failure checks — never for merely training, saving, loading,

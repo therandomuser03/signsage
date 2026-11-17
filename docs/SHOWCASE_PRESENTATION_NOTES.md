@@ -67,7 +67,7 @@ Status legend: ✅ Implemented & verified · 🟡 Implemented, experimental/inco
 | English→ISL LLM-assisted gloss (Groq `gpt-oss-20b`; fallback: allam-2-7b → deterministic lookup) | 🟡 | Wired; failure falls back to lookup honestly; no claim of semantic accuracy |
 | Text→Speech (browser Web Speech; optional Groq Orpheus) | 🟡 | Browser fallback audible; backend Orpheus path needs one-time Groq console acceptance (tracked blocker, 2026-11-15 note) |
 | 3D avatar: real human GLB, 164 bones, MakeHuman-style rig, 34 facial morph targers | 🟡 | `/dev/avatar` dev page; render verified 2026-11-16 (SwiftShader + headless Chromium); hands/wrists articulate; not end-to-end wired to sign playback |
-| Text→Sign page root | 🟡 | `TextToSignPage.tsx`; renders human avatar with articulation demo; **not linguistically correct ISL animation** |
+| Text→Sign page root | 🟡 | `TextToSignPage.tsx`; human avatar plays retargeted/authored sign clips (2026-11-17); 7 clips ship, 7 signs show “no clip yet”; **not ISL-validated** |
 | History deletion & export | 🟡 | Frontend `HistoryPage.tsx`; backend `DELETE /api/v1/history/...` implemented; export-to-file **not implemented** |
 | Unsupported/"drop-word" handling | ✅ | Text→Sign drops unknown words honestly; Sign→Text returns honest refusal (`accepted:false`) |
 
@@ -142,7 +142,7 @@ flowchart LR
 - `signsage-human.glb` — MakeHuman-style rig, 164 joints counted via skin (verified 2026-11-16): `spine01–05`, `neck01–03`, `head`, `clavicle.L/R`, `shoulder01.L/R`, `upperarm{01,02}.L/R`, `lowerarm{01,02}.L/R`, `wrist.L/R`, fingers `finger1-{1..3}` (thumb) … `finger5-{1..3}` (pinky) plus `metacarpal{1..4}`.
 - 34 morph targers: eyes (`eyeBlinkLeft/Right`, `eyeWide*`, `eyeSquint*`), brow (`browInnerUp`, `browOuterUp*`), jaw/mouth (`jawOpen`, `mouthSmile`, `viseme_*` ARKit-style).
 - Rendering: Three.js + `@pixiv/three-vrm` (unused for the GLB — plain `GLTFLoader`); `AvatarViewer.tsx` is the VRM (old) path; `HumanAvatarViewer.tsx` is the GLB path.
-- `avatar-test/HumanAvatarScene.ts` holds the scene manager used by `/dev/avatar` and wired to `TextToSignPage.tsx` (experimental articulation demo, not a Sign-ISL correct performance).
+- `avatar-test/HumanAvatarScene.ts` holds the scene manager used by `/dev/avatar` and wired to `TextToSignPage.tsx` (plays per-gloss JSON clips retargeted from recordings or hand-authored approximations; not an ISL-validated performance).
 
 ## 8. Sign-to-Text Recognition Pipeline
 

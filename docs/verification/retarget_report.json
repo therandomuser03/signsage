@@ -1,0 +1,29 @@
+{
+  "rig": "/mnt/Drive-D/Codes/signsage/frontend/public/models/signsage-human.glb",
+  "results": [
+    {
+      "gloss": "HELLO",
+      "status": "ok",
+      "samples": 21,
+      "frames": 74,
+      "fkMeanErrorShoulderWidths": 0.5526990353038641,
+      "medoid": "hello__INCLUDE__00581__MVI_9955.npy"
+    },
+    {
+      "gloss": "THANK_YOU",
+      "status": "ok",
+      "samples": 21,
+      "frames": 63,
+      "fkMeanErrorShoulderWidths": 0.4798329516009261,
+      "medoid": "thank_you__INCLUDE__00612__MVI_0059.npy"
+    },
+    {
+      "gloss": "WHERE",
+      "status": "ok",
+      "samples": 1,
+      "frames": 191,
+      "fkMeanErrorShoulderWidths": 0.25219432035243716,
+      "medoid": "where.npy"
+    }
+  ]
+}
