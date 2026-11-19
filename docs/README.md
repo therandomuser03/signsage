@@ -1,38 +1,25 @@
 # SignSage Documentation
 
-This folder contains the current project guides, technical contracts, research evidence, and historical audit reports.
-
-## Start here
-
-| If you need to... | Read |
+| Document | Read it to |
 |---|---|
-| Understand the project and its scope | [MASTER.md](MASTER.md) |
-| See what is currently working and blocked | [STATUS_AND_ROADMAP.md](STATUS_AND_ROADMAP.md) |
-| Understand model decisions and promotion status | [ml/MODEL_STATUS.md](ml/MODEL_STATUS.md) |
-| Set up the development environment | [development/DEVELOPMENT_SETUP.md](development/DEVELOPMENT_SETUP.md) |
-| Understand the system architecture | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) |
-| Inspect backend interfaces and contracts | [architecture/BACKEND_ARCHITECTURE.md](architecture/BACKEND_ARCHITECTURE.md), [architecture/API_REFERENCE.md](architecture/API_REFERENCE.md), [architecture/end-to-end-contract.md](architecture/end-to-end-contract.md) |
-| Understand datasets and their limitations | [ml/DATASET_CATALOG.md](ml/DATASET_CATALOG.md), [datasets/](datasets/) |
-| Prepare a truthful live demonstration | [product/DEMONSTRATION_GUIDE.md](product/DEMONSTRATION_GUIDE.md) |
-| Review a past investigation | [reports/](reports/) |
+| [PRD.md](PRD.md) | Understand what is being built, for whom, scope, requirements, roadmap |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | See how the system works and the exact contracts between parts |
+| [MODELS_AND_DATA.md](MODELS_AND_DATA.md) | Datasets, models, evaluation results, promotion gates, training pipeline |
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | Build UI that matches the product and its honesty rules |
+| [CODE_STYLE.md](CODE_STYLE.md) | Follow code conventions |
+| [TESTING.md](TESTING.md) | Know what to test and how |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Deploy, configure and verify; ship a model bundle |
+| [SIGN_ANIMATION.md](SIGN_ANIMATION.md) | Produce and validate avatar sign motion |
+| [references.bib](references.bib) | Cite the dataset papers |
 
-## Directory guide
+At the repository root: [README](../README.md) · [AGENTS](../AGENTS.md) · [SECURITY](../SECURITY.md) · [CONTRIBUTING](../CONTRIBUTING.md) · [CHANGELOG](../CHANGELOG.md) · [CREDITS](../CREDITS.md).
 
-- `architecture/` — system design, backend/ML architecture, API and data contracts.
-- `datasets/` — detailed dataset and vocabulary audits.
-- `development/` — setup, development workflow, deployment, and experiment runbooks.
-- `evaluation/` — evaluation results and proposals.
-- `ml/` — current model and dataset status summaries.
-- `product/` — product scope, feature evidence, privacy, limitations, and demo guidance.
-- `reference/` — external ISL learning/reference material.
-- `reports/` — dated audit reports and historical evidence.
+## How these documents are kept honest
 
-## Authority and freshness
+1. **Code and tests are authoritative** for what the application does. Contract values are pinned in `ARCHITECTURE.md` §5.
+2. **One topic, one file.** Edit in place; never add numbered copies or one-off reports. Dated history goes in `CHANGELOG.md`.
+3. **Status words** mean something ([PRD §11](PRD.md#11-status-vocabulary)); never turn a metric into a quality claim.
+4. Research metrics are task- and dataset-specific; do not compare isolated-sign accuracy, gloss WER and sentence BLEU.
+5. When behaviour changes, update the code, tests, the affected document and the changelog together.
 
-1. Runtime code and executable configuration are authoritative for what the application actually does.
-2. `STATUS_AND_ROADMAP.md` and `ml/MODEL_STATUS.md` are the current project/model status summaries.
-3. Architecture contracts document expected interfaces; verify them against code before changing implementation.
-4. Files under `reports/` are evidence snapshots. A newer report may supersede an older one; historical reports must not be treated as current instructions.
-5. Research metrics are task- and dataset-specific. Do not compare isolated-sign BLEU-1, continuous gloss WER, and sentence-translation BLEU as if they measured the same task.
-
-**Current model gate:** `SIGNSAGE_MODEL_PROMOTED=false`. No continuous ISL-to-English model is approved for production.
+**Current model gate:** `SIGNSAGE_MODEL_PROMOTED=false`.

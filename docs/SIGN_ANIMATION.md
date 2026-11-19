@@ -1,89 +1,69 @@
-# Sign animation pipeline — landmark → GLB clip
+# SignSage — Sign Animation (landmark → avatar clip)
 
-How the Text→Sign page's avatar motion is produced, reproduced, and what it is NOT.
+How the Text → Sign avatar gets its motion, how to reproduce it, and what it is **not**.
 
-## Honesty rules (non-negotiable)
+## 1. Honesty rules (non-negotiable)
 
-- No motion has been validated by a fluent ISL signer. The UI keeps saying so.
-- Glosses without a shipped clip render a **"No clip yet"** alert and skip the gloss;
-  they never fall back to the old generic articulation demo (removed 2026-11-17).
-- Authored approximations (PLEASE, FOOD, NAME, HOW) are hand-keyframed
-  approximations — NOT recorded data, NOT validated ISL, `needsReview: true`.
-- Retargeted clips are mechanical transfers of recorded MediaPipe landmarks.
-  Faithfulness to the recording is bounded by the data (2.5D, low fps, gaps);
-  machines cannot vouch for the sign's linguistic correctness.
+- **No motion has been validated by a fluent ISL signer.** The UI says so.
+- A gloss without a shipped clip shows **"No clip yet"** and is skipped. There is no generic fallback animation.
+- Hand-authored approximations (PLEASE, FOOD, NAME, HOW) are keyframed from a template — not recorded, not validated, `needsReview: true`.
+- Retargeted clips are mechanical transfers of recorded MediaPipe landmarks. Fidelity is bounded by the data (2.5D, low frame rate, detection gaps); a machine cannot vouch for linguistic correctness.
+- Distinguishability passes automated checks; **correctness does not** — signer review is required.
 
-## Data provenance per clip
+## 2. Data provenance (as of 2026-11-17)
 
 | Gloss | Source | Samples | Notes |
 |---|---|---|---|
-| HELLO | ISLRTC dictionary videos, MediaPipe (T,75,3) | 21 | DTW-medoid retarget; both hands 100% present |
-| THANK_YOU | ISLRTC dictionary videos | 21 | DTW-medoid retarget; both hands 100% present |
-| WHERE | local single-signer recording (`data/videos/where.mp4`) | 1 | single sample, `needsReview: true`, 6.4 s (slow, authentic data) |
-| PLEASE | authored approximation | 0 | no recording exists |
-| FOOD | authored approximation | 0 | no recording exists |
-| NAME | authored approximation | 0 | no recording exists |
-| HOW | authored approximation | 0 | no recording exists |
-| SORRY, YES, NO, HELP, WATER, ME, YOU | **none ships** | — | poor one-handed captures only; recordings needed |
+| HELLO | ISLRTC dictionary videos | 21 | DTW-medoid retarget; both hands detected in every frame |
+| THANK_YOU | ISLRTC dictionary videos | 21 | Same |
+| WHERE | Local single-signer recording | 1 | Single sample, `needsReview`, slow (6.4 s) |
+| PLEASE, FOOD, NAME, HOW | Authored approximation | 0 | No recording exists |
+| SORRY, YES, NO, HELP, WATER, ME, YOU | **No clip ships** | 1–2 poor | One-handed or partial detections; recordings needed |
 
-Sample schema (docs/sign_data_audit.md): `(T,75,3)` float32 — pose 0–33,
-left-hand slot 33–54, right-hand slot 54–75; image-normalized x,y plus
-relative z (z-damped ×0.3 on retarget). Handedness labels are unusable on
-unmirrored video; physical side is assigned by image x vs shoulder midpoint
-(image-left = person's right), with nearest-wrist temporal continuity.
+Sample layout: `(T, 75, 3)` float32 — pose 0–32, left-hand slot 33–53, right-hand slot 54–74; image-normalised `x, y` plus relative `z` (damped ×0.3 on retarget). MediaPipe handedness labels are unusable on unmirrored video; the physical side is assigned from image x versus the shoulder midpoint (image-left = the person's right) with nearest-wrist continuity.
 
-## Pipeline (tools/)
+## 3. Pipeline
 
-1. `extract_sign_landmarks.py` — video → `(T,75,3)` npy (MediaPipe Tasks API).
-2. `signlib/landmarks.py` — aspect correction to pixel units → shoulder-center
-   normalization scaled by avatar shoulder width (0.229 m) → gap interpolation
-   (≤5 frames) → per-landmark temporal median → DTW medoid selection → idle-trim.
-3. `signlib/retarget.py` — per frame:
-   - arms: two-bone IK (pole = rest elbow offset, out/down/slightly back);
-   - wrist: delta-from-bind swing (wrist→middle-MCP) + twist aligning the palm
-     plane to the landmark palm plane (branch chosen nearest the carried palm,
-     or exact when an authored palm normal is supplied);
-   - fingers: per-bone minimal-arc swing onto the landmark chain directions;
-     metacarpals damped to 60%; all expressed as local quaternions vs rest;
-   - smoothing: per-component hemisphere-fixed moving average (window 5);
-     8-frame ease-in/out from rest baked into the clip;
-   - output: absolute local quaternions per bone per frame at source fps.
-4. `author_sign_clips.py` — synthetic hand-template keyframes → same retargeter
-   (anatomy: index/pinky offsets and hyperextensible-joint-free chains); output
-   clips marked `authored-approximation`.
-5. `build_sign_clips.py` → `frontend/public/models/avatar/clips/<gloss>.json`
-   + `docs/verification/retarget_report.json`.
-6. `update_manifest.py` → manifest `clip` entries (`null` = "no clip yet").
+1. **Extract** — video → `(T,75,3)` landmarks (MediaPipe Tasks API).
+2. **Clean** — aspect correction, shoulder-centre normalisation scaled to the avatar shoulder width (0.229 m), gap interpolation (≤ 5 frames), temporal median, DTW-medoid selection, idle trim.
+3. **Retarget** per frame — arms by two-bone IK; wrist swing and twist matched to the palm plane; fingers by per-bone minimal-arc swing; metacarpals damped; smoothing window 5; 8-frame ease in/out baked in. Output: absolute local quaternions per bone at source fps.
+4. **Author** (fallback) — synthetic hand-template keyframes through the same retargeter, marked `authored-approximation`.
+5. **Build** — write `frontend/public/models/avatar/clips/<gloss>.json` and a report; update the manifest (`clip: null` means "No clip yet").
+6. **Play** — `HumanAvatarViewer` fetches and caches clips, applies frames through `HumanAvatarScene.applyClip()` with slerp between frames; ease in/out lets sequences crossfade through rest.
 
-`signsage-human.glb` (MakeHuman rig, 164 joints) is NEVER swapped; only poses change.
+The GLB (`signsage-human.glb`, MakeHuman rig, 164 joints, 0 animations) is **never swapped**; only poses change.
 
-## Runtime (frontend)
+> **To verify:** the 2026-11-17 workspace cleanup notes that a `tools/` directory was removed, while the scripts below live under `tools/`. Restore them (or note their new location here) before relying on the commands.
 
-`HumanAvatarViewer.tsx` fetches/caches clips from `/models/avatar/clips/*.json`,
-preloads them once the GLB is up, then per gloss applies frames via
-`HumanAvatarScene.applyClip()` — absolute local quaternions, slerped between
-frames. Ease in/out is baked in, so sequences crossfade naturally through rest.
-Stop/Replay/Clear behave as before; the progress indicator and
-`unavailableGlosses` ("No clip yet") flow through `useSignAnimation` unchanged.
-`/dev/verify-clips` (DEV-only) pins any clip+frame for screenshots.
-
-## Verification (Step 3)
-
-Run:
-```
-python3 tools/build_sign_clips.py        # FK check per sign + rebuild clips
-python3 tools/verify_clips.py            # FK error + pairwise DTW + L/R report
-python3 tools/render_verification.mjs    # (frontend/) headless renders start/mid/end
-python3 tools/render_landmarks.py        # source landmark panels
-python3 tools/compose_side_by_side.py    # side-by-side composites
-./backend/.venv/bin/python -m pytest tools/signlib/test_retarget.py
+```bash
+python3 tools/build_sign_clips.py      # forward-kinematics check per sign + rebuild clips
+python3 tools/verify_clips.py          # FK error, pairwise DTW, left/right report
+python3 tools/render_verification.mjs  # headless renders (run from frontend/)
+python3 tools/render_landmarks.py && python3 tools/compose_side_by_side.py
+pytest tools/signlib/test_retarget.py
 ```
 
-Current numbers are in `docs/verification/verification_report.json` and
-`retarget_report.json`. FK error ≈ mean wrist+fingertip error vs source
-landmarks, in shoulder-widths (0.229 m): HELLO 0.55, THANK_YOU 0.48, WHERE 0.25
-(single sample), authored ≈ 0.2 by construction (synthetic ground truth).
-Pairwise DTW between all 7 clips: minimum 0.084 (FOOD vs NAME — both are
-one-handed chin/chest taps; flagged for signer review to differentiate).
-Left/right mapping covered by unit tests (image-left ⇒ physical right ⇒ rig .R).
-Distinguishability passes; correctness does NOT — signer review still required.
+Verification numbers (FK error in shoulder-widths): HELLO 0.55, THANK_YOU 0.48, WHERE 0.25 (single sample), authored ≈ 0.2 by construction. Closest pair by DTW: FOOD vs NAME (0.084; both one-handed chin/chest taps) — flagged for signer review. Generated renders are reproducible and should not be committed.
+
+## 4. Rig conventions
+
+- MakeHuman-style rig: `spine01..05`, `neck01..03`, `upperarm01/02`, `lowerarm01/02`, fingers `finger1` (thumb) to `finger5` (pinky), `metacarpal1..4` feeding fingers 2–5. Not Mixamo, Ready Player Me or VRM.
+- Units are metres; glTF Y-up. The `root` node carries a 180° flip, so the character faces **+Z**; its left hand is at world **+X**, right hand at **−X**.
+- **Bone length axis is local +Y** for every limb and finger bone; **finger curl is about local +X**. Rest pose is an A-pose (upper arms ≈ 37° below horizontal, slight elbow flex).
+- Shoulder width ≈ 0.229 m; height ≈ 1.75 m.
+- three.js strips `. : [ ]` from node names (`wrist.L` → `wristL`); `sanitizeBoneName()` in `rigMap.ts` handles it. Bone map: `frontend/src/features/avatar-test/rigMap.ts`; curl sign `+1` (the earlier `−1` produced backward claws).
+- Machine-readable rest transforms: `rig_bones.json` (regenerate with the rig analysis script rather than keeping a long dump here).
+
+## 5. Quality and validation gate
+
+Before any UI copy changes from "not validated":
+
+- **Automated:** no NaN tracks; angular velocity within physical bounds; clip duration within ±20% of the manifest; every bone name resolves in the GLB; morph targets limited to a whitelist.
+- **Human:** a signer reviews each clip beside its reference; an ISL-fluent reviewer signs off vocabulary coverage before any public release.
+- **Measure** retarget drift against a held-out take; if wrist error exceeds ≈ 10 cm equivalent, fix rest-pose calibration first. The thumb is the weak spot of any retarget — validate it most.
+
+Risks: signer recordings are personal data — commit only retargeted bone tracks (no RGB, no face geometry), keep raw video local and delete on request; one-signer motion stays labelled as such; finger curl direction must follow the conventions above.
+
+## 6. Growing beyond 14 signs
+
+Recorded, multi-signer isolated-word video is the right source. The FDMSE-ISL extraction pipeline already saves per-video pose and hand landmarks for ≈ 2,000 words and could be converted to the `(T,75,3)` layout. **But** FDMSE-ISL is research-only and not redistributable: shipping clips derived from it needs the authors' explicit written permission ([MODELS_AND_DATA §3](MODELS_AND_DATA.md#3-fdmse-isl)). Until that is granted, use your own recordings or permissively licensed sources for shipped clips.
