@@ -16,7 +16,7 @@ SignSage started as an M.Tech research prototype and is being turned into a real
 | Browser camera → MediaPipe Holistic → 543 landmarks/frame → WebSocket → backend | Implemented | Landmarks only; ~10 fps |
 | Static alphabet recognition (A–Z images) | Verified | ~87% held-out accuracy; weak on W, Z, S |
 | Isolated ISL word recognition (`word_v3`) | Experimental, **not promoted** | 9 words, one signer |
-| Full-vocabulary ISL recognition (FDMSE-ISL, 2,002 words) | **In progress** | Landmark extraction and training pipeline being rebuilt; see [MODELS_AND_DATA](docs/MODELS_AND_DATA.md) |
+| Full-vocabulary ISL recognition (FDMSE-ISL, 2,002 words) | Offline baseline trained, **not integrated or promoted** | Test split (8 unseen signers): 82.1% top-1, 95.1% top-5 on studio video; webcam accuracy not yet measured; see [MODELS_AND_DATA](docs/MODELS_AND_DATA.md) |
 | English → ISL (text/speech → gloss → 3D avatar) | Implemented, bounded | 14 gloss IDs; unknown words are dropped, never guessed; motion not yet validated by a fluent signer |
 | Sign → sentence composition | Implemented | Rule-based, then a constrained LLM; it can never add content words |
 | Text-to-speech | Implemented | Server provider when configured, browser Web Speech fallback |

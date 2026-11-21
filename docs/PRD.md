@@ -55,7 +55,7 @@ Status words are defined in §11. "Gate" is what must be true before the claim c
 | Camera → MediaPipe → landmarks → WebSocket | Implemented | Contract tests; real-camera session still to be verified on target hardware |
 | Static alphabet classifier (A–Z) | Verified | 87.1% held-out accuracy, macro-F1 0.849; weak classes W, Z, S |
 | Isolated word recognition `word_v3` | Experimental | 9 words, one signer; below promotion bar |
-| Full-vocabulary recognition (FDMSE-ISL) | In progress | Needs training, signer-independent evaluation, calibrated confidence, bundle export |
+| Full-vocabulary recognition (FDMSE-ISL) | Experimental | Offline baseline trained: 82.1% top-1 / 95.1% top-5 on 8 unseen signers (studio video). Not integrated into the live app; webcam accuracy unmeasured; promotion gates still open |
 | Fingerspelling fallback | Planned | Letter set and approach to be confirmed (see §9) |
 | Sentence composition | Implemented | Rules, then constrained LLM; every signed word appears exactly once and no content word can be invented |
 | English → gloss | Implemented | Deterministic lookup (14 IDs) plus optional LLM mapper, vocabulary-filtered |
@@ -131,12 +131,12 @@ Order matters; each step has a gate.
 
 | Phase | Work | Gate |
 |---|---|---|
-| **Now** | Run the resumable FDMSE-ISL landmark extraction over all 2,002 words; features; training and evaluation notebook | Official split respected; counts of used videos reported |
-| | Evaluate on the signer-independent test split, then retrain on all signers for the deployment model | Test metric reported from the first run only |
-| | Export a bundle; calibrate the confidence floor; model-check and adapter tests | §7 |
+| **Now** | ~~Run the resumable FDMSE-ISL landmark extraction over all 2,002 words~~ (done Nov 2026: 40,033 videos, 0 failed); check face-detection quality; train and evaluate | Official split respected; counts of used videos reported |
+| | ~~Evaluate on the signer-independent test split, then retrain on all signers for the deployment model~~ (done: 82.1% top-1) | Test metric reported from the first run only |
+| | Bundle exported and threshold calibrated on validation (done); remaining: backend adapter and tests, live-webcam calibration | §7 |
 | | Text → Sign: fix hand-motion quality; widen vocabulary using recorded data | Signer review before any "validated" label |
 | **Next** | Fingerspelling fallback (confirm which letter classes the data provides; the current A–Z image classifier is one option) | Held-out letter accuracy reported |
-| | Check that landmarks produced in the browser match those used in training (extractor parity) | Numeric comparison on the same clips |
+| | Check that landmarks produced in the browser match those used in training (extractor parity, including the pose-derived face points and the video aspect ratio of `sign_features_v4`) | Numeric comparison on the same clips |
 | | Credits page and frontend polish; live multi-account auth and RLS test | Live test log |
 | | Latency on the target device | Measured, with hardware stated |
 | **Later** | Fluent-signer review of avatar motion; larger vocabularies; native mobile; two-device relay | Fresh review for each |
