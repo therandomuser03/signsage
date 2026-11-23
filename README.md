@@ -3,7 +3,7 @@
 **A bidirectional Indian Sign Language (ISL) ↔ English web application.**
 Sign into your camera and read English; type or speak English and watch a 3D avatar sign it.
 
-> **Privacy by construction:** raw camera video never leaves your browser. Only landmark coordinates are sent to the backend.
+> **Privacy by design:** on the live camera path, raw video never leaves your browser; only landmark coordinates are sent to the backend. An optional *upload a video* feature sends the file you choose (see [SECURITY.md](SECURITY.md)).
 
 ![Text → Sign page: English text mapped to a gloss sequence and played by the 3D avatar](docs/assets/ui-sign-generator.png)
 

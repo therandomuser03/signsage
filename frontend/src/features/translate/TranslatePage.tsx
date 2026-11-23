@@ -95,9 +95,20 @@ type WordPhase = "idle" | "countdown" | "recording" | "result" | "error";
 
 const SEND_INTERVAL_MS = 100; // ~10 landmark frames per second
 const DETECT_INTERVAL_MS = 80; // MediaPipe runs far faster than the backend can use; keep preview responsive without re-running all models every animation frame.
-const WORD_RECORD_DURATION_MS = 2500; // 2.5 s capture window
+const WORD_RECORD_DURATION_MS = 3000; // 3 s capture window (the FDMSE-ISL training clips are 3 s long)
 const PHRASE_RECORD_DURATION_MS = 10_000; // 10 s capture window for the experimental "Sign a phrase" flow
 const WORD_COUNTDOWN_SECONDS = 3;
+
+/**
+ * The camera's real width/height. The word model was trained on 1200x950 video; the backend multiplies x by
+ * width/height so x and y share one unit and a 4:3 or 16:9 webcam gives the same features as the dataset.
+ * Without these fields the backend falls back to an assumed 16:9 and labels the result "assumed".
+ */
+function videoSizeFields(video: HTMLVideoElement | null): { video_width?: number; video_height?: number } {
+  const w = video?.videoWidth ?? 0;
+  const h = video?.videoHeight ?? 0;
+  return w > 0 && h > 0 ? { video_width: w, video_height: h } : {};
+}
 const LANDMARK_COLOR = "rgba(34, 197, 94, 0.4)"; // 40% opacity to prevent obscuring the camera feed
 
 /** One auto-mode segment's detail entry (extends the capture Details shape). */
@@ -862,6 +873,7 @@ export default function TranslatePage() {
 
     const requestPayload = {
       frames: frames?.map((f) => ({ landmarks: f.landmarks })) ?? [],
+      ...videoSizeFields(videoRef.current),
       ...(captureKind === "phrase"
         ? {
             save_history: loadPrefs().saveHistory,
@@ -1156,7 +1168,7 @@ export default function TranslatePage() {
     const { frames, stats } = item;
     try {
       const result = await apiClient.word(
-        { frames },
+        { frames, ...videoSizeFields(videoRef.current) },
         { retries: 1, timeoutMs: 60_000 },
       );
       const roundTripMs = performance.now() - t0;

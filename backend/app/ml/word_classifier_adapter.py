@@ -125,6 +125,11 @@ class WordClassifierAdapter:
         device: str | None = None,
     ) -> "WordClassifierAdapter":
         root = Path(bundle_dir)
+        if (root / "preprocessing.json").is_file():
+            # FDMSE-ISL bundle exported by notebook 02: serve it with its own adapter (same public interface).
+            from app.ml.fdmse_word_adapter import FDMSEWordAdapter
+
+            return FDMSEWordAdapter.load(root, device=device)  # type: ignore[return-value]
         meta_path = root / "meta.json"
         if not meta_path.is_file():
             raise FileNotFoundError(f"word model meta.json not found: {meta_path}")

@@ -10,13 +10,14 @@ Include what you found, how to reproduce it, and the impact. You will get an ack
 
 ## Privacy model
 
-- **Landmarks, not video.** On the live path the browser extracts landmarks locally and sends only coordinates. The backend stores no video, and landmark sequences are not kept as a permanent biometric store.
+- **Landmarks, not video, on the live camera path.** The browser extracts landmarks locally and sends only coordinates. Landmark sequences are not kept as a permanent biometric store.
+- **The one exception: upload a video.** The Live Interpreter page has an optional file-upload flow (`apiClient.uploadVideo`) that sends the video file you pick to the backend. It must process the file in a temporary location and delete it afterwards, enforce file type and size limits, and tell the user plainly that the file is uploaded.
 - **No retention by default.** Any new recording, upload or retention behaviour needs an explicit privacy review before it ships.
 - **History is per user.** It exists only for signed-in users, is isolated by row-level security, can be deleted by the user, and sign-out clears protected UI state. Signed-out use works without storing anything.
 - **Consent** is stamped at signup.
 - Do not claim every path has been independently privacy-tested; check the specific endpoint and current code first.
 
-> **To verify:** earlier notes mention server-side video upload routes. If any exist, they must process the file in a temporary location, delete it in a `finally` block, enforce type and size limits, and be documented in [ARCHITECTURE §5.5](docs/ARCHITECTURE.md#55-rest-apiv1).
+> **To verify in the backend:** the frontend upload flow exists; confirm the matching route deletes the file in a `finally` block, enforces type and size limits, and is documented in [ARCHITECTURE §5.5](docs/ARCHITECTURE.md#55-rest-apiv1).
 
 ## Authentication and authorisation
 

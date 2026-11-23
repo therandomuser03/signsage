@@ -42,7 +42,7 @@ It began as an M.Tech research prototype extending an earlier ASL project (V1). 
 ### Non-goals
 
 - A certified interpreter or any medical, legal, emergency or other high-stakes use.
-- Uploading or storing raw camera video.
+- Uploading or storing raw camera video from the live camera path (the optional manual *upload a video* flow processes only the file the user picks).
 - Claiming open-vocabulary sentence-level translation without evidence.
 - Two-device relay, a native mobile app and a photorealistic avatar (deferred).
 
@@ -56,7 +56,7 @@ Status words are defined in §11. "Gate" is what must be true before the claim c
 | Static alphabet classifier (A–Z) | Verified | 87.1% held-out accuracy, macro-F1 0.849; weak classes W, Z, S |
 | Isolated word recognition `word_v3` | Experimental | 9 words, one signer; below promotion bar |
 | Full-vocabulary recognition (FDMSE-ISL) | Experimental | Offline baseline trained: 82.1% top-1 / 95.1% top-5 on 8 unseen signers (studio video). Not integrated into the live app; webcam accuracy unmeasured; promotion gates still open |
-| Fingerspelling fallback | Planned | Letter set and approach to be confirmed (see §9) |
+| Fingerspelling fallback | Planned | FDMSE-ISL has all 26 letters but they average only 64% recall as words-among-2,002; restrict output to the 26 letters in spelling mode and measure, or train a letter-only model (see §9) |
 | Sentence composition | Implemented | Rules, then constrained LLM; every signed word appears exactly once and no content word can be invented |
 | English → gloss | Implemented | Deterministic lookup (14 IDs) plus optional LLM mapper, vocabulary-filtered |
 | Gloss → 3D avatar motion | Experimental | 3 recorded-data clips, 4 hand-authored approximations, others show "No clip yet"; not validated by a signer |
@@ -85,7 +85,7 @@ Status words are defined in §11. "Gate" is what must be true before the claim c
 
 | ID | Requirement |
 |---|---|
-| NFR1 | **Privacy:** only landmarks leave the browser; no raw video upload on the live path; per-user isolation of history. See [SECURITY.md](../SECURITY.md). |
+| NFR1 | **Privacy:** only landmarks leave the browser on the live camera path; the optional manual video upload is disclosed and its files are not retained; per-user isolation of history. See [SECURITY.md](../SECURITY.md). |
 | NFR2 | **Honesty:** UI and docs distinguish verified, experimental, unsupported and unavailable (§6). |
 | NFR3 | **Reliability:** bounded WebSocket reconnect (5 attempts with backoff); no queued stale frames. |
 | NFR4 | **Performance:** landmark detection throttled to a bounded rate; end-to-end latency to be measured on the target device before any real-time claim. |
@@ -135,7 +135,7 @@ Order matters; each step has a gate.
 | | ~~Evaluate on the signer-independent test split, then retrain on all signers for the deployment model~~ (done: 82.1% top-1) | Test metric reported from the first run only |
 | | Bundle exported and threshold calibrated on validation (done); remaining: backend adapter and tests, live-webcam calibration | §7 |
 | | Text → Sign: fix hand-motion quality; widen vocabulary using recorded data | Signer review before any "validated" label |
-| **Next** | Fingerspelling fallback (confirm which letter classes the data provides; the current A–Z image classifier is one option) | Held-out letter accuracy reported |
+| **Next** | Fingerspelling fallback: FDMSE-ISL has all 26 letters (mean recall 64.4% among all 2,002 classes, confused with words such as "Add" and "November"); evaluate a letters-only output, compare with the A–Z image classifier (87.1%) | Held-out letter accuracy reported |
 | | Check that landmarks produced in the browser match those used in training (extractor parity, including the pose-derived face points and the video aspect ratio of `sign_features_v4`) | Numeric comparison on the same clips |
 | | Credits page and frontend polish; live multi-account auth and RLS test | Live test log |
 | | Latency on the target device | Measured, with hardware stated |

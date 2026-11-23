@@ -6,7 +6,7 @@ Intended scope lives in the [PRD](PRD.md); datasets and models in [MODELS_AND_DA
 
 ## 1. Principles
 
-1. **Landmarks, not video.** Camera frames are processed in the browser; only coordinates travel.
+1. **Landmarks, not video.** On the live camera path, frames are processed in the browser and only coordinates travel. (An optional manual video-upload flow sends the chosen file; see [SECURITY.md](../SECURITY.md).)
 2. **Honest refusal beats a confident guess.** A model gate and an acceptance gate sit between inference and the user.
 3. **Deterministic where possible.** English → gloss is a vocabulary lookup; an optional LLM can only choose from that vocabulary.
 4. **Research is separate from serving.** Notebooks and training scripts never run inside the app; the app never retrains.
@@ -65,6 +65,8 @@ Two recognition paths exist:
 |---|---|---|
 | **Isolated words** (`word_v3`, FDMSE-ISL models) | 60-frame window → `sign_features_v3` → 60 × 122 hand-centric features → small neural classifier, top-3 | Experimental / in progress |
 | **Continuous Sign → Text** (`SignToTextAdapter`) | 543 × 3 → `pose_normalize_v1` → 160 × 1629 → transformer → tokenizer | Gated off; no promotable model |
+
+**Live word path for the FDMSE-ISL model (serving recipe).** "Record word" captures 3 s (about 25–30 frames at ~10 fps) or the auto-segmenter cuts one hands-present span; the frontend posts the frames plus the camera's `video_width` / `video_height` to `/translation/word`. The backend resamples to **exactly 48 frames** (`sign_features_v3` pads shorter input by repeating the last frame and its velocities are per frame step, so the model must see the 48-frame layout it was trained on), derives the face points from pose, multiplies x by the aspect ratio, runs `sign_features_v3`, standardises with the bundle's mean/std and applies the BiGRU. The result carries `aspect_source` (`client` or `assumed`). A golden-vector test pins these features to the training code.
 
 ### 4.2 Static image classification
 
@@ -130,7 +132,7 @@ Error codes: `MODEL_UNAVAILABLE` (gate working as intended), `INVALID_MESSAGE` (
 | `GET /auth/me` | Current user or 401 |
 | `GET/DELETE /history`, `GET/DELETE /history/{id}`, `POST /history/bulk-delete` | Per-user, session-based history; another user's id returns 404 |
 
-> **To verify:** earlier notes mention video-upload and ISLiM routes (`/translation/video`, `/translation/islim/*`). Confirm whether they still exist; if so, document them here and in [SECURITY.md](../SECURITY.md).
+> **To verify:** the frontend calls `apiClient.uploadVideo`; confirm the backend route (earlier notes mention `/translation/video` and `/translation/islim/*`), document it here and check its file handling against [SECURITY.md](../SECURITY.md).
 
 ### 5.6 Verdict vocabulary
 
@@ -184,7 +186,8 @@ Record any change of decision here, with the reason.
 | B3 | Confidence floor ships at `0.0` | Calibrate on held-out data with any promotion; add a wrong-input-must-reject test |
 | B4 | No numeric normalisation-equivalence test | Shared golden-vector test between training export and backend |
 | B6 | Frontend never calls the REST sign-to-text endpoint | Wire it behind the gates, or remove it |
-| — | Browser vs training landmark extractor parity unverified | Compare on identical clips before promotion |
+| — | Browser vs training landmark extractor parity unverified: the browser runs `pose_landmarker_lite` in tracking (VIDEO) mode, training used the full pose model per image; webcam vs studio video; capture window (3 s) and the auto-segmenter's hands-present spans vs fixed 3 s training clips | Compare features and accuracy on identical clips (lite vs full), then score a webcam test set through the exact live path |
+| — | The FDMSE-ISL model has no "no sign" class and gives about 50% confidence to a perfectly frozen pose; phrase mode (sliding 20-frame windows, drops `rest`) does not fit it | Motion floor (`metrics.json`), keep the confidence threshold, keep phrase mode off, consider a negative class |
 
 ## 11. Changing a contract
 
