@@ -100,7 +100,7 @@ TTS: backend provider when configured, browser Web Speech as automatic fallback 
 |---|---|---|
 | `pose_normalize_v1` | Continuous path | Hip-midpoint centring (fallback body mean), scale by median per-frame body-33 std, `nan_to_num → 0`. Must be numerically identical in training and serving |
 | `sign_features_v3` | Isolated-word path (legacy) | `(60, 122)` hand-centric vector from `x, y` only. Hand identity by temporal nearest-wrist (MediaPipe Left/Right labels are **ignored**; the camera is unmirrored); the active hand is mirrored to one side. Reads four face-mesh points (nose, chin, mouth, forehead) |
-| `sign_features_v4` | Isolated-word path (FDMSE-ISL models) | The same code on **isotropic** coordinates (x × video width/height) with the four face points **derived from the pose head points** (nose; eye centres; mouth corners) because the face mesh was not detected in the training videos. Serving must apply the same `to_landmarks_543(..., face_source="pose", aspect=width/height)` recipe to the live frames (recorded in the exported `preprocessing.json`) |
+| `sign_features_v4` | Isolated-word path (FDMSE-ISL models) | The same feature code (revision 2 handles **missed hands** robustly: active hand chosen from frames where it was seen; no phantom hand after mirroring; identical to v3 when nothing is missed) on **isotropic** coordinates (x × video width/height) with the four face points **derived from the pose head points** (nose; eye centres; mouth corners) because the face mesh was not detected in the training videos. Serving must apply the same `to_landmarks_543(..., face_source="pose", aspect=width/height)` recipe to the live frames (recorded in the exported `preprocessing.json`) |
 
 ### 5.3 Temporal convention (live)
 
@@ -186,7 +186,7 @@ Record any change of decision here, with the reason.
 | B3 | Confidence floor ships at `0.0` | Calibrate on held-out data with any promotion; add a wrong-input-must-reject test |
 | B4 | No numeric normalisation-equivalence test | Shared golden-vector test between training export and backend |
 | B6 | Frontend never calls the REST sign-to-text endpoint | Wire it behind the gates, or remove it |
-| — | Browser vs training landmark extractor parity unverified: the browser runs `pose_landmarker_lite` in tracking (VIDEO) mode, training used the full pose model per image; webcam vs studio video; capture window (3 s) and the auto-segmenter's hands-present spans vs fixed 3 s training clips | Compare features and accuracy on identical clips (lite vs full), then score a webcam test set through the exact live path |
+| — | Browser vs training extractor parity only partly closed: the browser now loads the full pose model (as in training) but still runs in tracking (VIDEO) mode, training used per-image detection; webcam vs studio video is unmeasured; capture window (3 s) and the auto-segmenter's hands-present spans vs fixed 3 s training clips | Notebook 03 (live-like stress test on real test landmarks); a webcam test set is the only measure of the camera gap |
 | — | The FDMSE-ISL model has no "no sign" class and gives about 50% confidence to a perfectly frozen pose; phrase mode (sliding 20-frame windows, drops `rest`) does not fit it | Motion floor (`metrics.json`), keep the confidence threshold, keep phrase mode off, consider a negative class |
 
 ## 11. Changing a contract

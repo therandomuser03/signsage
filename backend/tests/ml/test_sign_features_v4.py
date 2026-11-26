@@ -47,11 +47,17 @@ def _to_normalized(phys: np.ndarray, aspect: float, shift=(0.0, 0.0)) -> np.ndar
     return out
 
 
-def test_golden_vector_matches_training_features():
+def test_golden_vector_matches_training_features_legacy_hand_selection():
     g = np.load(GOLDEN)
-    got = extract_features_v4(g["landmarks"], float(g["aspect"]))
+    got = extract_features_v4(g["landmarks"], float(g["aspect"]), robust=False)
     assert got.shape == (60, 122) and got.dtype == np.float32
     np.testing.assert_allclose(got, g["expected"], atol=1e-5)
+
+
+def test_golden_vector_matches_training_features_robust_hand_selection():
+    g = np.load(GOLDEN)
+    got = extract_features_v4(g["landmarks"], float(g["aspect"]))               # robust is the default
+    np.testing.assert_allclose(got, g["expected_robust"], atol=1e-5)
 
 
 def test_live_face_mesh_is_ignored():
@@ -134,3 +140,54 @@ def test_live_frame_rate_is_handled_by_resampling():
     assert err_ours < 0.05, err_ours
     assert err_ours < 0.5 * err_naive, (err_ours, err_naive)
     assert EXTRACT_FRAMES == 48
+
+
+def _drop(arr: np.ndarray, p: float, seed: int) -> np.ndarray:
+    r = np.random.RandomState(seed)
+    out = arr.copy()
+    for sl in (slice(501, 522), slice(522, 543)):
+        out[r.rand(len(out)) < p, sl] = 0
+    return out
+
+
+def test_robust_equals_legacy_when_no_hand_is_missed():
+    clip = _to_normalized(_physical_clip(48), 1200 / 950)
+    np.testing.assert_array_equal(extract_features_v4(clip, 1200 / 950, robust=True),
+                                  extract_features_v4(clip, 1200 / 950, robust=False))
+
+
+def test_robust_selection_is_far_more_stable_under_missed_hands():
+    """Webcams miss hands. The legacy code treated a missed frame as a jump to the image corner, which flipped
+    the active hand and mirrored the sign; the robust selection must stay close to the clean features."""
+    aspect = 1200 / 950
+    clean = _to_normalized(_physical_clip(48), aspect)
+    ref = extract_features_v4(clean, aspect, robust=True)
+    leg = [np.abs(extract_features_v4(_drop(clean, 0.10, s), aspect, robust=False) - ref).mean() for s in range(8)]
+    rob = [np.abs(extract_features_v4(_drop(clean, 0.10, s), aspect, robust=True) - ref).mean() for s in range(8)]
+    assert np.mean(rob) < 0.5 * np.mean(leg), (np.mean(rob), np.mean(leg))
+    assert np.mean(rob) < 0.12, np.mean(rob)
+
+
+def test_a_resting_hand_with_dropouts_does_not_become_the_signing_hand():
+    """Right hand signs; the left hand rests but the detector keeps losing it (it sits low in the frame). The legacy
+    code counted each lost frame as a jump to the image corner, so the RESTING hand looked 'active'."""
+    from app.ml.preprocessing.sign_features_v3 import _active_secondary, _track_hands
+    from app.ml.preprocessing.sign_features_v4 import _active_secondary_robust
+    clip = _to_normalized(_physical_clip(48), 16 / 9)
+    clip[:, 501:522, :2] = clip[0:1, 501:522, :2]                                        # left hand rests
+    clip[np.random.RandomState(0).rand(48) < 0.25, 501:522] = 0                          # ... and is often not detected
+    phys, wrists = _track_hands(clip[:, 501:522, :2], clip[:, 522:543, :2])
+    moving = int(np.argmax([np.linalg.norm(np.diff(wrists[:, s][np.any(wrists[:, s] != 0, axis=1)], axis=0), axis=1).sum() for s in (0, 1)]))
+    resting = 1 - moving
+    assert _active_secondary(phys, wrists) == resting                                     # the legacy failure
+    assert _active_secondary_robust(phys, wrists) == moving                               # the fix
+
+
+def test_mirroring_does_not_turn_missing_hands_into_phantom_hands():
+    """A mirrored sign (the signing hand is left of the body centre) must still have NO hand where none was detected."""
+    from app.ml.preprocessing.sign_features_v4 import _mirror_x_present
+    arr = np.zeros((6, 21, 2), np.float32)
+    arr[[1, 2, 4], :, 0] = 0.3
+    arr[[1, 2, 4], :, 1] = 0.5
+    out = _mirror_x_present(arr, np.full(6, 0.5, np.float32))
+    assert np.allclose(out[[1, 2, 4], :, 0], 0.7) and not np.any(out[[0, 3, 5]])         # missing stays missing

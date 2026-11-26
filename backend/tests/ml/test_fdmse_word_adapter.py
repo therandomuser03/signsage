@@ -149,3 +149,8 @@ def test_motion_floor_is_read_from_metrics(tmp_path):
     m["motion"] = {"min_motion_feature": 0.0123}
     (root / "metrics.json").write_text(json.dumps(m))
     assert FDMSEWordAdapter.load(root, device="cpu").min_motion_feature == 0.0123
+
+
+def test_adapter_uses_the_robust_recipe_by_default(bundle):
+    ad = FDMSEWordAdapter.load(bundle, device="cpu")
+    assert ad.robust_hands is True

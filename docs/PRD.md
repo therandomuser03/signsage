@@ -133,7 +133,7 @@ Order matters; each step has a gate.
 |---|---|---|
 | **Now** | ~~Run the resumable FDMSE-ISL landmark extraction over all 2,002 words~~ (done Nov 2026: 40,033 videos, 0 failed); check face-detection quality; train and evaluate | Official split respected; counts of used videos reported |
 | | ~~Evaluate on the signer-independent test split, then retrain on all signers for the deployment model~~ (done: 82.1% top-1) | Test metric reported from the first run only |
-| | Bundle exported and threshold calibrated on validation (done); remaining: backend adapter and tests, live-webcam calibration | §7 |
+| | Bundle exported and threshold calibrated on validation (done); backend adapter written and tested (wiring into the route pending); live-like stress test (notebook 03); live-webcam calibration when footage exists | §7 |
 | | Text → Sign: fix hand-motion quality; widen vocabulary using recorded data | Signer review before any "validated" label |
 | **Next** | Fingerspelling fallback: FDMSE-ISL has all 26 letters (mean recall 64.4% among all 2,002 classes, confused with words such as "Add" and "November"); evaluate a letters-only output, compare with the A–Z image classifier (87.1%) | Held-out letter accuracy reported |
 | | Check that landmarks produced in the browser match those used in training (extractor parity, including the pose-derived face points and the video aspect ratio of `sign_features_v4`) | Numeric comparison on the same clips |

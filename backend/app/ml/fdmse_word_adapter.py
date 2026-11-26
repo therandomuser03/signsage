@@ -92,6 +92,7 @@ class FDMSEWordAdapter:
         self.extract_frames = int(extract_frames)
         self.default_aspect = float(default_aspect)
         self.min_motion_feature: Optional[float] = None   # set when a motion floor has been calibrated
+        self.robust_hands = True                          # see sign_features_v4.extract_features_v4
         self.model.eval()
 
     # ---------------------------------------------------------------- loading
@@ -181,7 +182,7 @@ class FDMSEWordAdapter:
         t0 = time.perf_counter()
         feats = extract_features_v4(arr, used_aspect, n_frames=self.extract_frames,
                                     forehead_k=float(self.spec.get("forehead_k", 1.2)),
-                                    chin_k=float(self.spec.get("chin_k", 0.6)))
+                                    chin_k=float(self.spec.get("chin_k", 0.6)), robust=self.robust_hands)
         feature_ms = (time.perf_counter() - t0) * 1000
         if feats.shape != (N_FRAMES, FEAT_DIM):
             raise ValueError(f"Expected features ({N_FRAMES}, {FEAT_DIM}), received {feats.shape}")

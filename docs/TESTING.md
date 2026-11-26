@@ -54,7 +54,7 @@ Playwright may need system dependencies installed with elevated rights; it reuse
 
 ## 5. Pipelines and notebooks
 
-The FDMSE-ISL extraction notebook is tested without the dataset: a small fake archive and a local range-capable server exercise streaming, archive and local-archive modes, resume, two-machine splitting, a rejected key, network failure, corrupt and truncated files. Use `DRY_RUN=True` to rehearse the full pipeline with a fake detector (output goes to a separate folder). A dry run proves the machinery only; extraction speed and quality are measured by the notebook's benchmark cell on real clips.
+The FDMSE-ISL extraction notebook is tested without the dataset: a small fake archive and a local range-capable server exercise streaming, archive and local-archive modes, resume, two-machine splitting, a rejected key, network failure, corrupt and truncated files. Use `DRY_RUN=True` to rehearse the full pipeline with a fake detector (output goes to a separate folder). `SignSage_03_LivePath_StressTest_v2.ipynb` replays real saved test-clip landmarks through the serving code under live-like conditions (frame count, dropped frames, landmark noise, missed hands, trimmed or padded windows, wrong aspect) and checks that the serving path reproduces the stored-feature accuracy. The stress test scores every condition with both the legacy and the robust hand handling so the effect of the missed-hand fix is measured on the real model. A dry run proves the machinery only; extraction speed and quality are measured by the notebook's benchmark cell on real clips.
 
 ## 6. Known gaps
 

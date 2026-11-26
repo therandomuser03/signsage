@@ -5,6 +5,8 @@ All notable changes to SignSage. Format follows [Keep a Changelog](https://keepa
 ## [Unreleased]
 
 ### Added
+- **Live-path stress test** (`SignSage_03_LivePath_StressTest_v2.ipynb`): replays real saved test-clip landmarks through the serving code under 13 live-like conditions and saves `stress_test.csv`. Browser pose model switched from lite to full to match training (`landmarks.ts`).
+- Motion floor for the FDMSE-ISL model written to its `metrics.json` (0.00181).
 - **Serving integration for the FDMSE-ISL model** (`signsage-integration-patch.zip`): `sign_features_v4` serving recipe (resample to 48 frames, pose-derived face points, aspect correction), a new `fdmse_word_adapter` that loads the notebook-02 export (loader dispatch in `WordClassifierAdapter.load`), the frontend now sends the camera size and captures 3 s, 28 tests including a golden-vector parity test against the training code and an export-to-adapter prediction check. Motion floor cell added to notebook 02.
 - **First full-vocabulary recogniser trained** (`baseline_v1`, BiGRU, FDMSE-ISL, 2,002 words): official test split (8 unseen signers) top-1 82.1%, top-5 95.1%; validation top-1 85.8%; exported with preprocessing, labels, metrics and model card. Offline result on studio video; not integrated and not promoted. See [MODELS_AND_DATA §7](docs/MODELS_AND_DATA.md#7-fdmse-isl-training-pipeline-v2).
 - **FDMSE-ISL extraction finished** (Nov 2026): 40,033 of 40,033 videos, 801 chunks, all 2,002 classes, no corrupt chunks, 0 unusable clips; features built for the whole dataset. Details in [MODELS_AND_DATA §7](docs/MODELS_AND_DATA.md#7-fdmse-isl-training-pipeline-v2).
@@ -17,6 +19,7 @@ All notable changes to SignSage. Format follows [Keep a Changelog](https://keepa
 - **Documentation consolidated** from 51 Markdown files (about 86,000 words) into 15 maintained documents (PRD, ARCHITECTURE, MODELS_AND_DATA, DESIGN_SYSTEM, CODE_STYLE, TESTING, DEPLOYMENT, SIGN_ANIMATION). Historical audit reports were retired; their conclusions live in the documents above and in this file. The old files remain in git history.
 
 ### Fixed
+- **Two flaws of `sign_features_v3` with missed hands** (found by the live-path stress test, where a 10% hand-miss rate cost 16 accuracy points): the active hand was chosen from wrist travel measured on zero-filled arrays, and mirroring turned missed frames into phantom hands. `sign_features_v4` revision 2 (`robust=True`, the serving default) fixes both and is identical to v3 when no hand is missed; `sign_features_v3` itself is unchanged. Notebook 01 cell 12 builds robust features into `features_v4r2_pose_face`; the stress test compares both recipes.
 - Privacy wording: the app also has an optional upload-a-video flow, so "raw video never leaves the browser" now applies to the live camera path only.
 - The earlier `fdmse_word_adapter.py` (written for the 200-word model) had a different architecture and no input standardisation, face points or aspect handling; it is replaced.
 - Reading chunk and feature files from Google Drive now retries and copies to local disk first: a transient Drive error (`Errno 103`, shown by numpy as "File is not a zip file") no longer aborts the feature build or training; an unreadable chunk is skipped with a warning and picked up on rerun.

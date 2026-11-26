@@ -84,10 +84,13 @@ export class HolisticExtractor {
     // software WebGL (SwiftShader/remote desktops), freezing "Initializing
     // landmark detection". CPU is reliably fast enough for 543 points at 10-30 fps.
     [this.pose, this.face, this.hands] = await Promise.all([
+      // Full pose model (was lite): the FDMSE-ISL word model was trained on landmarks from the FULL model, and the
+      // face reference points and shoulder-width scale are derived from pose. If the camera loop gets too slow on a
+      // weak machine, switch back to lite and expect a small accuracy loss (docs/MODELS_AND_DATA.md section 6).
       vision.PoseLandmarker.createFromOptions(fileset, {
         baseOptions: {
           modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
           delegate: "CPU",
         },
         runningMode: "VIDEO",
